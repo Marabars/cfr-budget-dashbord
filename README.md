@@ -124,13 +124,31 @@ tests/              pytest
 
 ***REMOVED******REMOVED*** Развёртывание
 
-Пример unit-файла — `deploy/cfo-budget.service`. Секреты в репозиторий не
-попадают: путь к базе и параметры задаются переменными окружения на сервере.
+Деплой по SSH одной командой. Секреты в скрипте не хранятся: доступ берётся из
+переменных окружения либо из внешнего xlsx с параметрами сервера.
 
 ```bash
-sudo cp deploy/cfo-budget.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now cfo-budget
+set DEPLOY_CREDS=<путь к файлу с данными сервера.xlsx>
+***REMOVED***   или: set DEPLOY_USER=... & set DEPLOY_PASS=... & set DEPLOY_HOST=...
+
+python scripts/deploy.py check      ***REMOVED*** окружение сервера: python, порт, служба
+python scripts/deploy.py deploy     ***REMOVED*** выложить код, поставить зависимости, запустить
+python scripts/deploy.py restart    ***REMOVED*** перезапустить
+python scripts/deploy.py logs       ***REMOVED*** последние строки журнала
+python scripts/deploy.py stop       ***REMOVED*** остановить
 ```
+
+Скрипт выкладывает код в `$HOME/cfo-budget-dashboard`, создаёт venv, ставит
+зависимости и регистрирует службу **пользовательского** systemd
+(`systemctl --user`) — root для этого не нужен, приложение поднимается после
+перезагрузки сервера благодаря `loginctl enable-linger`. Если linger включить
+не удалось, скрипт откатывается на запуск через `nohup` и об этом сообщает.
+
+База (`data/budget.db`) при обновлении кода не затирается: архив содержит только
+код, каталог `data/` в него не попадает.
+
+Если администратор захочет системную службу в `/opt/apps` (как у fin-dashboard),
+готовый unit-файл — `deploy/cfo-budget.service`.
 
 ***REMOVED******REMOVED*** Макет
 
