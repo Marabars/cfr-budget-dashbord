@@ -1,0 +1,22 @@
+; Пример unit-файла для systemd. Секретов не содержит:
+; путь к базе и параметры задаются переменными окружения на сервере.
+;
+;   sudo cp deploy/cfo-budget.service /etc/systemd/system/
+;   sudo systemctl daemon-reload && sudo systemctl enable --now cfo-budget
+
+[Unit]
+Description=Дашборд бюджетов ЦФО
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/apps/cfo-budget-dashboard
+Environment=BUDGET_DB=/opt/apps/cfo-budget-dashboard/data/budget.db
+ExecStart=/opt/apps/cfo-budget-dashboard/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

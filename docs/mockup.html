@@ -1,0 +1,1566 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Бюджеты ЦФО — макет дашборда</title>
+<style>
+/* Дизайн-система взята с внутреннего дашборда рассадки: тёмная тема, фиолетовый акцент, Calibri */
+:root {
+  color-scheme: dark;
+  --plane: ***REMOVED***0A0814;          /* bg-deep */
+  --surface: ***REMOVED***13112A;        /* bg-surface */
+  --raised: ***REMOVED***1C1A35;         /* bg-raised — поля, вторичные кнопки */
+  --ink: ***REMOVED***E5E3EB;
+  --ink2: ***REMOVED***C4BEDD;
+  --muted: ***REMOVED***FFFFFF;
+  --faint: ***REMOVED***6B6592;
+  --border: ***REMOVED***2E2A4A;
+  --grid: ***REMOVED***241F3F;
+  --axis: ***REMOVED***433E67;           /* border-hi */
+  --hover: rgba(255, 255, 255, .035);
+  --accent: ***REMOVED***7549E8;
+  --accent-2: ***REMOVED***8A62F0;
+  --accent-soft: rgba(117, 73, 232, .16);
+  --good: ***REMOVED***82D6CC;           /* teal */
+  --good-ink: ***REMOVED***82D6CC;
+  --warning: ***REMOVED***BD9375;        /* warm */
+  --serious: ***REMOVED***E09A5F;
+  --critical: ***REMOVED***F48A8A;
+  --crit-bg: rgba(198, 40, 40, .15);
+  --hm-0: ***REMOVED***232042;
+  --hm-b1: ***REMOVED***1D3D3A; --hm-b2: ***REMOVED***2C5C56; --hm-b3: ***REMOVED***4A8F86; --hm-b4: ***REMOVED***82D6CC;
+  --hm-r1: ***REMOVED***4A1F1F; --hm-r2: ***REMOVED***7A2E2E; --hm-r3: ***REMOVED***B04545; --hm-r4: ***REMOVED***F48A8A;
+  --hm-ink-3: ***REMOVED***E5E3EB; --hm-ink-4: ***REMOVED***0A0814;
+  --r-sm: 5px; --r: 8px; --r-lg: 12px;
+}
+/* светлая тема — только по явному переключателю */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --plane: ***REMOVED***EFEDF6;
+  --surface: ***REMOVED***FFFFFF;
+  --raised: ***REMOVED***F6F4FC;
+  --ink: ***REMOVED***17142B;
+  --ink2: ***REMOVED***4A4568;
+  --muted: ***REMOVED***635D85;
+  --faint: ***REMOVED***A8A3C4;
+  --border: ***REMOVED***DFDBEE;
+  --grid: ***REMOVED***ECE9F5;
+  --axis: ***REMOVED***C6C0DE;
+  --hover: rgba(23, 20, 43, .04);
+  --accent: ***REMOVED***6A3FD8;
+  --accent-2: ***REMOVED***7549E8;
+  --accent-soft: rgba(117, 73, 232, .12);
+  --good: ***REMOVED***1F9E90;
+  --good-ink: ***REMOVED***167C71;
+  --warning: ***REMOVED***9A6C46;
+  --serious: ***REMOVED***C4703A;
+  --critical: ***REMOVED***C62828;
+  --crit-bg: rgba(198, 40, 40, .10);
+  --hm-0: ***REMOVED***ECE9F5;
+  --hm-b1: ***REMOVED***D6F0EC; --hm-b2: ***REMOVED***A5DDD5; --hm-b3: ***REMOVED***5FB3A8; --hm-b4: ***REMOVED***1F8478;
+  --hm-r1: ***REMOVED***FBDCDC; --hm-r2: ***REMOVED***F0AEAE; --hm-r3: ***REMOVED***DC7070; --hm-r4: ***REMOVED***B32F2F;
+  --hm-ink-3: ***REMOVED***FFFFFF; --hm-ink-4: ***REMOVED***FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--plane);
+  color: var(--ink);
+  font: 15px/1.45 Calibri, "Helvetica Neue", Helvetica, -apple-system, sans-serif;
+  overflow-x: hidden;
+}
+h1, h2, h3 { margin: 0; font-weight: 700; }
+button { font: inherit; color: inherit; cursor: pointer; }
+select, input, textarea { font: inherit; color: inherit; }
+
+/* ---------- header ---------- */
+.top {
+  position: sticky; top: 0; z-index: 30;
+  background: ***REMOVED***070512;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px 0;
+}
+:root[data-theme="light"] .top { background: var(--surface); }
+.top::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: linear-gradient(90deg, var(--accent) 0%, rgba(117,73,232,.35) 35%, transparent 70%);
+}
+.top { position: sticky; }
+.top-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo-mark { width: 34px; height: 34px; flex: none; border-radius: 7px; }
+.wordmark { font-size: 16px; font-weight: 700; letter-spacing: .03em; }
+.wordmark span { color: var(--accent-2); }
+.brand-sep { width: 1px; height: 22px; background: var(--border); }
+.brand h1 { font-size: 16px; font-weight: 400; color: var(--ink2); letter-spacing: 0; }
+.tag {
+  font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  padding: 3px 9px; border-radius: var(--r-sm);
+  background: var(--accent-soft); color: var(--accent-2);
+}
+.top-spacer { flex: 1; }
+.ctl { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink2); }
+.ctl select, .ctl input {
+  background: var(--raised); border: 1px solid var(--border); color: var(--ink);
+  border-radius: var(--r-sm); padding: 6px 10px; font-size: 14px;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.ctl select:focus, .ctl input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.icon-btn {
+  background: var(--raised); border: 1px solid var(--border); border-radius: var(--r-sm);
+  width: 34px; height: 32px; line-height: 1; font-size: 15px; color: var(--ink2);
+}
+.icon-btn:hover { background: var(--border); border-color: var(--axis); color: var(--ink); }
+
+.tabs { display: flex; gap: 2px; margin-top: 10px; flex-wrap: wrap; }
+.tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 9px 14px; font-size: 15px; color: var(--ink2); white-space: nowrap;
+}
+.tab:hover { color: var(--ink); background: var(--hover); }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent-2); font-weight: 700; }
+
+.note {
+  margin: 12px 20px 0; padding: 8px 12px;
+  border: 1px solid var(--border); border-left: 3px solid var(--warning);
+  background: var(--surface); border-radius: var(--r-sm);
+  font-size: 14px; color: var(--ink2);
+}
+main { padding: 16px 20px 60px; }
+.panel { display: none; }
+.panel.on { display: block; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); margin-bottom: 16px;
+}
+.card > header {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 11px 14px; border-bottom: 1px solid var(--border);
+}
+.card > header h2 { font-size: 18px; display: flex; align-items: center; gap: 9px; }
+.card > header h2::before {
+  content: ""; width: 3px; height: 18px; border-radius: 2px;
+  background: var(--accent-2); flex: none;
+}
+.card > header .sub { font-size: 14px; color: var(--muted); }
+.card-body { padding: 14px; }
+.card-body.flush { padding: 0; }
+
+/* ---------- KPI ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(186px, 1fr)); gap: 1px; background: var(--border); }
+.kpi { background: var(--surface); padding: 13px 14px; border-top: 3px solid var(--border); }
+.kpi.k-accent { border-top-color: var(--accent); }
+.kpi.k-good   { border-top-color: var(--good); }
+.kpi.k-warm   { border-top-color: var(--warning); }
+.kpi.k-crit   { border-top-color: var(--critical); }
+.kpi.k-accent .val { color: var(--accent-2); }
+.kpi.k-good .val   { color: var(--good); }
+.kpi.k-warm .val   { color: var(--warning); }
+.kpi.k-crit .val   { color: var(--critical); }
+.kpi .lbl { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.kpi .val { font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin-top: 4px; }
+.kpi .val.hero { font-size: 34px; }
+.kpi .sub { font-size: 13px; color: var(--ink2); margin-top: 4px; }
+.kpi .sub.neg { color: var(--critical); font-weight: 600; }
+.acc { color: var(--accent-2); font-weight: 600; }
+.cfo-name { font-weight: 600; }
+tbody tr:hover .cfo-name { color: var(--accent-2); }
+.pos { color: var(--good-ink); font-weight: 600; }
+.warm { color: var(--warning); font-weight: 600; }
+.kpi .sub.pos { color: var(--good-ink); font-weight: 600; }
+
+/* ---------- tables ---------- */
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface); color: var(--ink2);
+  font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+  border-bottom: 2px solid var(--border);
+}
+tbody tr:hover { background: var(--hover); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dim { color: var(--muted); }
+.wrap { white-space: normal; min-width: 160px; max-width: 260px; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* закреплённые первые колонки в широкой таблице ЦФО */
+***REMOVED***t-cfo th:nth-child(1), ***REMOVED***t-cfo td:nth-child(1),
+***REMOVED***t-cfo th:nth-child(2), ***REMOVED***t-cfo td:nth-child(2) {
+  position: sticky; background: var(--surface); z-index: 1;
+}
+***REMOVED***t-cfo th:nth-child(1), ***REMOVED***t-cfo td:nth-child(1) { left: 0; min-width: 72px; }
+***REMOVED***t-cfo th:nth-child(2), ***REMOVED***t-cfo td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--grid); }
+***REMOVED***t-cfo thead th:nth-child(1), ***REMOVED***t-cfo thead th:nth-child(2) { z-index: 3; }
+***REMOVED***t-cfo tr:hover td:nth-child(1), ***REMOVED***t-cfo tr:hover td:nth-child(2) { background: var(--plane); }
+***REMOVED***t-cfo tr.group td { position: static; }
+tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--raised); }
+tr.group td {
+  background: var(--raised); font-weight: 700; font-size: 13px;
+  text-transform: uppercase; letter-spacing: .03em; color: var(--accent-2);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+tr.child td:first-child { padding-left: 26px; }
+tr.child { color: var(--ink2); }
+tr.child td { font-size: 13.5px; }
+
+/* ---------- meter / status ---------- */
+.meter { display: flex; align-items: center; gap: 7px; min-width: 132px; }
+.track { position: relative; flex: 1; height: 7px; border-radius: 4px; background: var(--raised); overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; background: var(--accent); }
+.fill.s-warning { background: var(--warning); }
+.fill.s-serious { background: var(--serious); }
+.fill.s-critical { background: var(--critical); }
+.pace { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--faint); }
+.pct { font-variant-numeric: tabular-nums; font-size: 14px; min-width: 42px; text-align: right; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 600; padding: 4px 10px 4px 8px;
+  border-radius: var(--r-sm); white-space: nowrap; background: var(--raised);
+}
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.badge.good { color: var(--good-ink); background: rgba(130,214,204,.15); } .badge.good .dot { background: var(--good); }
+.badge.warning { color: var(--warning); background: rgba(189,147,117,.15); } .badge.warning .dot { background: var(--warning); }
+.badge.serious { color: var(--serious); background: rgba(224,154,95,.15); } .badge.serious .dot { background: var(--serious); }
+.badge.critical { color: var(--critical); background: var(--crit-bg); } .badge.critical .dot { background: var(--critical); }
+.neg { color: var(--critical); font-weight: 600; }
+
+/* ---------- heatmap ---------- */
+.hm { border-collapse: separate; border-spacing: 2px; font-size: 13px; width: auto; }
+.hm th { background: none; border: none; position: static; text-transform: none; }
+.hm th.rowh { text-align: left; white-space: normal; max-width: 270px; font-weight: 400; color: var(--ink2); font-size: 14px; }
+.hm td {
+  border: none; width: 70px; height: 34px; text-align: center;
+  font-variant-numeric: tabular-nums; border-radius: var(--r-sm);
+}
+.hm td.d0 { color: var(--ink2); }
+.hm td.d1, .hm td.d2 { color: var(--ink); }
+.hm td.d3 { color: var(--hm-ink-3); }
+.hm td.d4 { color: var(--hm-ink-4); }
+.hm td.fc { background-image: repeating-linear-gradient(135deg, var(--grid) 0 1px, transparent 1px 5px); color: var(--muted); }
+.hm-legend { display: flex; align-items: center; gap: 3px; font-size: 13px; color: var(--ink2); flex-wrap: wrap; }
+.hm-legend i { width: 26px; height: 12px; border-radius: 2px; display: inline-block; }
+
+/* ---------- forms / misc ---------- */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 13px; }
+label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px; }
+.f-in {
+  width: 100%; background: var(--raised); border: 1px solid var(--border); color: var(--ink);
+  border-radius: var(--r-sm); padding: 7px 11px; transition: border-color 120ms, box-shadow 120ms;
+}
+.f-in:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.btn {
+  border: 1px solid var(--border); background: var(--raised); color: var(--ink);
+  border-radius: var(--r-sm); padding: 8px 18px; font-size: 15px; font-weight: 500;
+  transition: background 120ms, box-shadow 120ms, border-color 120ms;
+}
+.btn:hover { background: var(--border); border-color: var(--axis); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: ***REMOVED***fff; font-weight: 500; }
+.btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); box-shadow: 0 0 0 4px var(--accent-soft); }
+.btn.sm { padding: 5px 12px; font-size: 13px; }
+.row-actions { display: flex; gap: 6px; }
+.alert {
+  display: flex; gap: 8px; align-items: flex-start;
+  border: 1px solid var(--border); border-left: 3px solid var(--serious);
+  background: var(--raised); border-radius: var(--r-sm); padding: 11px 14px; font-size: 14px; margin-bottom: 12px;
+}
+.alert.crit { border-left-color: var(--critical); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .two-col { grid-template-columns: 1fr; } }
+.pick { cursor: pointer; }
+.pick[aria-selected="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent-2); }
+.drop {
+  border: 2px dashed var(--axis); border-radius: var(--r); padding: 28px;
+  text-align: center; color: var(--ink2); font-size: 15px; background: var(--raised);
+}
+/* ---------- дашборд: карточки ЦФО ---------- */
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(345px, 1fr)); gap: 13px; }
+.cfo-card {
+  position: relative; overflow: hidden; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 15px 15px 13px; transition: transform 160ms, box-shadow 160ms, border-color 160ms;
+}
+.cfo-card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--faint);
+}
+.cfo-card.st-good::before { background: var(--good); }
+.cfo-card.st-warning::before { background: var(--warning); }
+.cfo-card.st-serious::before { background: var(--serious); }
+.cfo-card.st-critical::before { background: var(--critical); }
+.cfo-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0, 0, 0, .35); border-color: var(--axis); }
+:root[data-theme="light"] .cfo-card:hover { box-shadow: 0 8px 22px rgba(23, 20, 43, .12); }
+.cc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 9px; }
+.cc-title { font-size: 16px; font-weight: 600; line-height: 1.25; }
+.cc-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.cc-meta {
+  display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px;
+  color: var(--muted); margin: 12px 0 3px;
+}
+.cc-meta b { display: block; font-size: 17px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cc-meta .m-fact b { color: var(--accent-2); }
+.cc-meta .m-claim b { color: var(--warning); }
+.cc-foot {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  border-top: 1px solid var(--border); margin-top: 12px; padding-top: 10px; font-size: 13px; color: var(--muted);
+}
+.cc-foot b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.cc-oob { font-size: 13px; color: var(--critical); margin-top: 8px; font-weight: 600; }
+
+/* батарейка освоения */
+.batt { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.batt-shell { display: flex; align-items: center; gap: 2px; flex: 1; }
+.batt-body {
+  position: relative; flex: 1; height: 22px; display: flex; gap: 2px; padding: 2px;
+  border: 1px solid var(--axis); border-radius: 4px; background: var(--raised);
+}
+.batt-cap { width: 4px; height: 11px; background: var(--axis); border-radius: 0 2px 2px 0; flex: none; }
+.batt-seg { flex: 1; border-radius: 1px; background: var(--grid); }
+.st-good .batt-seg.on { background: var(--good); }
+.st-warning .batt-seg.on { background: var(--warning); }
+.st-serious .batt-seg.on { background: var(--serious); }
+.st-critical .batt-seg.on { background: var(--critical); }
+.batt-pace { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink2); border-radius: 1px; }
+.batt-pct { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+
+.add-form {
+  padding: 14px; border-bottom: 1px solid var(--border); background: var(--raised);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.add-form h3 { font-size: 16px; margin-bottom: 12px; color: var(--accent-2); }
+.add-form .row-btns { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
+.err { color: var(--critical); font-size: 14px; font-weight: 600; }
+tr.manual td { background: rgba(117, 73, 232, .07); }
+tr.manual td:nth-child(1) { box-shadow: inset 3px 0 0 var(--accent-2); }
+.mini {
+  border: none; background: none; color: var(--muted); font-size: 14px;
+  line-height: 1; padding: 0 4px; border-radius: 3px; visibility: hidden; font-weight: 700;
+}
+tr:hover .mini { visibility: visible; }
+.mini:hover { color: var(--critical); background: var(--crit-bg); }
+.no-cell { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--border); border-radius: 14px; padding: 4px 12px;
+  font-size: 14px; background: var(--raised); color: var(--ink2);
+}
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: ***REMOVED***fff; font-weight: 600; }
+.chip:hover { border-color: var(--axis); color: var(--ink); }
+.legend-inline { font-size: 13px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+.mono-s { font-size: 13px; color: var(--muted); font-weight: 700; }
+/* всё, что раньше было приглушённым (***REMOVED***ADA6CF), теперь жирное белое */
+.kpi .lbl, .card > header .sub, .dim, .legend-inline, label.f,
+.cc-sub, .cc-meta, .cc-foot, .hm td.fc, .mini { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-row">
+    <div class="brand">
+      <svg class="logo-mark" viewBox="0 0 38 38" aria-label="Холдинг">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="***REMOVED***8A62F0"/><stop offset="1" stop-color="***REMOVED***5B2FD0"/>
+        </linearGradient></defs>
+        <rect width="38" height="38" rx="8" fill="url(***REMOVED***lg)"/>
+        <text x="19" y="25" text-anchor="middle" fill="***REMOVED***fff" font-family="Calibri, sans-serif"
+              font-size="15" font-weight="700" letter-spacing="0.5">MR</text>
+      </svg>
+      <span class="wordmark">MR <span>Group</span></span>
+      <span class="brand-sep"></span>
+      <h1>Бюджеты ЦФО</h1>
+      <span class="tag">МАКЕТ</span>
+    </div>
+    <div class="top-spacer"></div>
+    <div class="ctl">
+      <span>Год</span>
+      <select id="year"><option>2026</option><option disabled>2025 (архив)</option></select>
+    </div>
+    <div class="ctl">
+      <span>Отчётная дата</span>
+      <input id="asof" type="date" value="2026-08-04">
+    </div>
+    <div class="ctl">
+      <span>Факт закрыт по</span>
+      <select id="closed">
+        <option value="6">Июнь</option>
+        <option value="7" selected>Июль</option>
+        <option value="8">Август</option>
+      </select>
+    </div>
+    <div class="ctl">
+      <span>Роль</span>
+      <select id="role">
+        <option value="fin">Финансовый отдел</option>
+        <option value="cfo">Руководитель ЦФО — ДИТ</option>
+      </select>
+    </div>
+    <button class="icon-btn" id="theme" title="Светлая / тёмная тема">◐</button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-p="dash" aria-selected="true">Дашборд</button>
+    <button class="tab" role="tab" data-p="sum" aria-selected="false">Сводка</button>
+    <button class="tab" role="tab" data-p="cfo" aria-selected="false">Карточка ЦФО</button>
+    <button class="tab" role="tab" data-p="claims" aria-selected="false">Заявки</button>
+    <button class="tab" role="tab" data-p="match" aria-selected="false">Сопоставление</button>
+    <button class="tab" role="tab" data-p="heat" aria-selected="false">Тепловая карта</button>
+    <button class="tab" role="tab" data-p="adj" aria-selected="false">Корректировки</button>
+    <button class="tab" role="tab" data-p="io" aria-selected="false">Импорт / экспорт</button>
+  </div>
+</div>
+
+<div class="note" id="src-note">Загрузка данных…</div>
+
+<main>
+
+<!-- ================= ДАШБОРД ================= -->
+<section class="panel on" id="p-dash">
+  <div class="card">
+    <header><h2>Ключевые показатели</h2><span class="sub">на 04.08.2026</span></header>
+    <div class="kpis" id="dash-kpis"></div>
+  </div>
+
+  <div class="card">
+    <header>
+      <h2>ЦФО — освоение бюджета</h2>
+      <span class="sub" id="dash-sub"></span>
+      <div class="top-spacer"></div>
+      <div class="chips" id="dash-sort">
+        <button class="chip" aria-pressed="true" data-s="plan">По размеру бюджета</button>
+        <button class="chip" aria-pressed="false" data-s="pct">По освоению</button>
+        <button class="chip" aria-pressed="false" data-s="risk">По риску</button>
+      </div>
+    </header>
+    <div class="card-body">
+      <div class="dash-grid" id="dash-grid"></div>
+      <div class="legend-inline">
+        <span>Батарейка — освоение годового лимита фактом; засечка │ — ожидаемый темп к отчётной дате</span>
+        <span>Полоса сверху карточки — статус ЦФО</span>
+        <span>Клик по карточке открывает карточку ЦФО</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= СВОДКА ================= -->
+<section class="panel" id="p-sum">
+  <div class="card">
+    <div class="kpis" id="kpis"></div>
+  </div>
+
+  <div class="card">
+    <header>
+      <h2>Освоение бюджета по ЦФО</h2>
+      <span class="sub" id="sum-sub"></span>
+      <div class="top-spacer"></div>
+      <div class="chips" id="sum-filter">
+        <button class="chip" aria-pressed="true" data-f="all">Все</button>
+        <button class="chip" aria-pressed="false" data-f="risk">Только с риском</button>
+        <button class="chip" aria-pressed="false" data-f="over">Перерасход</button>
+      </div>
+    </header>
+    <div class="card-body flush">
+      <div class="scroll">
+        <table id="t-sum">
+          <thead>
+            <tr>
+              <th>ЦФО / бюджет</th>
+              <th class="num">Бюджет год</th>
+              <th class="num">Факт</th>
+              <th class="num">Заявки</th>
+              <th class="num">Итого опер&nbsp;план</th>
+              <th class="num">Остаток по кассе</th>
+              <th class="num">Свободный лимит</th>
+              <th>Освоение</th>
+              <th>Статус</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+      <div class="legend-inline" style="padding:10px 14px">
+        <span>Остаток по кассе = Бюджет − Факт</span>
+        <span>Свободный лимит = Бюджет − (Факт + Заявки)</span>
+        <span>│ на шкале — ожидаемый темп освоения к отчётной дате</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header>
+      <h2>Вне бюджета</h2>
+      <span class="sub">расходы, помеченные вручную как внебюджетные</span>
+      <div class="top-spacer"></div>
+      <span class="badge serious"><span class="dot"></span>требует решения</span>
+    </header>
+    <div class="card-body flush">
+      <div class="scroll"><table id="t-oob">
+        <thead><tr>
+          <th>Дата</th><th>ЦФО</th><th class="wrap">Контрагент</th><th class="wrap">Назначение</th>
+          <th class="num">Сумма</th><th>Кто пометил</th><th></th>
+        </tr></thead>
+        <tbody></tbody><tfoot></tfoot>
+      </table></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= КАРТОЧКА ЦФО ================= -->
+<section class="panel" id="p-cfo">
+  <div class="card">
+    <header>
+      <h2>Карточка ЦФО</h2>
+      <div class="ctl"><select id="cfo-pick" class="f-in" style="min-width:340px"></select></div>
+      <div class="top-spacer"></div>
+      <button class="btn sm primary" id="add-row-btn">+ Добавить строку</button>
+      <button class="btn sm">Excel</button>
+      <button class="btn sm">PDF</button>
+    </header>
+    <div class="card-body">
+      <div class="kpis" id="cfo-kpis" style="border:1px solid var(--border);border-radius:6px;overflow:hidden"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header>
+      <h2 id="cfo-block-title">Строки бюджета</h2>
+      <span class="sub">↳ вложенные строки — фактические платежи, привязанные к лимиту строки</span>
+    </header>
+    <div class="card-body flush">
+      <div class="add-form" id="add-form" hidden>
+        <h3 id="add-title">Новая строка бюджета</h3>
+        <div class="chips" style="margin-bottom:14px">
+          <button class="chip" aria-pressed="true" data-kind="budget">Строка бюджета (лимит)</button>
+          <button class="chip" aria-pressed="false" data-kind="fact">Фактический расход к строке</button>
+        </div>
+        <div class="form-grid">
+          <div><label class="f">Бюджет</label><select class="f-in" id="a-budget"></select></div>
+          <div><label class="f">Статья оборотов</label>
+            <input class="f-in" id="a-article" list="dl-articles" placeholder="4420_Расходы на приобретение ПО">
+            <datalist id="dl-articles"></datalist></div>
+          <div><label class="f">Контрагент</label><input class="f-in" id="a-cp" placeholder="Исполнитель не определён"></div>
+          <div><label class="f">Договор</label><input class="f-in" id="a-contract" placeholder="Без договора"></div>
+          <div><label class="f">Детализация</label><input class="f-in" id="a-detail" placeholder="на что расход"></div>
+          <div id="w-parent" hidden><label class="f">Взять лимит из строки №</label>
+            <select class="f-in" id="a-parent"></select></div>
+          <div><label class="f">Сумма, ₽ (с НДС)</label><input class="f-in" id="a-sum" placeholder="1 200 000"></div>
+          <div id="w-spread"><label class="f">Распределение по месяцам</label>
+            <select class="f-in" id="a-spread">
+              <option value="even">Равномерно по 12 месяцам</option>
+              <option value="one">Целиком в один месяц</option>
+              <option value="none">Не распределять (только годовой лимит)</option>
+            </select></div>
+          <div id="w-month"><label class="f">Месяц</label><select class="f-in" id="a-month"></select></div>
+          <div><label class="f">Признак</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:13px;padding-top:5px">
+              <input type="checkbox" id="a-oob"> вне бюджета</label></div>
+        </div>
+        <div class="row-btns">
+          <button class="btn primary" id="a-save">Добавить строку</button>
+          <button class="btn" id="a-cancel">Отмена</button>
+          <span class="err" id="a-err"></span>
+        </div>
+      </div>
+      <div class="scroll">
+        <table id="t-cfo">
+          <thead><tr id="cfo-head"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="legend-inline" style="padding:10px 14px">
+        <span><b>Жирный</b> месяц — закрытый факт</span>
+        <span><i style="color:var(--muted)">курсив</i> — заявка / прогноз</span>
+        <span>Август показан двумя числами: факт + остаток заявок</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ЗАЯВКИ ================= -->
+<section class="panel" id="p-claims">
+  <div class="card">
+    <header><h2>Новая заявка (обязательство)</h2>
+      <span class="sub">уменьшает свободный лимит строки, но не факт</span></header>
+    <div class="card-body">
+      <div class="form-grid">
+        <div><label class="f">№ заявки (1С)</label><input class="f-in" value="ЗП-2026-04417"></div>
+        <div><label class="f">Дата платежа</label><input class="f-in" type="date" value="2026-09-15"></div>
+        <div><label class="f">ЦФО</label><select class="f-in" id="claim-cfo"></select></div>
+        <div><label class="f">Бюджет</label><select class="f-in"><option>Бюджет обязательных затрат</option><option>Бюджет развития</option></select></div>
+        <div><label class="f">Строка бюджета</label><select class="f-in">
+          <option>№10 · 4411.3_Аренда оборудования для IT · Аренда виртуальных машин</option>
+          <option>№2 · 4411.1_Приобретение офисного оборудования · ИТ инфраструктура</option>
+          <option>№4 · 4411.2_Содержание офисного оборудования · Расходные материалы</option>
+        </select></div>
+        <div><label class="f">Контрагент</label><input class="f-in" value="Альфа Технолоджис ООО"></div>
+        <div><label class="f">Договор</label><input class="f-in" value="Договор №АТ-170/2025"></div>
+        <div><label class="f">Сумма, ₽ (с НДС)</label><input class="f-in" value="1 950 000"></div>
+        <div><label class="f">Детализация</label><input class="f-in" value="Аренда ВМ, IV квартал"></div>
+      </div>
+      <div class="alert" style="margin:14px 0 0">
+        <span class="badge warning"><span class="dot"></span>сверх лимита</span>
+        <div>Свободный лимит строки №10 — <b>6 000 000&nbsp;₽</b>, уже заявлено <b>4 550 000&nbsp;₽</b>.
+        С этой заявкой превышение составит <b>500 000&nbsp;₽</b>. Система не блокирует — заявка будет сохранена с пометкой «сверх лимита».</div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="btn primary">Сохранить заявку</button>
+        <button class="btn">Сохранить и добавить ещё</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>Заявки в работе</h2><span class="sub">неоплаченные — входят в «Итого опер план»</span>
+      <div class="top-spacer"></div>
+      <div class="chips">
+        <button class="chip" aria-pressed="true">Все</button>
+        <button class="chip" aria-pressed="false">Сверх лимита</button>
+        <button class="chip" aria-pressed="false">Вне бюджета</button>
+      </div>
+    </header>
+    <div class="card-body flush"><div class="scroll">
+      <table id="t-claims">
+        <thead><tr>
+          <th>№ заявки</th><th>Дата платежа</th><th class="wrap">ЦФО</th><th class="wrap">Строка бюджета</th>
+          <th class="wrap">Контрагент</th><th class="num">Сумма</th><th>Признак</th><th></th>
+        </tr></thead>
+        <tbody></tbody><tfoot></tfoot>
+      </table>
+    </div></div>
+  </div>
+</section>
+
+<!-- ================= СОПОСТАВЛЕНИЕ ================= -->
+<section class="panel" id="p-match">
+  <div class="alert crit">
+    <span class="badge critical"><span class="dot"></span>5 платежей не разобрано</span>
+    <div>Платежи из выгрузки 1С за август, для которых не найдена бюджетная строка. Пока не разобраны — не попадают в факт ЦФО.</div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <header><h2>Неразобранные платежи из 1С</h2><span class="sub">выгрузка от 04.08.2026</span></header>
+      <div class="card-body flush"><div class="scroll">
+        <table id="t-unmatched">
+          <thead><tr><th>Дата</th><th class="wrap">Контрагент</th><th class="wrap">Статья / назначение</th><th class="num">Сумма</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div></div>
+    </div>
+    <div class="card">
+      <header><h2>Куда отнести</h2><span class="sub" id="match-sel">выберите платёж слева</span></header>
+      <div class="card-body">
+        <div id="match-body" class="dim">Кандидаты подбираются по статье, ЦФО, контрагенту и договору.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ТЕПЛОВАЯ КАРТА ================= -->
+<section class="panel" id="p-heat">
+  <div class="card">
+    <header>
+      <h2>Отклонение факта от плана, % — ЦФО × месяц</h2>
+      <div class="top-spacer"></div>
+      <div class="hm-legend" id="hm-legend"></div>
+    </header>
+    <div class="card-body">
+      <div class="scroll"><table class="hm" id="t-heat"><thead></thead><tbody></tbody></table></div>
+      <div class="legend-inline">
+        <span>Синий — расход ниже плана месяца, красный — выше. Заштрихованные месяцы ещё не закрыты.</span>
+        <span>В макете план месяца = 1/12 годового бюджета; в системе — план из файла дирекции.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= КОРРЕКТИРОВКИ ================= -->
+<section class="panel" id="p-adj">
+  <div class="card">
+    <header><h2>Перенос лимита</h2>
+      <span class="sub">разрешено: между месяцами внутри строки и между строками внутри ЦФО</span></header>
+    <div class="card-body">
+      <div class="chips" style="margin-bottom:14px">
+        <button class="chip" aria-pressed="true" data-m="m">Между месяцами (внутри строки)</button>
+        <button class="chip" aria-pressed="false" data-m="r">Между строками (внутри ЦФО)</button>
+      </div>
+      <div class="form-grid">
+        <div><label class="f">ЦФО</label><select class="f-in" id="adj-cfo"></select></div>
+        <div><label class="f">Строка бюджета</label><select class="f-in"><option>№10 · 4411.3_Аренда оборудования для IT</option></select></div>
+        <div><label class="f">Снять с месяца</label><select class="f-in"><option>Ноябрь — свободно 1 500 000 ₽</option><option>Декабрь — свободно 1 500 000 ₽</option></select></div>
+        <div><label class="f">Добавить в месяц</label><select class="f-in"><option>Сентябрь</option><option>Октябрь</option></select></div>
+        <div><label class="f">Сумма, ₽</label><input class="f-in" value="800 000"></div>
+        <div style="grid-column:1/-1"><label class="f">Обоснование (обязательно)</label>
+          <input class="f-in" value="Перенос платежа по договору аренды на сентябрь по согласованию с поставщиком"></div>
+      </div>
+      <div class="alert" style="margin:14px 0 0">
+        <span class="badge good"><span class="dot"></span>в пределах бюджета</span>
+        <div>Годовой лимит строки и ЦФО не меняется — перераспределение внутри года. Автоматический перенос неиспользованного остатка месяца включён.</div>
+      </div>
+      <div style="margin-top:14px"><button class="btn primary">Провести корректировку</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>Журнал изменений</h2><span class="sub">кто, когда и что изменил — по всем ЦФО</span></header>
+    <div class="card-body flush"><div class="scroll">
+      <table id="t-log"><thead><tr>
+        <th>Дата и время</th><th>Автор</th><th>Тип</th><th class="wrap">Объект</th>
+        <th class="wrap">Было → стало</th><th class="wrap">Обоснование</th>
+      </tr></thead><tbody></tbody></table>
+    </div></div>
+  </div>
+</section>
+
+<!-- ================= ИМПОРТ / ЭКСПОРТ ================= -->
+<section class="panel" id="p-io">
+  <div class="two-col">
+    <div class="card">
+      <header><h2>Импорт</h2><span class="sub">план от дирекций, факт из 1С, оперплан 1:1</span></header>
+      <div class="card-body">
+        <div class="chips" style="margin-bottom:12px">
+          <button class="chip" aria-pressed="true">План (файл дирекции)</button>
+          <button class="chip" aria-pressed="false">Факт (выгрузка 1С)</button>
+          <button class="chip" aria-pressed="false">Оперплан ЦФО 1:1</button>
+        </div>
+        <div class="drop">Перетащите .xlsx сюда<br><span class="mono-s">или</span><br>
+          <button class="btn" style="margin-top:8px">Выбрать файл</button></div>
+        <p class="mono-s" style="margin:10px 0 0">Автоподхват из папки:
+          <code>…\2026\Бюджеты ЦФО\Бюджеты от дирекций</code> — раз в сутки, новые файлы попадают в очередь на разбор.</p>
+      </div>
+    </div>
+    <div class="card">
+      <header><h2>Экспорт</h2><span class="sub">Excel — точные суммы с копейками</span></header>
+      <div class="card-body">
+        <table><tbody>
+          <tr><td>Лист «Оперплан ЦФО» 1:1</td><td class="dim">для вставки в «Ликвидность»</td>
+            <td class="num"><button class="btn sm">Excel</button></td></tr>
+          <tr><td>Сводка по ЦФО</td><td class="dim">план / факт / заявки / остаток</td>
+            <td class="num"><button class="btn sm">Excel</button> <button class="btn sm">PDF</button></td></tr>
+          <tr><td>Карточка одного ЦФО</td><td class="dim">со строками и месяцами</td>
+            <td class="num"><button class="btn sm">Excel</button> <button class="btn sm">PDF</button></td></tr>
+          <tr><td>Вне бюджета</td><td class="dim">реестр за период</td>
+            <td class="num"><button class="btn sm">Excel</button></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>Сопоставление колонок файла</h2>
+      <span class="sub">файл: Бюджет 2026_Бухгалтерия_заявка.xlsx · лист «Лист_1» · шапка найдена в строке 3</span>
+      <div class="top-spacer"></div>
+      <span class="badge good"><span class="dot"></span>7 из 8 колонок распознаны</span>
+    </header>
+    <div class="card-body flush"><div class="scroll">
+      <table id="t-map"><thead><tr>
+        <th>Колонка файла</th><th>Пример значения</th><th>Поле системы</th><th>Статус</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+    <div class="legend-inline" style="padding:10px 14px">
+      <span>Колонки с ФИО сотрудника в заголовке распознаются как «Комментарий согласующего».</span>
+      <span>Настройка запоминается для этого ЦФО и применяется к следующим загрузкам.</span>
+    </div></div>
+  </div>
+</section>
+
+</main>
+
+<!-- Обезличенные демо-данные. Если рядом лежит локальный mock-data.js
+     с рабочими суммами, он перезапишет window.MOCK (в репозиторий не попадает). -->
+<script src="mock-data.demo.js"></script>
+<script src="mock-data.js" onerror="void 0"></script>
+<script>
+(function () {
+  "use strict";
+
+  var MONTHS = ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"];
+  var MONTHS_FULL = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  var CURRENT_MONTH = 8;          // август — месяц отчётной даты 04.08.2026
+  var CURRENT_FACT_SHARE = 0.45;  // доля месяца, уже прошедшая по кассе (демо)
+
+  var closedThrough = 7;          // «факт закрыт по» — из шапки
+
+  // ---------- утилиты ----------
+  function fmt(v) {
+    var n = Math.round(v || 0);
+    var sign = n < 0 ? "−" : "";
+    return sign + Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  }
+  function fmtShort(v) {
+    var a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(2).replace(".", ",") + " млрд";
+    if (a >= 1e6) return (v / 1e6).toFixed(1).replace(".", ",") + " млн";
+    if (a >= 1e3) return Math.round(v / 1e3) + " тыс";
+    return fmt(v);
+  }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) for (var k in attrs) {
+      if (k === "class") n.className = attrs[k];
+      else if (k === "html") n.innerHTML = attrs[k];
+      else if (k === "text") n.textContent = attrs[k];
+      else n.setAttribute(k, attrs[k]);
+    }
+    (kids || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function td(text, cls) { return el("td", { class: cls || "", text: text }); }
+  function tdn(v, cls) { return el("td", { class: "num " + (cls || ""), text: fmt(v) }); }
+  function th(text, cls) { return el("th", { class: cls || "", html: text }); }
+
+  // ---------- расчётная модель ----------
+  // Факт = закрытые месяцы + прошедшая часть текущего месяца.
+  // Заявки = остаток текущего месяца + будущие месяцы.
+  function derive(b) {
+    var fact = 0, claims = 0, factM = [], claimM = [];
+    for (var i = 0; i < 12; i++) {
+      var v = b.months[i] || 0, f = 0, c = 0;
+      if (i + 1 <= closedThrough) f = v;
+      else if (i + 1 === CURRENT_MONTH) { f = v * CURRENT_FACT_SHARE; c = v - f; }
+      else c = v;
+      fact += f; claims += c; factM.push(f); claimM.push(c);
+    }
+    var operplan = fact + claims;
+    return {
+      cfo: b.cfo, budget: b.budget, plan: b.plan, months: b.months,
+      fact: fact, claims: claims, operplan: operplan,
+      cash: b.plan - fact,          // Остаток бюджета
+      free: b.plan - operplan,      // Бюджет − опер план
+      pct: b.plan ? fact / b.plan : 0,
+      factM: factM, claimM: claimM
+    };
+  }
+
+  function pace() { return (closedThrough + CURRENT_FACT_SHARE) / 12; }
+
+  function status(d) {
+    if (d.fact > d.plan) return ["critical", "перерасход"];
+    if (d.free < 0) return ["serious", "заявки сверх лимита"];
+    if (d.pct > pace() + 0.15) return ["warning", "опережает темп"];
+    return ["good", "в графике"];
+  }
+
+  function badge(kind, text) {
+    return el("span", { class: "badge " + kind }, [el("span", { class: "dot" }), document.createTextNode(text)]);
+  }
+
+  function meter(d) {
+    var w = Math.min(100, d.pct * 100);
+    var st = status(d)[0];
+    var fill = el("div", { class: "fill" + (st === "good" ? "" : " s-" + st) });
+    fill.style.width = w + "%";
+    var mark = el("div", { class: "pace" });
+    mark.style.left = (pace() * 100) + "%";
+    var track = el("div", { class: "track" }, [fill, mark]);
+    track.title = "Освоено " + (d.pct * 100).toFixed(1) + "% · ожидаемый темп " + (pace() * 100).toFixed(0) + "%";
+    return el("div", { class: "meter" }, [track, el("span", { class: "pct", text: (d.pct * 100).toFixed(0) + "%" })]);
+  }
+
+  // ---------- данные ----------
+  var M = window.MOCK;
+  var ALL = M.blocks.map(derive);
+  var visible = ALL;
+  var sumFilter = "all";
+
+  document.getElementById("src-note").innerHTML =
+    "<b>Это макет</b> — интерфейс и функционал, без работающего бэкенда. Данные настоящие: " +
+    M.source + " (16 бюджетов, " + new Set(M.blocks.map(function (b) { return b.cfo; })).size +
+    " ЦФО). Разделение «факт / заявки» смоделировано под отчётную дату 04.08.2026, план по месяцам в тепловой карте — условный.";
+
+  // ---------- KPI ----------
+  function renderKpis() {
+    var t = { plan: 0, fact: 0, claims: 0, operplan: 0 };
+    visible.forEach(function (d) { t.plan += d.plan; t.fact += d.fact; t.claims += d.claims; t.operplan += d.operplan; });
+    var oob = OOB.reduce(function (s, r) { return s + r.sum; }, 0);
+    var over = visible.filter(function (d) { return d.fact > d.plan || d.free < 0; }).length;
+
+    var hosts = [document.getElementById("kpis"), document.getElementById("dash-kpis")];
+    hosts.forEach(function (h) { h.innerHTML = ""; });
+    var free = t.plan - t.operplan;
+    [
+      ["Бюджет 2026", fmtShort(t.plan) + " ₽", "16 бюджетов · " + visible.length + " показано", "", "k-accent", true],
+      ["Факт (по июль + август)", fmtShort(t.fact) + " ₽", (t.plan ? (t.fact / t.plan * 100).toFixed(1) : 0) + "% годового бюджета", "", "k-good"],
+      ["Заявки в работе", fmtShort(t.claims) + " ₽", "обязательства, ещё не оплачены", "", "k-warm"],
+      ["Свободный лимит", fmtShort(free) + " ₽", "Бюджет − (Факт + Заявки)", free < 0 ? "neg" : "pos", free < 0 ? "k-crit" : "k-good"],
+      ["Вне бюджета", fmtShort(oob) + " ₽", OOB.length + " записи за год", "neg", "k-crit"],
+      ["ЦФО с превышением", String(over), "перерасход или заявки сверх лимита", over ? "neg" : "pos", over ? "k-crit" : "k-good"]
+    ].forEach(function (k) {
+      hosts.forEach(function (h) {
+        h.appendChild(el("div", { class: "kpi " + k[4] }, [
+          el("div", { class: "lbl", text: k[0] }),
+          el("div", { class: "val" + (k[5] ? " hero" : ""), text: k[1] }),
+          el("div", { class: "sub " + (k[3] || ""), text: k[2] })
+        ]));
+      });
+    });
+  }
+
+  // ---------- сводка ----------
+  function renderSum() {
+    var tb = document.querySelector("***REMOVED***t-sum tbody"); tb.innerHTML = "";
+    var tf = document.querySelector("***REMOVED***t-sum tfoot"); tf.innerHTML = "";
+    var rows = visible.slice().sort(function (a, b) { return b.plan - a.plan; });
+    var t = { plan: 0, fact: 0, claims: 0, operplan: 0, cash: 0, free: 0 };
+
+    rows.forEach(function (d) {
+      var st = status(d);
+      var name = el("td", { class: "wrap" }, [
+        el("div", { class: "cfo-name", text: d.cfo }),
+        el("div", { class: "mono-s", text: d.budget })
+      ]);
+      var tr = el("tr", {}, [
+        name, tdn(d.plan), tdn(d.fact, "acc"), tdn(d.claims, "warm"), tdn(d.operplan),
+        tdn(d.cash, d.cash < 0 ? "neg" : ""), tdn(d.free, d.free < 0 ? "neg" : "pos"),
+        el("td", {}, [meter(d)]), el("td", {}, [badge(st[0], st[1])])
+      ]);
+      tr.style.cursor = "pointer";
+      tr.title = "Открыть карточку ЦФО";
+      tr.onclick = function () { openCfo(d.cfo); };
+      tb.appendChild(tr);
+      t.plan += d.plan; t.fact += d.fact; t.claims += d.claims;
+      t.operplan += d.operplan; t.cash += d.cash; t.free += d.free;
+    });
+
+    tf.appendChild(el("tr", {}, [
+      el("td", { text: "ИТОГО по показанным" }), tdn(t.plan), tdn(t.fact), tdn(t.claims),
+      tdn(t.operplan), tdn(t.cash), tdn(t.free, t.free < 0 ? "neg" : ""), el("td"), el("td")
+    ]));
+    document.getElementById("sum-sub").textContent =
+      "на 04.08.2026 · ожидаемый темп освоения " + (pace() * 100).toFixed(0) + "%";
+  }
+
+  // ---------- дашборд: карточки ЦФО ----------
+  var dashSort = "plan";
+
+  function battery(d, st) {
+    var pct = d.pct * 100;
+    var segs = el("div", { class: "batt-body" });
+    for (var i = 0; i < 10; i++) {
+      segs.appendChild(el("div", { class: "batt-seg" + (pct >= (i + 1) * 10 - 5 ? " on" : "") }));
+    }
+    var mark = el("div", { class: "batt-pace" });
+    mark.style.left = "calc(" + (pace() * 100) + "% - 1px)";
+    mark.title = "Ожидаемый темп освоения: " + (pace() * 100).toFixed(0) + "%";
+    segs.appendChild(mark);
+    return el("div", { class: "batt" }, [
+      el("div", { class: "batt-shell" }, [segs, el("div", { class: "batt-cap" })]),
+      el("span", { class: "batt-pct", text: Math.round(pct) + "%" })
+    ]);
+  }
+
+  function oobFor(cfo) {
+    return OOB.reduce(function (sum, r) { return r.cfo === cfo ? sum + r.sum : sum; }, 0);
+  }
+
+  function metaCell(label, value, cls) {
+    return el("div", { class: cls || "" }, [
+      el("b", { text: fmtShort(value) }), document.createTextNode(label)
+    ]);
+  }
+
+  function renderDash() {
+    var host = document.getElementById("dash-grid"); host.innerHTML = "";
+    var rows = visible.slice();
+    if (dashSort === "pct") rows.sort(function (a, b) { return b.pct - a.pct; });
+    else if (dashSort === "risk") rows.sort(function (a, b) { return (a.free / (a.plan || 1)) - (b.free / (b.plan || 1)); });
+    else rows.sort(function (a, b) { return b.plan - a.plan; });
+
+    var oobShown = {};
+    rows.forEach(function (d) {
+      var st = status(d);
+      var oob = oobShown[d.cfo] ? 0 : oobFor(d.cfo);
+      if (oob) oobShown[d.cfo] = true;
+      var card = el("div", { class: "cfo-card st-" + st[0] }, [
+        el("div", { class: "cc-head" }, [
+          el("div", {}, [
+            el("div", { class: "cc-title", text: d.cfo }),
+            el("div", { class: "cc-sub", text: d.budget })
+          ]),
+          badge(st[0], st[1])
+        ]),
+        el("div", { class: "cc-meta" }, [
+          metaCell("бюджет", d.plan),
+          metaCell("факт", d.fact, "m-fact"),
+          metaCell("заявки", d.claims, "m-claim")
+        ]),
+        battery(d, st[0]),
+        el("div", { class: "cc-foot" }, [
+          el("span", {}, [document.createTextNode("свободный лимит "),
+            el("b", { class: d.free < 0 ? "neg" : "pos", text: fmtShort(d.free) + " ₽" })]),
+          el("span", { class: "mono-s", text: "по кассе " + fmtShort(d.cash) })
+        ])
+      ]);
+      if (oob) card.appendChild(el("div", { class: "cc-oob", text: "вне бюджета: " + fmtShort(oob) + " ₽" }));
+      card.title = "Открыть карточку ЦФО";
+      card.onclick = function () { openCfo(d.cfo); };
+      host.appendChild(card);
+    });
+
+    document.getElementById("dash-sub").textContent =
+      rows.length + " бюджетов · ожидаемый темп освоения " + (pace() * 100).toFixed(0) + "%";
+  }
+
+  // ---------- вне бюджета ----------
+  var OOB = [
+    { d: "12.03.2026", cfo: "Первая дирекция", cp: "Дельта Интеграция ООО", p: "Диагностика печатной техники, вне договора", sum: 384000, who: "Смирнова А. (финотдел)" },
+    { d: "28.02.2026", cfo: "Первая дирекция", cp: "Гамма Сервис АО", p: "Выделенный сервер сверх лимита строки", sum: 2700000, who: "Смирнова А. (финотдел)" },
+    { d: "19.05.2026", cfo: "Служба безопасности", cp: "Исполнитель не определён", p: "Проверка контрагентов, не заложено в бюджет", sum: 440000, who: "Петров С. (рук. ЦФО)" },
+    { d: "07.07.2026", cfo: "Четвёртая дирекция", cp: "Бета Софт ООО", p: "Срочная доработка лендинга", sum: 67000, who: "Петров С. (рук. ЦФО)" }
+  ];
+  function renderOob() {
+    var tb = document.querySelector("***REMOVED***t-oob tbody"); tb.innerHTML = "";
+    var tot = 0;
+    OOB.forEach(function (r) {
+      tot += r.sum;
+      tb.appendChild(el("tr", {}, [
+        td(r.d), el("td", { class: "wrap", text: r.cfo }), el("td", { class: "wrap", text: r.cp }),
+        el("td", { class: "wrap", text: r.p }), tdn(r.sum, "neg"), el("td", { class: "dim", text: r.who }),
+        el("td", {}, [el("div", { class: "row-actions" }, [
+          el("button", { class: "btn sm", text: "Отнести в бюджет" }),
+          el("button", { class: "btn sm", text: "Снять признак" })
+        ])])
+      ]));
+    });
+    document.querySelector("***REMOVED***t-oob tfoot").innerHTML = "";
+    document.querySelector("***REMOVED***t-oob tfoot").appendChild(el("tr", {}, [
+      el("td", { text: "ИТОГО вне бюджета" }), el("td"), el("td"), el("td"), tdn(tot, "neg"), el("td"), el("td")
+    ]));
+  }
+
+  // ---------- карточка ЦФО ----------
+  var cfoNames = [];
+  ALL.forEach(function (d) { if (cfoNames.indexOf(d.cfo) < 0) cfoNames.push(d.cfo); });
+
+  function fillCfoSelects() {
+    ["cfo-pick", "claim-cfo", "adj-cfo"].forEach(function (id) {
+      var s = document.getElementById(id); if (!s) return;
+      s.innerHTML = "";
+      cfoNames.forEach(function (n) { s.appendChild(el("option", { value: n, text: n })); });
+    });
+    document.getElementById("cfo-pick").value = cfoNames[0];
+  }
+
+  function renderCfo() {
+    var name = document.getElementById("cfo-pick").value;
+    var blocks = ALL.filter(function (d) { return d.cfo === name; });
+
+    var host = document.getElementById("cfo-kpis"); host.innerHTML = "";
+    var t = { plan: 0, fact: 0, claims: 0 };
+    blocks.forEach(function (d) { t.plan += d.plan; t.fact += d.fact; t.claims += d.claims; });
+    addedFor(name).forEach(function (r) {
+      var mm = derive({ cfo: name, budget: "", plan: r.plan, months: r.months });
+      t.plan += r.plan; t.fact += mm.fact; t.claims += mm.claims;
+    });
+    var free = t.plan - t.fact - t.claims;
+    [["Бюджет года", fmtShort(t.plan) + " ₽", blocks.length + " бюджет(а) в ЦФО", "", "k-accent"],
+     ["Факт", fmtShort(t.fact) + " ₽", (t.plan ? (t.fact / t.plan * 100).toFixed(1) : 0) + "% освоено", "", "k-good"],
+     ["Заявки", fmtShort(t.claims) + " ₽", "не оплачены", "", "k-warm"],
+     ["Остаток по кассе", fmtShort(t.plan - t.fact) + " ₽", "Бюджет − Факт", "", "k-accent"],
+     ["Свободный лимит", fmtShort(free) + " ₽", "с учётом заявок", free < 0 ? "neg" : "pos", free < 0 ? "k-crit" : "k-good"]
+    ].forEach(function (k) {
+      host.appendChild(el("div", { class: "kpi " + k[4] }, [
+        el("div", { class: "lbl", text: k[0] }), el("div", { class: "val", text: k[1] }),
+        el("div", { class: "sub " + k[3], text: k[2] })
+      ]));
+    });
+
+    // шапка таблицы
+    var hr = document.getElementById("cfo-head"); hr.innerHTML = "";
+    [th("№"), th("Статья оборотов", "wrap"), th("Контрагент", "wrap"), th("Договор", "wrap"),
+     th("Детализация", "wrap"), th("Бюджет", "num"), th("Итого&nbsp;опер&nbsp;план", "num"),
+     th("Факт", "num"), th("Остаток бюджета", "num"), th("Свободный лимит", "num")]
+      .forEach(function (h) { hr.appendChild(h); });
+    MONTHS.forEach(function (m, i) {
+      hr.appendChild(th(m + (i + 1 <= closedThrough ? "" : i + 1 === CURRENT_MONTH ? "" : " <span class='dim'>план</span>"), "num"));
+    });
+
+    var tb = document.querySelector("***REMOVED***t-cfo tbody"); tb.innerHTML = "";
+    var det = rowsOf(name);
+
+    document.getElementById("cfo-block-title").textContent =
+      blocks.length > 1 ? "Строки бюджета — " + blocks[0].budget + " (+ ещё " + (blocks.length - 1) + " бюджет)" : "Строки бюджета";
+
+    if (!det.length) {
+      tb.appendChild(el("tr", {}, [el("td", { colspan: 22, class: "dim wrap", text: "В макете детальные строки загружены для «Дирекции по ИТ-направлению» и «Финансовой дирекции». Для остальных ЦФО строки можно создать кнопкой «+ Добавить строку»." })]));
+      return;
+    }
+
+    var groupRow = el("tr", { class: "group" }, [el("td", { colspan: 22, text: blocks[0].budget })]);
+    tb.appendChild(groupRow);
+
+    det.forEach(function (r) {
+      var monthSum = r.months.reduce(function (s, v) { return s + (v || 0); }, 0);
+      if (!r.no && !monthSum && !r.counterparty && !r.contract) return;  // пустые технические строки
+      var d = derive({ cfo: name, budget: "", plan: r.plan, months: r.months });
+      var isChild = !r.no;
+      var parent = (r.ourComment.match(/строки\s*(\d+)/i) || [])[1];
+      var del = el("button", { class: "mini", title: "Удалить строку", text: "✕" });
+      del.onclick = function (e) { e.stopPropagation(); removeRow(name, r); };
+      var cells = [
+        el("td", { class: isChild ? "dim" : "" }, [el("div", { class: "no-cell" }, [
+          el("span", { text: isChild ? "↳ №" + (parent || "?") : (r.no || "•") }), del
+        ])]),
+        el("td", { class: "wrap", text: r.article }),
+        el("td", { class: "wrap", text: r.counterparty || "—" }),
+        el("td", { class: "wrap", text: r.contract || "—" }),
+        el("td", { class: "wrap" }, [el("div", {
+          class: "clamp", title: r.detail || r.comment || "", text: r.detail || r.comment || "—"
+        })])
+      ];
+      if (isChild) {
+        cells.push(el("td", { class: "num dim", text: "—" }));
+        cells.push(tdn(d.operplan)); cells.push(tdn(d.fact));
+        cells.push(el("td", { class: "num dim", text: "—" }));
+        cells.push(el("td", { class: "num dim", text: "—" }));
+      } else {
+        cells.push(tdn(r.plan)); cells.push(tdn(d.operplan)); cells.push(tdn(d.fact, "acc"));
+        cells.push(tdn(d.cash, d.cash < 0 ? "neg" : ""));
+        cells.push(tdn(d.free, d.free < 0 ? "neg" : ""));
+      }
+      for (var i = 0; i < 12; i++) {
+        var v = r.months[i] || 0;
+        if (!v) { cells.push(el("td", { class: "num dim", text: "—" })); continue; }
+        if (i + 1 === CURRENT_MONTH) {
+          cells.push(el("td", { class: "num", html:
+            "<b>" + fmt(v * CURRENT_FACT_SHARE) + "</b><br><i class='dim'>" + fmt(v * (1 - CURRENT_FACT_SHARE)) + "</i>" }));
+        } else if (i + 1 <= closedThrough) {
+          cells.push(el("td", { class: "num", html: "<b>" + fmt(v) + "</b>" }));
+        } else {
+          cells.push(el("td", { class: "num dim", html: "<i>" + fmt(v) + "</i>" }));
+        }
+      }
+      var cls = isChild ? "child" : "";
+      if (r.manual) cls += " manual";
+      var tr = el("tr", { class: cls.replace(/^ /, "") }, cells);
+      if (r.oob) tr.title = "Помечено «вне бюджета»";
+      tb.appendChild(tr);
+    });
+  }
+
+  // ================= ручные строки в карточке ЦФО =================
+  var ADDED = {};     // ЦФО -> строки, добавленные вручную
+  var REMOVED = {};   // ЦФО -> ключи удалённых загруженных строк
+
+  function addedFor(name) { return ADDED[name] || (ADDED[name] = []); }
+  function removedFor(name) { return REMOVED[name] || (REMOVED[name] = {}); }
+  function rowKey(r) { return [r.no, r.article, r.counterparty, r.contract, r.plan].join("|"); }
+
+  function loadedFor(name) {
+    if (name.indexOf("ИТ-направлению") >= 0) return M.detailITD;
+    if (name.indexOf("Финансовая") >= 0) return M.detailFin;
+    return [];
+  }
+  function rowsOf(name) {
+    var gone = removedFor(name);
+    return loadedFor(name).filter(function (r) { return !gone[rowKey(r)]; }).concat(addedFor(name));
+  }
+
+  function removeRow(name, r) {
+    if (r.manual) {
+      var arr = addedFor(name), pos = arr.indexOf(r);
+      if (pos >= 0) arr.splice(pos, 1);
+    } else {
+      removedFor(name)[rowKey(r)] = true;
+    }
+    logChange("Удаление строки",
+      name + " · " + (r.no ? "№" + r.no + " · " : "") + r.article,
+      fmt(r.plan) + " ₽ → строка удалена", "Ручная правка в карточке ЦФО");
+    renderCfo(); refreshAddOptions();
+  }
+
+  var stampMin = 84;
+  function logChange(type, obj, was, why) {
+    stampMin += 7;
+    var hh = 11 + Math.floor(stampMin / 60), mm = stampMin % 60;
+    LOG.unshift({ t: "04.08.2026 " + hh + ":" + ("0" + mm).slice(-2),
+      who: "Иванова А. (финотдел)", type: type, obj: obj, was: was, why: why });
+    renderLog();
+  }
+
+  // --- форма добавления ---
+  var addKind = "budget";
+  var ARTICLES = (function () {
+    var seen = {}, out = [];
+    M.detailITD.concat(M.detailFin).forEach(function (r) {
+      if (r.article && !seen[r.article]) { seen[r.article] = 1; out.push(r.article); }
+    });
+    return out.sort();
+  })();
+
+  function initAddForm() {
+    var dl = document.getElementById("dl-articles");
+    ARTICLES.forEach(function (a) { dl.appendChild(el("option", { value: a })); });
+    var ms = document.getElementById("a-month");
+    MONTHS_FULL.forEach(function (m, i) { ms.appendChild(el("option", { value: String(i), text: m })); });
+    ms.value = "7";
+
+    Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***add-form .chip[data-kind]"), function (c) {
+      c.onclick = function () {
+        Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***add-form .chip[data-kind]"),
+          function (x) { x.setAttribute("aria-pressed", "false"); });
+        c.setAttribute("aria-pressed", "true");
+        addKind = c.getAttribute("data-kind");
+        syncAddForm();
+      };
+    });
+    document.getElementById("a-cancel").onclick = function () { document.getElementById("add-form").hidden = true; };
+    document.getElementById("a-save").onclick = saveRow;
+    document.getElementById("a-spread").onchange = syncAddForm;
+    document.getElementById("add-row-btn").onclick = function () {
+      var f = document.getElementById("add-form");
+      f.hidden = !f.hidden;
+      if (!f.hidden) { refreshAddOptions(); syncAddForm(); document.getElementById("a-article").focus(); }
+    };
+  }
+
+  function syncAddForm() {
+    var isFact = addKind === "fact";
+    document.getElementById("add-title").textContent =
+      isFact ? "Фактический расход — привязать к лимиту существующей строки" : "Новая строка бюджета";
+    document.getElementById("w-parent").hidden = !isFact;
+    document.getElementById("w-spread").hidden = isFact;
+    document.getElementById("a-save").textContent = isFact ? "Добавить расход" : "Добавить строку";
+    document.getElementById("w-month").hidden =
+      !isFact && document.getElementById("a-spread").value !== "one";
+  }
+
+  function refreshAddOptions() {
+    var name = document.getElementById("cfo-pick").value;
+    var bs = document.getElementById("a-budget"); bs.innerHTML = "";
+    ALL.filter(function (d) { return d.cfo === name; }).forEach(function (d) {
+      bs.appendChild(el("option", { value: d.budget, text: d.budget }));
+    });
+    var ps = document.getElementById("a-parent"); ps.innerHTML = "";
+    rowsOf(name).filter(function (r) { return r.no; }).forEach(function (r) {
+      var d = derive({ cfo: name, budget: "", plan: r.plan, months: r.months });
+      ps.appendChild(el("option", { value: r.no,
+        text: "№" + r.no + " · " + r.article + " · свободно " + fmt(d.free) + " ₽" }));
+    });
+    if (!ps.children.length) {
+      ps.appendChild(el("option", { value: "", text: "нет строк бюджета — сначала создайте лимит" }));
+    }
+  }
+
+  function parseSum(v) {
+    return parseFloat(String(v).replace(/[^0-9.,]/g, "").replace(",", ".")) || 0;
+  }
+
+  function saveRow() {
+    var name = document.getElementById("cfo-pick").value;
+    var err = document.getElementById("a-err");
+    err.style.color = ""; err.textContent = "";
+    var article = document.getElementById("a-article").value.replace(/^\s+|\s+$/g, "");
+    var sum = parseSum(document.getElementById("a-sum").value);
+    var isFact = addKind === "fact";
+    var parentNo = document.getElementById("a-parent").value;
+
+    if (!article) { err.textContent = "Укажите статью оборотов"; return; }
+    if (sum <= 0) { err.textContent = "Укажите сумму больше нуля"; return; }
+    if (isFact && !parentNo) { err.textContent = "Нет строки бюджета для привязки"; return; }
+
+    var months = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    var mi = parseInt(document.getElementById("a-month").value, 10);
+    if (isFact) {
+      months[mi] = sum;
+    } else {
+      var spread = document.getElementById("a-spread").value;
+      if (spread === "even") { for (var i = 0; i < 12; i++) months[i] = sum / 12; }
+      else if (spread === "one") { months[mi] = sum; }
+    }
+
+    var row = {
+      no: isFact ? "" : String(900 + addedFor(name).length),
+      article: article,
+      counterparty: document.getElementById("a-cp").value,
+      contract: document.getElementById("a-contract").value,
+      detail: document.getElementById("a-detail").value,
+      comment: "",
+      ourComment: isFact ? ("Из строки " + parentNo + " бюджет") : "Добавлено вручную",
+      plan: isFact ? 0 : sum,
+      months: months,
+      manual: true,
+      oob: document.getElementById("a-oob").checked,
+      budget: document.getElementById("a-budget").value
+    };
+    addedFor(name).push(row);
+
+    logChange(isFact ? "Ручной расход" : "Новая строка бюджета",
+      name + " · " + article + (isFact ? " → №" + parentNo : ""),
+      (row.oob ? "вне бюджета · " : "") + fmt(sum) + " ₽" + (isFact ? " (" + MONTHS_FULL[mi] + ")" : ""),
+      "Ручное добавление в карточке ЦФО");
+
+    ["a-article", "a-cp", "a-contract", "a-detail", "a-sum"].forEach(function (id) {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("a-oob").checked = false;
+
+    renderCfo(); applyFilters(); refreshAddOptions();
+    err.style.color = "var(--good)";
+    err.textContent = isFact ? "Расход добавлен" : "Строка добавлена";
+    setTimeout(function () { err.textContent = ""; err.style.color = ""; }, 2500);
+  }
+
+  function openCfo(name) {
+    document.getElementById("cfo-pick").value = name;
+    renderCfo();
+    selectTab("cfo");
+  }
+
+  // ---------- заявки ----------
+  var CLAIMS = [
+    { no: "ЗП-2026-04102", d: "15.08.2026", cfo: "Первая дирекция", line: "№10 · 4411.3_Аренда оборудования для IT", cp: "Альфа Технолоджис ООО", sum: 1950000, flag: "" },
+    { no: "ЗП-2026-04118", d: "20.08.2026", cfo: "Первая дирекция", line: "№24 · 4420_Расходы на приобретение ПО", cp: "Бета Софт ООО", sum: 4800000, flag: "over" },
+    { no: "ЗП-2026-04203", d: "01.09.2026", cfo: "Пятнадцатая дирекция", line: "№12 · 4307.4_Мероприятия, выставки и конференции", cp: "Эпсилон Групп ООО", sum: 12400000, flag: "" },
+    { no: "ЗП-2026-04240", d: "05.09.2026", cfo: "Одиннадцатая дирекция", line: "№7 · 4109.2_Обучение персонала", cp: "Дзета Консалтинг ООО", sum: 2300000, flag: "" },
+    { no: "ЗП-2026-04255", d: "10.09.2026", cfo: "Служба безопасности", line: "— (нет бюджетной строки)", cp: "Исполнитель не определён", sum: 440000, flag: "oob" }
+  ];
+  function renderClaims() {
+    var tb = document.querySelector("***REMOVED***t-claims tbody"); tb.innerHTML = "";
+    var tot = 0;
+    CLAIMS.forEach(function (c) {
+      tot += c.sum;
+      var flag = c.flag === "over" ? badge("warning", "сверх лимита")
+        : c.flag === "oob" ? badge("serious", "вне бюджета") : badge("good", "в лимите");
+      tb.appendChild(el("tr", {}, [
+        td(c.no), td(c.d), el("td", { class: "wrap", text: c.cfo }), el("td", { class: "wrap", text: c.line }),
+        el("td", { class: "wrap", text: c.cp }), tdn(c.sum), el("td", {}, [flag]),
+        el("td", {}, [el("div", { class: "row-actions" }, [
+          el("button", { class: "btn sm", text: "Изменить" }),
+          el("button", { class: "btn sm", text: "Удалить" })
+        ])])
+      ]));
+    });
+    var tf = document.querySelector("***REMOVED***t-claims tfoot"); tf.innerHTML = "";
+    tf.appendChild(el("tr", {}, [el("td", { text: "ИТОГО заявок" }), el("td"), el("td"), el("td"), el("td"), tdn(tot), el("td"), el("td")]));
+  }
+
+  // ---------- сопоставление ----------
+  var UNMATCHED = [
+    { d: "01.08.2026", cp: "Альфа Технолоджис ООО", p: "4411.1 · Поставка ноутбуков по счёту 4417", sum: 5900000 },
+    { d: "02.08.2026", cp: "Бета Софт ООО", p: "4411.2 · Гарнитуры для рабочих мест", sum: 100000 },
+    { d: "03.08.2026", cp: "Гамма Сервис АО", p: "4411.3 · Аренда виртуальных машин, август", sum: 570000 },
+    { d: "03.08.2026", cp: "Дельта Интеграция ООО", p: "4412.1 · Каналы связи до ЦОД", sum: 85000 },
+    { d: "04.08.2026", cp: "Эпсилон Групп ООО", p: "без статьи · Диагностика печатной техники", sum: 384000 }
+  ];
+  function renderMatch() {
+    var tb = document.querySelector("***REMOVED***t-unmatched tbody"); tb.innerHTML = "";
+    UNMATCHED.forEach(function (u, i) {
+      var tr = el("tr", { class: "pick", "aria-selected": "false" }, [
+        td(u.d), el("td", { class: "wrap", text: u.cp }), el("td", { class: "wrap", text: u.p }), tdn(u.sum)
+      ]);
+      tr.onclick = function () {
+        Array.prototype.forEach.call(tb.children, function (r) { r.setAttribute("aria-selected", "false"); });
+        tr.setAttribute("aria-selected", "true");
+        showCandidates(u);
+      };
+      tb.appendChild(tr);
+      if (i === 0) setTimeout(function () { tr.click(); }, 0);
+    });
+  }
+  function showCandidates(u) {
+    document.getElementById("match-sel").textContent = u.cp + " · " + fmt(u.sum) + " ₽ · " + u.d;
+    var host = document.getElementById("match-body"); host.innerHTML = "";
+    var cands = [
+      { line: "№2 · 4411.1_Приобретение офисного оборудования · ИТ инфраструктура", cfo: "ДИТ / Бюджет обязательных затрат", free: 7500000, score: "договор + статья + контрагент" },
+      { line: "№3 · 4411.1_Приобретение офисного оборудования · Приобретение МФУ, ноутбуков", cfo: "ДИТ / Бюджет обязательных затрат", free: 2500000, score: "статья + контрагент" },
+      { line: "№21 · 4411.2_Содержание офисного оборудования · Расходные материалы", cfo: "ДИТ / Бюджет обязательных затрат", free: 300000, score: "контрагент" }
+    ];
+    var t = el("table", {}, [el("thead", {}, [el("tr", {}, [
+      th("Строка бюджета", "wrap"), th("Свободный лимит", "num"), th("Совпадение"), th("")])])]);
+    var tbody = el("tbody");
+    cands.forEach(function (c, i) {
+      tbody.appendChild(el("tr", {}, [
+        el("td", { class: "wrap" }, [el("div", { text: c.line }), el("div", { class: "mono-s", text: c.cfo })]),
+        tdn(c.free, c.free < u.sum ? "neg" : ""),
+        el("td", { class: "dim", text: c.score }),
+        el("td", {}, [el("button", { class: "btn sm" + (i === 0 ? " primary" : ""), text: "Привязать" })])
+      ]));
+    });
+    t.appendChild(tbody);
+    host.appendChild(t);
+    if (u.sum > cands[0].free) {
+      host.appendChild(el("div", { class: "alert", style: "margin-top:12px" }, [
+        badge("warning", "сверх лимита"),
+        el("div", { text: "Сумма платежа превышает свободный лимит выбранной строки. Привязка возможна — строка получит признак «сверх лимита»." })
+      ]));
+    }
+    host.appendChild(el("div", { style: "margin-top:12px;display:flex;gap:8px;flex-wrap:wrap" }, [
+      el("button", { class: "btn", text: "Пометить «вне бюджета»" }),
+      el("button", { class: "btn", text: "Создать новую строку бюджета" }),
+      el("button", { class: "btn", text: "Отложить" })
+    ]));
+  }
+
+  // ---------- тепловая карта ----------
+  function heatColor(dev) {
+    var a = Math.abs(dev);
+    var step = a < 0.05 ? 0 : a < 0.15 ? 1 : a < 0.30 ? 2 : a < 0.60 ? 3 : 4;
+    if (step === 0) return { bg: "var(--hm-0)", cls: "d0" };
+    var arm = dev < 0 ? "b" : "r";
+    return { bg: "var(--hm-" + arm + step + ")", cls: "d" + step };
+  }
+  function renderHeat() {
+    var thead = document.querySelector("***REMOVED***t-heat thead"); thead.innerHTML = "";
+    var hr = el("tr", {}, [th("", "rowh")]);
+    MONTHS.forEach(function (m) { hr.appendChild(th(m)); });
+    thead.appendChild(hr);
+
+    var tb = document.querySelector("***REMOVED***t-heat tbody"); tb.innerHTML = "";
+    visible.slice().sort(function (a, b) { return b.plan - a.plan; }).forEach(function (d) {
+      var tr = el("tr", {}, [el("th", { class: "rowh" }, [
+        el("div", { text: d.cfo }), el("div", { class: "mono-s", text: d.budget })
+      ])]);
+      var planM = d.plan / 12;
+      for (var i = 0; i < 12; i++) {
+        if (i + 1 > closedThrough) {
+          tr.appendChild(el("td", { class: "fc", text: "·", title: MONTHS_FULL[i] + " — не закрыт" }));
+          continue;
+        }
+        var dev = planM ? (d.factM[i] - planM) / planM : 0;
+        var c = heatColor(dev);
+        var p = Math.round(Math.abs(dev) * 100);
+        var cell = el("td", { text: p === 0 ? "0%" : (dev > 0 ? "+" : "−") + Math.min(p, 999) + "%" });
+        cell.style.background = c.bg; cell.className = c.cls;
+        cell.title = d.cfo + " · " + MONTHS_FULL[i] + "\nфакт " + fmt(d.factM[i]) + " ₽ · план " + fmt(planM) + " ₽";
+        tr.appendChild(cell);
+      }
+      tb.appendChild(tr);
+    });
+
+    var lg = document.getElementById("hm-legend"); lg.innerHTML = "";
+    lg.appendChild(el("span", { text: "ниже плана" }));
+    ["b4", "b3", "b2", "b1", "0", "r1", "r2", "r3", "r4"].forEach(function (s) {
+      var i = el("i"); i.style.background = "var(--hm-" + s + ")"; lg.appendChild(i);
+    });
+    lg.appendChild(el("span", { text: "выше плана" }));
+    lg.appendChild(el("span", { class: "mono-s", text: "· −60% … 0 … +60%" }));
+  }
+
+  // ---------- журнал ----------
+  var LOG = [
+    { t: "04.08.2026 11:24", who: "Смирнова А. (финотдел)", type: "Перенос между месяцами", obj: "ДИТ · №10 · 4411.3_Аренда оборудования для IT", was: "Ноябрь 1 500 000 → Сентябрь 2 300 000", why: "Перенос платежа по договору аренды на сентябрь" },
+    { t: "03.08.2026 16:02", who: "Петров С. (рук. ЦФО)", type: "Признак «вне бюджета»", obj: "Четвёртая дирекция · Бета Софт ООО", was: "— → вне бюджета, 67 000 ₽", why: "Срочная доработка лендинга, лимита нет" },
+    { t: "01.08.2026 09:40", who: "Смирнова А. (финотдел)", type: "Импорт факта из 1С", obj: "Все ЦФО · июль 2026", was: "482 платежа, 61 не сопоставлен", why: "Плановая загрузка" },
+    { t: "28.07.2026 14:15", who: "Кузнецова Е. (финотдел)", type: "Перенос между строками", obj: "Одиннадцатая дирекция", was: "№7 Обучение −800 000 → №4 Подбор +800 000", why: "Смена приоритетов найма" },
+    { t: "27.07.2026 10:05", who: "Смирнова А. (финотдел)", type: "Корректировка бюджета", obj: "ДИТ · Бюджет развития", was: "205 405 524 → 212 405 524 ₽", why: "Приказ о корректировке от 24.07.2026" }
+  ];
+  function renderLog() {
+    var tb = document.querySelector("***REMOVED***t-log tbody"); tb.innerHTML = "";
+    LOG.forEach(function (r) {
+      tb.appendChild(el("tr", {}, [
+        td(r.t), el("td", { class: "dim", text: r.who }), td(r.type),
+        el("td", { class: "wrap", text: r.obj }), el("td", { class: "wrap", text: r.was }),
+        el("td", { class: "wrap dim", text: r.why })
+      ]));
+    });
+  }
+
+  // ---------- маппинг колонок ----------
+  var MAP = [
+    ["A", "4106_Аудит и консалтинг", "Статья оборотов", "ok"],
+    ["B", "Финансовый отдел", "ЦФО", "ok"],
+    ["C", "Дзета Консалтинг ООО", "Контрагент", "ok"],
+    ["D", "Договор №1524/А-25 от 11.09.25", "Договор", "ok"],
+    ["E", "ссылка на документ в СЭД", "Детализация (ссылка)", "ok"],
+    ["F", "Обязательный аудит", "Комментарий", "ok"],
+    ["G", "Орлов ВП → «актуализировать инф.»", "Комментарий согласующего", "guess"],
+    ["H", "497 000,00", "ИТОГО за год (проверочная)", "ok"],
+    ["I–T", "240 000,00 …", "Январь … Декабрь (план)", "ok"],
+    ["—", "нет в файле", "Бюджет (обязательные / развитие)", "need"]
+  ];
+  function renderMap() {
+    var tb = document.querySelector("***REMOVED***t-map tbody"); tb.innerHTML = "";
+    MAP.forEach(function (r) {
+      var st = r[3] === "ok" ? badge("good", "распознано")
+        : r[3] === "guess" ? badge("warning", "предположение") : badge("serious", "указать вручную");
+      var sel = el("select", { class: "f-in" }, [el("option", { text: r[2] })]);
+      tb.appendChild(el("tr", {}, [
+        td(r[0]), el("td", { class: "wrap dim", text: r[1] }),
+        el("td", {}, [sel]), el("td", {}, [st])
+      ]));
+    });
+  }
+
+  // ---------- фильтры / роли / табы ----------
+  function applyFilters() {
+    var role = document.getElementById("role").value;
+    var base = role === "cfo"
+      ? ALL.filter(function (d) { return d.cfo.indexOf("ИТ-направлению") >= 0; })
+      : ALL;
+    visible = base.filter(function (d) {
+      if (sumFilter === "risk") return d.fact > d.plan || d.free < 0 || d.pct > pace() + 0.15;
+      if (sumFilter === "over") return d.fact > d.plan;
+      return true;
+    });
+    renderKpis(); renderSum(); renderHeat(); renderDash();
+  }
+
+  function selectTab(p) {
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (t) {
+      t.setAttribute("aria-selected", t.dataset.p === p ? "true" : "false");
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".panel"), function (s) {
+      s.classList.toggle("on", s.id === "p-" + p);
+    });
+    window.scrollTo(0, 0);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (t) {
+    t.onclick = function () { selectTab(t.dataset.p); };
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***dash-sort .chip"), function (c) {
+    c.onclick = function () {
+      Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***dash-sort .chip"),
+        function (x) { x.setAttribute("aria-pressed", "false"); });
+      c.setAttribute("aria-pressed", "true");
+      dashSort = c.getAttribute("data-s");
+      renderDash();
+    };
+  });
+
+  Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***sum-filter .chip"), function (c) {
+    c.onclick = function () {
+      Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***sum-filter .chip"), function (x) { x.setAttribute("aria-pressed", "false"); });
+      c.setAttribute("aria-pressed", "true");
+      sumFilter = c.dataset.f;
+      applyFilters();
+    };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".chips .chip:not([data-f])"), function (c) {
+    c.onclick = function () {
+      var sibs = c.parentNode.children;
+      Array.prototype.forEach.call(sibs, function (x) { x.setAttribute("aria-pressed", "false"); });
+      c.setAttribute("aria-pressed", "true");
+    };
+  });
+
+  document.getElementById("role").onchange = function () { applyFilters(); renderCfo(); };
+  document.getElementById("closed").onchange = function (e) {
+    closedThrough = parseInt(e.target.value, 10);
+    applyFilters(); renderCfo();
+  };
+  document.getElementById("cfo-pick").onchange = function () { renderCfo(); refreshAddOptions(); };
+  document.getElementById("theme").onclick = function () {
+    var light = document.documentElement.getAttribute("data-theme") === "light";
+    document.documentElement.setAttribute("data-theme", light ? "dark" : "light");
+  };
+
+  // ---------- старт ----------
+  fillCfoSelects();
+  initAddForm();
+  renderOob();
+  applyFilters();
+  renderCfo();
+  renderClaims();
+  renderMatch();
+  renderLog();
+  renderMap();
+})();
+</script>
+</body>
+</html>

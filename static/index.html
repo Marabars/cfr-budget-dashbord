@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Бюджеты ЦФО</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<div class="top">
+  <div class="top-row">
+    <div class="brand">
+      <svg class="logo-mark" viewBox="0 0 38 38" aria-label="Холдинг">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="***REMOVED***8A62F0"/><stop offset="1" stop-color="***REMOVED***5B2FD0"/>
+        </linearGradient></defs>
+        <rect width="38" height="38" rx="8" fill="url(***REMOVED***lg)"/>
+        <text x="19" y="25" text-anchor="middle" fill="***REMOVED***fff" font-family="Calibri, sans-serif"
+              font-size="15" font-weight="700" letter-spacing="0.5">MR</text>
+      </svg>
+      <span class="wordmark">MR <span>Group</span></span>
+      <span class="brand-sep"></span>
+      <h1>Бюджеты ЦФО</h1>
+    </div>
+    <div class="top-spacer"></div>
+    <div class="ctl"><span>Год</span><select id="year"></select></div>
+    <div class="ctl"><span>Отчётная дата</span><input id="asof" type="date"></div>
+    <div class="ctl"><span>Факт закрыт по</span><select id="closed"></select></div>
+    <div class="ctl"><span>Роль</span><select id="role"></select></div>
+    <button class="icon-btn" id="theme" title="Светлая / тёмная тема">◐</button>
+  </div>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-p="dash" aria-selected="true">Дашборд</button>
+    <button class="tab" role="tab" data-p="sum" aria-selected="false">Сводка</button>
+    <button class="tab" role="tab" data-p="cfo" aria-selected="false">Карточка ЦФО</button>
+    <button class="tab" role="tab" data-p="claims" aria-selected="false">Заявки</button>
+    <button class="tab" role="tab" data-p="match" aria-selected="false">Сопоставление</button>
+    <button class="tab" role="tab" data-p="heat" aria-selected="false">Тепловая карта</button>
+    <button class="tab" role="tab" data-p="adj" aria-selected="false">Корректировки</button>
+    <button class="tab" role="tab" data-p="io" aria-selected="false">Импорт / экспорт</button>
+  </div>
+</div>
+
+<div class="note" id="note" hidden></div>
+
+<main>
+
+<!-- ================= ДАШБОРД ================= -->
+<section class="panel on" id="p-dash">
+  <div class="card">
+    <header><h2>Ключевые показатели</h2><span class="sub" id="dash-asof"></span></header>
+    <div class="kpis" id="dash-kpis"></div>
+  </div>
+  <div class="card">
+    <header>
+      <h2>ЦФО — освоение бюджета</h2>
+      <span class="sub" id="dash-sub"></span>
+      <div class="top-spacer"></div>
+      <div class="chips" id="dash-sort">
+        <button class="chip" aria-pressed="true" data-s="plan">По размеру бюджета</button>
+        <button class="chip" aria-pressed="false" data-s="pct">По освоению</button>
+        <button class="chip" aria-pressed="false" data-s="risk">По риску</button>
+      </div>
+    </header>
+    <div class="card-body">
+      <div class="dash-grid" id="dash-grid"></div>
+      <div class="legend-inline">
+        <span>Батарейка — освоение годового лимита фактом; засечка │ — ожидаемый темп к отчётной дате</span>
+        <span>Полоса сверху карточки — статус ЦФО</span>
+        <span>Клик по карточке открывает карточку ЦФО</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= СВОДКА ================= -->
+<section class="panel" id="p-sum">
+  <div class="card"><div class="kpis" id="sum-kpis"></div></div>
+  <div class="card">
+    <header>
+      <h2>Освоение бюджета по ЦФО</h2>
+      <span class="sub" id="sum-sub"></span>
+      <div class="top-spacer"></div>
+      <div class="chips" id="sum-filter">
+        <button class="chip" aria-pressed="true" data-f="all">Все</button>
+        <button class="chip" aria-pressed="false" data-f="risk">Только с риском</button>
+        <button class="chip" aria-pressed="false" data-f="over">Перерасход</button>
+      </div>
+      <button class="btn sm" data-export="summary">Excel</button>
+    </header>
+    <div class="card-body flush">
+      <div class="scroll"><table id="t-sum">
+        <thead><tr>
+          <th>ЦФО / бюджет</th><th class="num">Бюджет год</th><th class="num">Факт</th>
+          <th class="num">Заявки</th><th class="num">Итого&nbsp;опер&nbsp;план</th>
+          <th class="num">Остаток по кассе</th><th class="num">Свободный лимит</th>
+          <th>Освоение</th><th>Статус</th>
+        </tr></thead>
+        <tbody></tbody><tfoot></tfoot>
+      </table></div>
+      <div class="legend-inline" style="padding:10px 14px">
+        <span>Остаток по кассе = Бюджет − Факт</span>
+        <span>Свободный лимит = Бюджет − (Факт + Заявки)</span>
+        <span>│ на шкале — ожидаемый темп освоения к отчётной дате</span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <header><h2>Вне бюджета</h2><span class="sub">расходы, помеченные вручную как внебюджетные</span>
+      <div class="top-spacer"></div>
+      <button class="btn sm" data-export="out-of-budget">Excel</button>
+    </header>
+    <div class="card-body flush"><div class="scroll"><table id="t-oob">
+      <thead><tr>
+        <th>Дата</th><th class="wrap">ЦФО</th><th class="wrap">Контрагент</th><th class="wrap">Назначение</th>
+        <th class="num">Сумма</th><th>Кто пометил</th><th></th>
+      </tr></thead><tbody></tbody><tfoot></tfoot>
+    </table></div></div>
+  </div>
+</section>
+
+<!-- ================= КАРТОЧКА ЦФО ================= -->
+<section class="panel" id="p-cfo">
+  <div class="card">
+    <header>
+      <h2>Карточка ЦФО</h2>
+      <div class="ctl"><select id="cfo-pick" class="f-in" style="min-width:340px"></select></div>
+      <div class="top-spacer"></div>
+      <button class="btn sm primary" id="add-row-btn">+ Добавить строку</button>
+      <button class="btn sm" id="cfo-export">Excel</button>
+    </header>
+    <div class="card-body">
+      <div class="kpis" id="cfo-kpis" style="border:1px solid var(--border);border-radius:6px;overflow:hidden"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2 id="cfo-block-title">Строки бюджета</h2>
+      <span class="sub">↳ вложенные строки — фактические платежи, привязанные к лимиту строки</span></header>
+    <div class="card-body flush">
+      <div class="add-form" id="add-form" hidden>
+        <h3 id="add-title">Новая строка бюджета</h3>
+        <div class="chips" style="margin-bottom:14px" id="add-kind">
+          <button class="chip" aria-pressed="true" data-kind="budget">Строка бюджета (лимит)</button>
+          <button class="chip" aria-pressed="false" data-kind="fact">Фактический расход к строке</button>
+        </div>
+        <div class="form-grid">
+          <div><label class="f">Бюджет</label><select class="f-in" id="a-budget"></select></div>
+          <div><label class="f">Статья оборотов</label>
+            <input class="f-in" id="a-article" list="dl-articles" placeholder="4420_Расходы на приобретение ПО">
+            <datalist id="dl-articles"></datalist></div>
+          <div><label class="f">Контрагент</label><input class="f-in" id="a-cp" placeholder="Исполнитель не определён"></div>
+          <div><label class="f">Договор</label><input class="f-in" id="a-contract" placeholder="Без договора"></div>
+          <div><label class="f">Детализация</label><input class="f-in" id="a-detail" placeholder="на что расход"></div>
+          <div id="w-parent" hidden><label class="f">Взять лимит из строки №</label>
+            <select class="f-in" id="a-parent"></select></div>
+          <div><label class="f">Сумма, ₽ (с НДС)</label><input class="f-in" id="a-sum" placeholder="1 200 000"></div>
+          <div id="w-spread"><label class="f">Распределение по месяцам</label>
+            <select class="f-in" id="a-spread">
+              <option value="even">Равномерно по 12 месяцам</option>
+              <option value="one">Целиком в один месяц</option>
+              <option value="none">Не распределять (только годовой лимит)</option>
+            </select></div>
+          <div id="w-month"><label class="f">Месяц</label><select class="f-in" id="a-month"></select></div>
+          <div><label class="f">Признак</label>
+            <label style="display:flex;align-items:center;gap:7px;font-size:14px;padding-top:5px">
+              <input type="checkbox" id="a-oob"> вне бюджета</label></div>
+        </div>
+        <div class="row-btns">
+          <button class="btn primary" id="a-save">Добавить строку</button>
+          <button class="btn" id="a-cancel">Отмена</button>
+          <span class="err" id="a-err"></span>
+        </div>
+      </div>
+      <div class="scroll"><table id="t-cfo"><thead><tr id="cfo-head"></tr></thead><tbody></tbody></table></div>
+      <div class="legend-inline" style="padding:10px 14px">
+        <span><b>Жирный</b> месяц — закрытый факт</span>
+        <span><i>курсив</i> — заявка / план</span>
+        <span>Крестик в колонке № удаляет строку</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ЗАЯВКИ ================= -->
+<section class="panel" id="p-claims">
+  <div class="card">
+    <header><h2>Новая заявка (обязательство)</h2>
+      <span class="sub">уменьшает свободный лимит строки, но не факт</span></header>
+    <div class="card-body">
+      <div class="form-grid">
+        <div><label class="f">№ заявки (1С)</label><input class="f-in" id="c-no" placeholder="ЗП-2026-04417"></div>
+        <div><label class="f">Дата платежа</label><input class="f-in" id="c-date" type="date"></div>
+        <div><label class="f">ЦФО</label><select class="f-in" id="c-cfo"></select></div>
+        <div><label class="f">Строка бюджета</label><select class="f-in" id="c-row"></select></div>
+        <div><label class="f">Контрагент</label><input class="f-in" id="c-cp"></div>
+        <div><label class="f">Договор</label><input class="f-in" id="c-contract"></div>
+        <div><label class="f">Сумма, ₽ (с НДС)</label><input class="f-in" id="c-sum"></div>
+        <div><label class="f">Детализация</label><input class="f-in" id="c-detail"></div>
+      </div>
+      <div id="c-limit" class="alert" hidden></div>
+      <div class="row-btns" style="margin-top:14px">
+        <button class="btn primary" id="c-save">Сохранить заявку</button>
+        <span class="err" id="c-err"></span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <header><h2>Заявки в работе</h2><span class="sub">неоплаченные — входят в «Итого опер план»</span></header>
+    <div class="card-body flush"><div class="scroll"><table id="t-claims">
+      <thead><tr>
+        <th>№ заявки</th><th>Дата платежа</th><th class="wrap">ЦФО</th><th class="wrap">Строка бюджета</th>
+        <th class="wrap">Контрагент</th><th class="num">Сумма</th><th>Признак</th><th></th>
+      </tr></thead><tbody></tbody><tfoot></tfoot>
+    </table></div></div>
+  </div>
+</section>
+
+<!-- ================= СОПОСТАВЛЕНИЕ ================= -->
+<section class="panel" id="p-match">
+  <div class="alert crit" id="match-alert" hidden></div>
+  <div class="two-col">
+    <div class="card">
+      <header><h2>Неразобранные платежи</h2><span class="sub" id="match-count"></span>
+        <div class="top-spacer"></div>
+        <button class="btn sm" id="auto-match">Сопоставить автоматически</button>
+      </header>
+      <div class="card-body flush"><div class="scroll"><table id="t-unmatched">
+        <thead><tr><th>Дата</th><th class="wrap">Контрагент</th><th class="wrap">Статья / назначение</th><th class="num">Сумма</th></tr></thead>
+        <tbody></tbody>
+      </table></div></div>
+    </div>
+    <div class="card">
+      <header><h2>Куда отнести</h2><span class="sub" id="match-sel">выберите платёж слева</span></header>
+      <div class="card-body"><div id="match-body" class="dim">Кандидаты подбираются по статье, ЦФО, контрагенту и договору.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ТЕПЛОВАЯ КАРТА ================= -->
+<section class="panel" id="p-heat">
+  <div class="card">
+    <header><h2>Отклонение факта от плана, % — ЦФО × месяц</h2>
+      <div class="top-spacer"></div><div class="hm-legend" id="hm-legend"></div></header>
+    <div class="card-body">
+      <div class="scroll"><table class="hm" id="t-heat"><thead></thead><tbody></tbody></table></div>
+      <div class="legend-inline">
+        <span>Синий — расход ниже плана месяца, красный — выше. Заштрихованные месяцы ещё не закрыты.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= КОРРЕКТИРОВКИ ================= -->
+<section class="panel" id="p-adj">
+  <div class="card">
+    <header><h2>Перенос лимита</h2>
+      <span class="sub">разрешено: между месяцами внутри строки и между строками внутри ЦФО</span></header>
+    <div class="card-body">
+      <div class="chips" style="margin-bottom:14px" id="adj-kind">
+        <button class="chip" aria-pressed="true" data-k="month">Между месяцами (внутри строки)</button>
+        <button class="chip" aria-pressed="false" data-k="row">Между строками (внутри ЦФО)</button>
+      </div>
+      <div class="form-grid">
+        <div><label class="f">ЦФО</label><select class="f-in" id="j-cfo"></select></div>
+        <div><label class="f">Строка-источник</label><select class="f-in" id="j-from-row"></select></div>
+        <div id="w-j-from-month"><label class="f">Снять с месяца</label><select class="f-in" id="j-from-month"></select></div>
+        <div id="w-j-to-month"><label class="f">Добавить в месяц</label><select class="f-in" id="j-to-month"></select></div>
+        <div id="w-j-to-row" hidden><label class="f">Строка-получатель</label><select class="f-in" id="j-to-row"></select></div>
+        <div><label class="f">Сумма, ₽</label><input class="f-in" id="j-sum"></div>
+        <div style="grid-column:1/-1"><label class="f">Обоснование (обязательно)</label>
+          <input class="f-in" id="j-reason" placeholder="почему переносим лимит"></div>
+      </div>
+      <div class="row-btns">
+        <button class="btn primary" id="j-save">Провести корректировку</button>
+        <span class="err" id="j-err"></span>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <header><h2>Журнал изменений</h2><span class="sub">кто, когда и что изменил</span></header>
+    <div class="card-body flush"><div class="scroll"><table id="t-log">
+      <thead><tr><th>Дата и время</th><th>Автор</th><th>Действие</th>
+        <th class="wrap">Объект</th><th class="wrap">Было → стало</th><th class="wrap">Обоснование</th></tr></thead>
+      <tbody></tbody>
+    </table></div></div>
+  </div>
+</section>
+
+<!-- ================= ИМПОРТ / ЭКСПОРТ ================= -->
+<section class="panel" id="p-io">
+  <div class="two-col">
+    <div class="card">
+      <header><h2>Импорт</h2><span class="sub">план от дирекций, факт из 1С, оперплан целиком</span></header>
+      <div class="card-body">
+        <div class="chips" style="margin-bottom:12px" id="io-kind">
+          <button class="chip" aria-pressed="true" data-k="plan">План (файл дирекции)</button>
+          <button class="chip" aria-pressed="false" data-k="fact">Факт (выгрузка 1С)</button>
+          <button class="chip" aria-pressed="false" data-k="operplan">Оперплан ЦФО</button>
+        </div>
+        <div class="form-grid">
+          <div id="w-io-cfo"><label class="f">ЦФО</label><input class="f-in" id="io-cfo" placeholder="как в файле"></div>
+          <div id="w-io-budget"><label class="f">Название бюджета</label>
+            <input class="f-in" id="io-budget" value="Основной бюджет"></div>
+        </div>
+        <div class="drop" id="drop" style="margin-top:12px">
+          Перетащите .xlsx сюда<br><span class="mono-s">или</span><br>
+          <button class="btn" id="pick-file" style="margin-top:8px">Выбрать файл</button>
+          <input type="file" id="file" accept=".xlsx,.xlsm" hidden>
+        </div>
+        <div id="io-result" style="margin-top:12px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <header><h2>Экспорт</h2><span class="sub">Excel — точные суммы с копейками</span></header>
+      <div class="card-body">
+        <table><tbody>
+          <tr><td>Лист «Оперплан ЦФО»</td><td class="dim">для вставки в «Ликвидность»</td>
+            <td class="num"><button class="btn sm" data-export="operplan">Excel</button></td></tr>
+          <tr><td>Сводка по ЦФО</td><td class="dim">план / факт / заявки / остаток</td>
+            <td class="num"><button class="btn sm" data-export="summary">Excel</button></td></tr>
+          <tr><td>Вне бюджета</td><td class="dim">реестр за год</td>
+            <td class="num"><button class="btn sm" data-export="out-of-budget">Excel</button></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+  <div class="card" id="mapping-card" hidden>
+    <header><h2>Сопоставление колонок файла</h2><span class="sub" id="mapping-sub"></span>
+      <div class="top-spacer"></div>
+      <button class="btn primary sm" id="do-import">Загрузить</button></header>
+    <div class="card-body flush"><div class="scroll"><table id="t-map">
+      <thead><tr><th>Колонка файла</th><th>Пример значения</th><th>Поле системы</th><th>Статус</th></tr></thead>
+      <tbody></tbody>
+    </table></div></div>
+  </div>
+  <div class="card">
+    <header><h2>История загрузок</h2></header>
+    <div class="card-body flush"><div class="scroll"><table id="t-imports">
+      <thead><tr><th>Когда</th><th>Тип</th><th class="wrap">Файл</th><th>Автор</th>
+        <th class="num">Строк</th><th class="wrap">Примечание</th></tr></thead><tbody></tbody>
+    </table></div></div>
+  </div>
+</section>
+
+</main>
+
+<script src="/js/util.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/summary.js"></script>
+<script src="/js/cfocard.js"></script>
+<script src="/js/claims.js"></script>
+<script src="/js/matching.js"></script>
+<script src="/js/heatmap.js"></script>
+<script src="/js/adjustments.js"></script>
+<script src="/js/io.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

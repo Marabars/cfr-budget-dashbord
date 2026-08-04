@@ -1,0 +1,43 @@
+***REMOVED*** ---------- рабочие данные компании: в репозиторий не попадают ----------
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+***REMOVED*** выгрузки и рабочие файлы Excel
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+!tests/fixtures/*.xlsx
+
+***REMOVED*** макет: реальные суммы бюджетов держим только локально,
+***REMOVED*** в репозитории лежит обезличенный docs/mock-data.demo.js
+docs/mock-data.js
+
+***REMOVED*** ---------- окружение и секреты ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.*
+deploy.local.*
+
+***REMOVED*** ---------- служебное ----------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+venv/
+.venv/
+env/
+.idea/
+.vscode/
+.playwright-mcp/
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store
