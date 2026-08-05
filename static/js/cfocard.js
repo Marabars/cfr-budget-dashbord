@@ -16,7 +16,9 @@
       .forEach(function (title) { row.appendChild(U.th(title, "num")); });
     U.MONTHS_SHORT.forEach(function (name, i) {
       var closed = (i + 1) <= cfg.closed_through;
-      row.appendChild(U.th(name + (closed ? "" : " <span class='dim'>план</span>"), "num"));
+      // в две строки: месяц сверху, вид суммы снизу
+      row.appendChild(U.th(name + "<br><span class='th-kind'>" +
+        (closed ? "факт" : "план") + "</span>", "num month-col"));
     });
   }
 
@@ -54,7 +56,7 @@
         class: "clamp", title: row.detail || row.comment || "",
         text: row.detail || row.comment || "—"
       })]),
-      U.tdn(row.plan_year), U.tdn(row.operplan), U.tdn(row.fact, "acc"),
+      U.tdn(row.plan_year, "n-plan"), U.tdn(row.operplan), U.tdn(row.fact, "n-fact"),
       U.tdn(row.cash_remain, row.cash_remain < 0 ? "neg" : ""),
       U.tdn(row.free_limit, row.free_limit < 0 ? "neg" : "pos")
     ];
@@ -70,7 +72,7 @@
       U.el("td", { class: "wrap", text: fact.contract || "—" }),
       U.el("td", { class: "wrap" }, [U.el("div", { class: "clamp", text: fact.purpose || "—" })]),
       U.el("td", { class: "num dim", text: "—" }),
-      U.tdn(fact.amount), U.tdn(fact.amount, "acc"),
+      U.tdn(fact.amount), U.tdn(fact.amount, "n-fact"),
       U.el("td", { class: "num dim", text: "—" }),
       U.el("td", { class: "num dim", text: "—" })
     ];
@@ -91,13 +93,14 @@
     U.kpi(document.getElementById("cfo-kpis"), [
       { label: "Бюджет года", value: U.fmtShort(totals.plan_year) + " ₽",
         sub: payload.budgets.length + " бюджет(а) в ЦФО", tone: "k-accent" },
-      { label: "Факт", value: U.fmtShort(totals.fact) + " ₽",
+      { label: "Факт — оплачено", value: U.fmtShort(totals.fact) + " ₽",
         sub: (totals.plan_year ? (totals.pct * 100).toFixed(1) : 0) + "% освоено", tone: "k-good" },
-      { label: "Заявки", value: U.fmtShort(totals.claims) + " ₽", sub: "не оплачены", tone: "k-warm" },
-      { label: "Остаток по кассе", value: U.fmtShort(totals.cash_remain) + " ₽",
-        sub: "Бюджет − Факт", tone: "k-accent" },
+      { label: "Заявки в работе", value: U.fmtShort(totals.claims) + " ₽",
+        sub: "поданы, ещё не оплачены", tone: "k-warm" },
+      { label: "Остаток бюджета", value: U.fmtShort(totals.cash_remain) + " ₽",
+        sub: "бюджет − факт: ещё не оплачено", tone: "k-accent" },
       { label: "Свободный лимит", value: U.fmtShort(totals.free_limit) + " ₽",
-        sub: "с учётом заявок", subClass: totals.free_limit < 0 ? "neg" : "pos",
+        sub: "остаток − заявки", subClass: totals.free_limit < 0 ? "neg" : "pos",
         tone: totals.free_limit < 0 ? "k-crit" : "k-good" }
     ]);
 

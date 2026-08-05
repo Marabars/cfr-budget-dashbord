@@ -121,7 +121,7 @@ def summary(year: int | None = None, cfo_ids=None) -> bytes:
     ws.cell(row=1, column=1).font = Font(bold=True, size=12)
 
     header = ["ЦФО", "Бюджет", "Бюджет год", "Факт", "Заявки", "Итого опер план",
-              "Остаток по кассе", "Свободный лимит", "Освоение, %", "Статус", "Вне бюджета"]
+              "Остаток бюджета", "Свободный лимит", "Освоение, %", "Статус", "Вне бюджета"]
     for col, title in enumerate(header, start=1):
         ws.cell(row=3, column=col, value=title)
     _style_header(ws, 3, len(header))

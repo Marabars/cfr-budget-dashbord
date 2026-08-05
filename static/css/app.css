@@ -9,7 +9,7 @@
   --surface: ***REMOVED***13112A;        /* bg-surface */
   --raised: ***REMOVED***1C1A35;         /* bg-raised — поля, вторичные кнопки */
   --ink: ***REMOVED***E5E3EB;
-  --ink2: ***REMOVED***C4BEDD;
+  --ink2: ***REMOVED***E4E0F2;
   --muted: ***REMOVED***FFFFFF;
   --faint: ***REMOVED***6B6592;
   --border: ***REMOVED***2E2A4A;
@@ -379,4 +379,46 @@ tbody tr:hover .cfo-name { color: var(--accent-2); }
 @media (max-width: 700px) {
   .dup-pair { grid-template-columns: 1fr; }
   .dup-arrow { transform: rotate(90deg); }
+}
+
+/* ---------- карточка ЦФО: одна величина — одна строка ---------- */
+.cc-lines { margin-top: 12px; }
+.cc-line {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: 1px solid var(--grid);
+}
+.cc-line:last-child { border-bottom: none; }
+.cc-line .k { font-size: 13px; font-weight: 700; color: var(--ink); }
+.cc-line .k small {
+  display: block; font-size: 12px; font-weight: 400; color: var(--ink2); margin-top: 1px;
+}
+.cc-line .v {
+  font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.cc-line.major .v { font-size: 20px; letter-spacing: -.01em; }
+.cc-derived {
+  margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--border);
+}
+.cc-derived .cc-line .v { font-size: 16px; }
+
+/* ---------- выделение величин цветом (не размером шрифта) ---------- */
+.n-plan  { color: var(--accent-2); font-weight: 600; }
+.n-fact  { color: var(--good); font-weight: 600; }
+.n-claim { color: var(--warning); font-weight: 600; }
+
+/* карточки: все величины одного размера, различаются цветом */
+.cc-line .v, .cc-line.major .v, .cc-derived .cc-line .v { font-size: 17px; font-weight: 600; }
+.cc-line { border-bottom: 1px solid var(--border); }
+
+/* ---------- границы ячеек, чтобы колонки не сливались ---------- */
+table th, table td { border-right: 1px solid var(--grid); }
+table th:last-child, table td:last-child { border-right: none; }
+thead th { border-right-color: var(--axis); }
+.hm th, .hm td { border-right: none; }
+
+/* шапка месяцев в две строки */
+.month-col { line-height: 1.25; }
+.th-kind {
+  display: block; font-size: 11px; font-weight: 400; letter-spacing: .02em;
+  color: var(--ink2); text-transform: none;
 }

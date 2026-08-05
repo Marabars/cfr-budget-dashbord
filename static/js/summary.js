@@ -37,7 +37,8 @@
           U.el("div", { class: "cfo-name", text: item.cfo_name }),
           U.el("div", { class: "mono-s", text: item.name })
         ]),
-        U.tdn(t.plan_year), U.tdn(t.fact, "acc"), U.tdn(t.claims, "warm"), U.tdn(t.operplan),
+        U.tdn(t.plan_year, "n-plan"), U.tdn(t.fact, "n-fact"), U.tdn(t.claims, "n-claim"),
+        U.tdn(t.operplan),
         U.tdn(t.cash_remain, t.cash_remain < 0 ? "neg" : ""),
         U.tdn(t.free_limit, t.free_limit < 0 ? "neg" : "pos"),
         U.el("td", {}, [U.meter(t.pct, pace, item.status)]),

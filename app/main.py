@@ -40,6 +40,16 @@ app.include_router(files.router)
 app.include_router(registry.router)
 
 
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    """Интерфейс не кэшируем: после обновления версии браузер должен взять новые файлы."""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.endswith((".js", ".css", ".html")):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "version": __version__, "db": str(db.get_db_path())}

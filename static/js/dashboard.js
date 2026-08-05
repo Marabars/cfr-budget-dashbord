@@ -10,13 +10,13 @@
     var items = [
       { label: "Бюджет " + d.settings.year, value: U.fmtShort(t.plan_year) + " ₽",
         sub: d.cards.length + " бюджетов", tone: "k-accent", hero: true },
-      { label: "Факт", value: U.fmtShort(t.fact) + " ₽",
+      { label: "Факт — оплачено", value: U.fmtShort(t.fact) + " ₽",
         sub: (t.plan_year ? (t.fact / t.plan_year * 100).toFixed(1) : 0) + "% годового бюджета",
         tone: "k-good" },
       { label: "Заявки в работе", value: U.fmtShort(t.claims) + " ₽",
         sub: "обязательства, ещё не оплачены", tone: "k-warm" },
       { label: "Свободный лимит", value: U.fmtShort(t.free_limit) + " ₽",
-        sub: "Бюджет − (Факт + Заявки)",
+        sub: "бюджет − факт − заявки",
         subClass: t.free_limit < 0 ? "neg" : "pos",
         tone: t.free_limit < 0 ? "k-crit" : "k-good" },
       { label: "Вне бюджета", value: U.fmtShort(d.out_of_budget_total) + " ₽",
@@ -31,6 +31,15 @@
     U.kpi(document.getElementById("sum-kpis"), items);
   }
 
+  /* Одна величина — одна строка: название слева, сумма справа. */
+  function line(label, hint, value, opts) {
+    var settings = opts || {};
+    return U.el("div", { class: "cc-line" + (settings.major ? " major" : "") }, [
+      U.el("div", { class: "k" }, [label, hint ? U.el("small", { text: hint }) : null]),
+      U.el("div", { class: "v " + (settings.tone || ""), text: U.fmt(value) + " ₽" })
+    ]);
+  }
+
   function card(item, pace) {
     var t = item.totals;
     var node = U.el("div", { class: "cfo-card st-" + item.status, title: "Открыть карточку ЦФО" }, [
@@ -41,16 +50,17 @@
         ]),
         U.badge(item.status, item.status_text)
       ]),
-      U.el("div", { class: "cc-meta" }, [
-        U.el("div", {}, [U.el("b", { text: U.fmtShort(t.plan_year) }), "бюджет"]),
-        U.el("div", { class: "m-fact" }, [U.el("b", { text: U.fmtShort(t.fact) }), "факт"]),
-        U.el("div", { class: "m-claim" }, [U.el("b", { text: U.fmtShort(t.claims) }), "заявки"])
+      U.el("div", { class: "cc-lines" }, [
+        line("Бюджет на год", "", t.plan_year, { tone: "n-plan" }),
+        line("Факт", "оплачено", t.fact, { tone: "n-fact" }),
+        line("Заявки", "в работе, не оплачены", t.claims, { tone: "n-claim" })
       ]),
       U.battery(t.pct, pace),
-      U.el("div", { class: "cc-foot" }, [
-        U.el("span", {}, ["свободный лимит ",
-          U.el("b", { class: t.free_limit < 0 ? "neg" : "pos", text: U.fmt(t.free_limit) + " ₽" })]),
-        U.el("span", { class: "mono-s", text: "остаток по кассе " + U.fmtShort(t.cash_remain) })
+      U.el("div", { class: "cc-lines cc-derived" }, [
+        line("Остаток бюджета", "бюджет − факт", t.cash_remain,
+             { tone: t.cash_remain < 0 ? "neg" : "" }),
+        line("Свободный лимит", "остаток − заявки", t.free_limit,
+             { tone: t.free_limit < 0 ? "neg" : "pos" })
       ])
     ]);
     if (item.out_of_budget) {
