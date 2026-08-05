@@ -93,6 +93,25 @@
     autoMatch: function () { return request("POST", "/api/facts/auto-match"); },
     transfer: function (payload) { return request("POST", "/api/adjustments", payload); },
 
+    registry: function () { return request("GET", "/api/registry/cfo"); },
+    mergePreview: function (sourceId, targetId) {
+      return request("GET", "/api/registry/merge-preview?source_id=" + sourceId +
+        "&target_id=" + targetId);
+    },
+    merge: function (sourceId, targetId) {
+      return request("POST", "/api/registry/merge", { source_id: sourceId, target_id: targetId });
+    },
+    renameCfo: function (cfoId, name) {
+      return request("PATCH", "/api/registry/cfo/" + cfoId, { name: name });
+    },
+    addAlias: function (cfoId, alias) {
+      return request("POST", "/api/registry/cfo/" + cfoId + "/alias", { alias: alias });
+    },
+    deleteAlias: function (alias) {
+      return request("DELETE", "/api/registry/alias?alias=" + encodeURIComponent(alias));
+    },
+    deleteCfo: function (cfoId) { return request("DELETE", "/api/registry/cfo/" + cfoId); },
+
     inspect: function (kind, file) {
       var form = new FormData();
       form.append("kind", kind);

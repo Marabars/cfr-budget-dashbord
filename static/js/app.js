@@ -116,8 +116,15 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {
-      tab.onclick = function () { selectTab(tab.getAttribute("data-p")); };
+      tab.onclick = function () {
+        var name = tab.getAttribute("data-p");
+        selectTab(name);
+        if (name === "reg") Registry.load();      // справочник грузим по открытию
+      };
     });
+    var refresh = document.getElementById("reg-refresh");
+    if (refresh) refresh.onclick = function () { Registry.load(); };
+    Registry.init();
 
     Dash.init();
     Sum.init();

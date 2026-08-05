@@ -39,6 +39,7 @@
     <button class="tab" role="tab" data-p="heat" aria-selected="false">Тепловая карта</button>
     <button class="tab" role="tab" data-p="adj" aria-selected="false">Корректировки</button>
     <button class="tab" role="tab" data-p="io" aria-selected="false">Импорт / экспорт</button>
+    <button class="tab" role="tab" data-p="reg" aria-selected="false">Справочник ЦФО</button>
   </div>
 </div>
 
@@ -344,6 +345,55 @@
   </div>
 </section>
 
+<!-- ================= СПРАВОЧНИК ЦФО ================= -->
+<section class="panel" id="p-reg">
+  <div class="card">
+    <header>
+      <h2>Похожие названия</h2>
+      <span class="sub" id="dup-count"></span>
+      <div class="top-spacer"></div>
+      <button class="btn sm" id="reg-refresh">Обновить</button>
+    </header>
+    <div class="card-body">
+      <div id="merge-confirm" hidden></div>
+      <div id="dup-list" class="dup-grid"></div>
+      <div class="legend-inline">
+        <span>Сведение переносит бюджеты, строки, факт и заявки на оставляемый ЦФО</span>
+        <span>Прежнее написание запоминается — следующий импорт дубль не создаст</span>
+        <span>Названия, отличающиеся только пробелами или регистром, сводятся сами при импорте</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>Свести вручную</h2>
+      <span class="sub">если похожие названия не распознались автоматически</span></header>
+    <div class="card-body">
+      <div class="form-grid">
+        <div><label class="f">Присоединить (запись исчезнет)</label>
+          <select class="f-in" id="mm-source"></select></div>
+        <div><label class="f">К этому ЦФО (останется)</label>
+          <select class="f-in" id="mm-target"></select></div>
+      </div>
+      <div class="row-btns">
+        <button class="btn primary" id="mm-go">Проверить и свести</button>
+        <span class="err" id="mm-err"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header><h2>Все ЦФО</h2><span class="sub" id="reg-sub"></span></header>
+    <div class="card-body flush"><div class="scroll"><table id="t-registry">
+      <thead><tr>
+        <th>ЦФО / бюджеты</th><th class="num">Строк</th><th class="num">План</th>
+        <th class="num">Факт</th><th class="num">Заявки</th>
+        <th class="wrap">Варианты написания</th><th></th>
+      </tr></thead><tbody></tbody>
+    </table></div></div>
+  </div>
+</section>
+
 </main>
 
 <script src="/js/util.js"></script>
@@ -356,6 +406,7 @@
 <script src="/js/heatmap.js"></script>
 <script src="/js/adjustments.js"></script>
 <script src="/js/io.js"></script>
+<script src="/js/registry.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

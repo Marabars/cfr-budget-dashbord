@@ -100,3 +100,16 @@ class SettingsIn(BaseModel):
     closed_through: int | None = Field(default=None, ge=0, le=12)
     as_of: str | None = None
     pace_warning_pp: float | None = None
+
+class MergeIn(BaseModel):
+    """Сведение дублей справочника: данные source переезжают в target."""
+    source_id: int
+    target_id: int
+
+
+class RenameIn(BaseModel):
+    name: str = Field(min_length=2)
+
+
+class AliasIn(BaseModel):
+    alias: str = Field(min_length=2)
