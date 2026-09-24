@@ -52,9 +52,58 @@ def tx() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Догоняет схему на уже существующей базе.
+
+    Новые колонки добавляются через ALTER, а вот `budget` приходится пересобирать:
+    у неё меняется UNIQUE — в него добавился слой, иначе одноимённый бюджет ЦФО
+    не может существовать одновременно в исполнении и в планировании.
+    """
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'budget'"
+    ).fetchone():
+        return                              ***REMOVED*** чистая база: всё создаст schema.sql
+
+    if "detail_source" not in _columns(conn, "cfo"):
+        conn.execute("ALTER TABLE cfo ADD COLUMN detail_source TEXT NOT NULL DEFAULT 'comment'")
+
+    if "layer" not in _columns(conn, "budget"):
+        conn.executescript("""
+            CREATE TABLE budget_new (
+              id     INTEGER PRIMARY KEY,
+              cfo_id INTEGER NOT NULL REFERENCES cfo(id) ON DELETE CASCADE,
+              year   INTEGER NOT NULL,
+              name   TEXT NOT NULL,
+              layer  TEXT NOT NULL DEFAULT 'main',
+              UNIQUE (cfo_id, year, name, layer)
+            );
+            INSERT INTO budget_new(id, cfo_id, year, name, layer)
+                SELECT id, cfo_id, year, name, 'main' FROM budget;
+            DROP TABLE budget;
+            ALTER TABLE budget_new RENAME TO budget;
+        """)
+        broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if broken:
+            raise RuntimeError(f"Миграция budget нарушила связи: {broken[:3]}")
+
+
 def init_db() -> None:
-    """Создаёт таблицы и заполняет настройки по умолчанию."""
+    """Создаёт таблицы, догоняет схему на существующей базе и заполняет настройки."""
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
+    conn = connect()
+    try:
+        conn.execute("PRAGMA foreign_keys = OFF")   ***REMOVED*** пересборка budget роняет внешние ключи
+        _migrate(conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
     with tx() as conn:
         conn.executescript(schema)
         for key, value in DEFAULT_SETTINGS.items():

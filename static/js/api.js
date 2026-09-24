@@ -93,6 +93,29 @@
     autoMatch: function () { return request("POST", "/api/facts/auto-match"); },
     transfer: function (payload) { return request("POST", "/api/adjustments", payload); },
 
+    operplan: function (year) {
+      return request("GET", "/api/operplan" + (year ? "?year=" + year : ""));
+    },
+    operplanMissing: function (year) {
+      return request("GET", "/api/operplan/missing" + (year ? "?year=" + year : ""));
+    },
+    operplanRefs: function (year) {
+      return request("GET", "/api/operplan/references" + (year ? "?year=" + year : ""));
+    },
+    operplanLock: function (year, locked) {
+      return request("POST", "/api/operplan/lock", { year: year, locked: locked });
+    },
+    copyYear: function (payload) { return request("POST", "/api/operplan/copy-year", payload); },
+    addMissingRow: function (rowId, year) {
+      return request("POST", "/api/operplan/missing/" + rowId + "/add?year=" + year);
+    },
+    createOperplanRow: function (payload, year) {
+      return request("POST", "/api/operplan/rows?year=" + year, payload);
+    },
+    patchRow: function (rowId, payload) {
+      return request("PATCH", "/api/rows/" + rowId, payload);
+    },
+
     registry: function () { return request("GET", "/api/registry/cfo"); },
     mergePreview: function (sourceId, targetId) {
       return request("GET", "/api/registry/merge-preview?source_id=" + sourceId +

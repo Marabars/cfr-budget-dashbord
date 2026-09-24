@@ -8,9 +8,10 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
-from app import auth, repo, service
+from app import auth, operplan, repo, service
 from app.exporters import excel
-from app.importers import directorate, fact as fact_importer, operplan
+from app.importers import (cfo_budgets, directorate, fact as fact_importer,
+                           operplan as operplan_importer)
 
 router = APIRouter(prefix="/api", tags=["files"])
 
@@ -57,8 +58,26 @@ async def inspect(kind: str = Form("plan"), file: UploadFile = File(...),
     try:
         if kind == "fact":
             return {"kind": kind, "filename": file.filename, **fact_importer.inspect(content)}
+        if kind == "cfo-budgets":
+            parsed = cfo_budgets.parse(content)
+            return {
+                "kind": kind, "filename": file.filename, "sheet": parsed["sheet"],
+                "sheets": parsed["sheets"], "header_row": parsed["header_row"],
+                "columns": parsed["columns"], "blocks": len(parsed["blocks"]),
+                "rows": len(parsed["rows"]),
+                "total": sum(r["plan_year"] for r in parsed["rows"]),
+                "mismatches": cfo_budgets.check_totals(parsed),
+            }
+        if kind == "cfo-articles":
+            parsed = cfo_budgets.parse_articles(content)
+            return {
+                "kind": kind, "filename": file.filename, "sheet": parsed["sheet"],
+                "sheets": parsed["sheets"], "header_row": parsed["header_row"],
+                "pairs": len(parsed["pairs"]),
+                "cfo": len({pair["cfo"] for pair in parsed["pairs"]}),
+            }
         if kind == "operplan":
-            parsed = operplan.parse(content)
+            parsed = operplan_importer.parse(content)
             return {
                 "kind": kind, "filename": file.filename, "sheet": parsed["sheet"],
                 "sheets": parsed["sheets"], "header_row": parsed["header_row"],
@@ -79,6 +98,35 @@ async def import_operplan(file: UploadFile = File(...), year: int = Form(...),
     content = await _read(file)
     try:
         return service.import_operplan(content, file.filename or "operplan.xlsx", year, u.name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/import/cfo-budgets")
+async def import_cfo_budgets(file: UploadFile = File(...), year: int = Form(...),
+                             replace: bool = Form(True),
+                             u: auth.User = Depends(user)) -> dict:
+    """Лист «Бюджеты ЦФО» файла ликвидности → слой планирования вкладки «Оперплан».
+
+    Слой исполнения (дашборд, сводка, карточка ЦФО, факт из 1С) не затрагивается.
+    """
+    _require_fin(u)
+    content = await _read(file)
+    try:
+        return operplan.import_budgets(content, file.filename or "budgets.xlsx", year, u.name,
+                                       replace=replace)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/import/cfo-articles")
+async def import_cfo_articles(file: UploadFile = File(...),
+                              u: auth.User = Depends(user)) -> dict:
+    """Лист «ЦФО Статьи» — справочник статей для выпадающих списков."""
+    _require_fin(u)
+    content = await _read(file)
+    try:
+        return operplan.import_articles(content, file.filename or "articles.xlsx", u.name)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

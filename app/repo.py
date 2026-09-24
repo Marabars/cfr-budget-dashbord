@@ -53,26 +53,52 @@ def add_alias(alias: str, cfo_id: int) -> None:
     )
 
 
-def ensure_budget(cfo_id: int, year: int, name: str) -> int:
+LAYER_MAIN = "main"          ***REMOVED*** исполнение: дашборд, сводка, карточка ЦФО
+LAYER_OPERPLAN = "operplan"  ***REMOVED*** планирование: вкладка «Оперплан»
+
+
+def ensure_budget(cfo_id: int, year: int, name: str, layer: str = LAYER_MAIN) -> int:
     name = (name or "").strip() or "Основной бюджет"
     row = db.query_one(
-        "SELECT id FROM budget WHERE cfo_id = ? AND year = ? AND name = ?", (cfo_id, year, name)
+        "SELECT id FROM budget WHERE cfo_id = ? AND year = ? AND name = ? AND layer = ?",
+        (cfo_id, year, name, layer),
     )
     if row:
         return int(row["id"])
     return db.execute(
-        "INSERT INTO budget(cfo_id, year, name) VALUES (?, ?, ?)", (cfo_id, year, name)
+        "INSERT INTO budget(cfo_id, year, name, layer) VALUES (?, ?, ?, ?)",
+        (cfo_id, year, name, layer),
     )
 
 
-def list_budgets(year: int) -> list[dict]:
+def list_budgets(year: int, layer: str = LAYER_MAIN) -> list[dict]:
     rows = db.query(
-        "SELECT b.id, b.name, b.year, b.cfo_id, c.name AS cfo_name "
+        "SELECT b.id, b.name, b.year, b.layer, b.cfo_id, c.name AS cfo_name, c.detail_source "
         "FROM budget b JOIN cfo c ON c.id = b.cfo_id "
-        "WHERE b.year = ? ORDER BY c.name, b.name",
-        (year,),
+        "WHERE b.year = ? AND b.layer = ? ORDER BY c.name, b.name",
+        (year, layer),
     )
     return [dict(r) for r in rows]
+
+
+def delete_budgets(year: int, layer: str) -> int:
+    """Полностью очищает слой за год — используется при повторной заливке плана.
+
+    Возвращает число удалённых строк: именно его показывает отчёт о загрузке.
+    """
+    removed = 0
+    with db.tx() as conn:
+        ids = [int(r["id"]) for r in conn.execute(
+            "SELECT id FROM budget WHERE year = ? AND layer = ?", (year, layer))]
+        for bid in ids:
+            removed += int(conn.execute(
+                "SELECT COUNT(*) c FROM budget_row WHERE budget_id = ?", (bid,)).fetchone()["c"])
+            conn.execute(
+                "DELETE FROM budget_row_month WHERE row_id IN "
+                "(SELECT id FROM budget_row WHERE budget_id = ?)", (bid,))
+            conn.execute("DELETE FROM budget_row WHERE budget_id = ?", (bid,))
+            conn.execute("DELETE FROM budget WHERE id = ?", (bid,))
+    return removed
 
 
 ***REMOVED*** ---------- строки бюджета ----------
@@ -81,13 +107,15 @@ ROW_FIELDS = ("article", "counterparty", "contract", "detail", "comment",
               "approver_comment", "plan_year", "carryover")
 
 
-def list_rows(year: int, budget_id: int | None = None) -> list[dict]:
+def list_rows(year: int, budget_id: int | None = None,
+              layer: str = LAYER_MAIN) -> list[dict]:
     sql = (
-        "SELECT r.*, b.name AS budget_name, b.cfo_id, c.name AS cfo_name "
+        "SELECT r.*, b.name AS budget_name, b.layer, b.cfo_id, c.name AS cfo_name, "
+        "c.detail_source "
         "FROM budget_row r JOIN budget b ON b.id = r.budget_id JOIN cfo c ON c.id = b.cfo_id "
-        "WHERE b.year = ? AND r.deleted_at IS NULL"
+        "WHERE b.year = ? AND b.layer = ? AND r.deleted_at IS NULL"
     )
-    params: list[Any] = [year]
+    params: list[Any] = [year, layer]
     if budget_id:
         sql += " AND r.budget_id = ?"
         params.append(budget_id)
@@ -97,7 +125,8 @@ def list_rows(year: int, budget_id: int | None = None) -> list[dict]:
 
 def get_row(row_id: int) -> dict | None:
     row = db.query_one(
-        "SELECT r.*, b.name AS budget_name, b.year, b.cfo_id, c.name AS cfo_name "
+        "SELECT r.*, b.name AS budget_name, b.year, b.layer, b.cfo_id, c.name AS cfo_name, "
+        "c.detail_source "
         "FROM budget_row r JOIN budget b ON b.id = r.budget_id JOIN cfo c ON c.id = b.cfo_id "
         "WHERE r.id = ? AND r.deleted_at IS NULL",
         (row_id,),
@@ -167,13 +196,13 @@ def delete_row(row_id: int) -> None:
     db.execute("UPDATE budget_row SET deleted_at = datetime('now') WHERE id = ?", (row_id,))
 
 
-def plan_months(year: int) -> dict[int, list[float]]:
+def plan_months(year: int, layer: str = LAYER_MAIN) -> dict[int, list[float]]:
     """План по месяцам: {row_id: [12 сумм]}."""
     rows = db.query(
         "SELECT m.row_id, m.month, m.amount FROM budget_row_month m "
         "JOIN budget_row r ON r.id = m.row_id JOIN budget b ON b.id = r.budget_id "
-        "WHERE b.year = ? AND r.deleted_at IS NULL",
-        (year,),
+        "WHERE b.year = ? AND b.layer = ? AND r.deleted_at IS NULL",
+        (year, layer),
     )
     out: dict[int, list[float]] = {}
     for r in rows:
@@ -410,3 +439,39 @@ def save_column_mapping(cfo_id: int, mapping_json: str) -> None:
 def get_column_mapping(cfo_id: int) -> str:
     row = db.query_one("SELECT mapping FROM column_mapping WHERE cfo_id = ?", (cfo_id,))
     return row["mapping"] if row else ""
+
+***REMOVED*** ---------- справочники для форм Оперплана ----------
+
+def set_detail_source(cfo_id: int, source: str) -> None:
+    """Откуда брать «Детализацию» в интерфейсе: 'detail' (из бюджета) или 'comment' (наш)."""
+    db.execute("UPDATE cfo SET detail_source = ? WHERE id = ?",
+               ("detail" if source == "detail" else "comment", cfo_id))
+
+
+def set_article_refs(cfo_id: int, articles: Iterable[str]) -> int:
+    """Перезаписывает утверждённый список статей ЦФО."""
+    items = sorted({a.strip() for a in articles if a and a.strip()})
+    with db.tx() as conn:
+        conn.execute("DELETE FROM article_ref WHERE cfo_id = ?", (cfo_id,))
+        conn.executemany("INSERT INTO article_ref(cfo_id, article) VALUES (?, ?)",
+                         [(cfo_id, a) for a in items])
+    return len(items)
+
+
+def list_article_refs() -> list[dict]:
+    return [dict(r) for r in db.query(
+        "SELECT cfo_id, article FROM article_ref ORDER BY cfo_id, article")]
+
+
+def used_values(year: int, layer: str = LAYER_MAIN) -> list[dict]:
+    """Статьи, контрагенты и договоры, реально встречающиеся в строках слоя.
+
+    Договор отдаётся вместе с контрагентом: в форме список договоров сужается
+    по выбранному контрагенту.
+    """
+    return [dict(r) for r in db.query(
+        "SELECT b.cfo_id, r.article, r.counterparty, r.contract "
+        "FROM budget_row r JOIN budget b ON b.id = r.budget_id "
+        "WHERE b.year = ? AND b.layer = ? AND r.deleted_at IS NULL",
+        (year, layer),
+    )]

@@ -125,6 +125,111 @@
     if (selected !== undefined && selected !== null) select.value = String(selected);
   }
 
+  /* Фильтр колонки: кнопка со счётчиком, поиск и список значений с галочками.
+     Пустой выбор = «не фильтруем», так значения, пришедшие позже, не отсекаются. */
+  function multiFilter(label, onChange) {
+    var chosen = {};
+    var options = [];
+    var count = el("span", { class: "fcount", hidden: "hidden" });
+    var button = el("button", { class: "fbtn", type: "button" },
+      [el("span", { text: label }), count, el("span", { class: "fcaret", text: "▾" })]);
+    var search = el("input", { class: "fsearch", type: "search", placeholder: "Поиск…" });
+    var list = el("div", { class: "flist" });
+    var pop = el("div", { class: "fpop", hidden: "hidden" }, [
+      search,
+      el("div", { class: "frow" }, [
+        el("button", { class: "flink", type: "button", text: "Выбрать все",
+          on: { click: function () { setAll(true); } } }),
+        el("button", { class: "flink", type: "button", text: "Очистить",
+          on: { click: function () { setAll(false); } } })
+      ]),
+      list
+    ]);
+    var node = el("div", { class: "fwrap" }, [button, pop]);
+
+    function selected() { return Object.keys(chosen); }
+
+    function sync() {
+      var n = selected().length;
+      count.hidden = n === 0;
+      count.textContent = n;
+      button.setAttribute("aria-pressed", n ? "true" : "false");
+    }
+
+    function setAll(on) {
+      var query = search.value.toLowerCase();
+      options.forEach(function (value) {
+        if (query && value.toLowerCase().indexOf(query) < 0) return;
+        if (on) chosen[value] = true; else delete chosen[value];
+      });
+      draw();
+      sync();
+      onChange(selected());
+    }
+
+    function draw() {
+      var query = search.value.toLowerCase();
+      clear(list);
+      var shown = 0;
+      options.forEach(function (value) {
+        if (query && value.toLowerCase().indexOf(query) < 0) return;
+        if (shown >= 300) return;                   // длинные списки режем, поиск сузит
+        shown++;
+        var box = el("input", { type: "checkbox" });
+        box.checked = !!chosen[value];
+        box.onchange = function () {
+          if (box.checked) chosen[value] = true; else delete chosen[value];
+          sync();
+          onChange(selected());
+        };
+        list.appendChild(el("label", { class: "fopt" }, [box,
+          el("span", { text: value === "" ? "— не заполнено —" : value })]));
+      });
+      if (!shown) list.appendChild(el("div", { class: "dim fempty", text: "ничего не найдено" }));
+      else if (options.length > shown) {
+        list.appendChild(el("div", { class: "dim fempty",
+          text: "показано " + shown + " из " + options.length + " — уточните поиск" }));
+      }
+    }
+
+    search.oninput = draw;
+    button.onclick = function (event) {
+      event.stopPropagation();
+      var opening = pop.hidden;
+      closeAllFilters();
+      pop.hidden = !opening;
+      if (opening) { draw(); search.focus(); }
+    };
+    pop.onclick = function (event) { event.stopPropagation(); };
+
+    return {
+      node: node,
+      selected: selected,
+      setOptions: function (values) {
+        options = values.slice().sort(function (a, b) { return a.localeCompare(b, "ru"); });
+        // выбранное значение, пропавшее из данных, снимаем — иначе фильтр «залипнет»
+        Object.keys(chosen).forEach(function (v) {
+          if (options.indexOf(v) < 0) delete chosen[v];
+        });
+        sync();
+        if (!pop.hidden) draw();
+      },
+      clear: function () { chosen = {}; sync(); if (!pop.hidden) draw(); },
+      close: function () { pop.hidden = true; }
+    };
+  }
+
+  function closeAllFilters() {
+    Array.prototype.forEach.call(document.querySelectorAll(".fpop"), function (pop) {
+      pop.hidden = true;
+    });
+  }
+
+  document.addEventListener("click", closeAllFilters);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") closeAllFilters();
+  });
+
   function toast(message, kind) {
     var node = document.getElementById("note");
     node.hidden = false;
@@ -140,6 +245,7 @@
     MONTHS_FULL: MONTHS_FULL, MONTHS_SHORT: MONTHS_SHORT,
     el: el, fmt: fmt, fmtShort: fmtShort, parseSum: parseSum,
     td: td, tdn: tdn, th: th, badge: badge, meter: meter, battery: battery,
-    kpi: kpi, empty: empty, clear: clear, chips: chips, fillSelect: fillSelect, toast: toast
+    kpi: kpi, empty: empty, clear: clear, chips: chips, fillSelect: fillSelect, toast: toast,
+    multiFilter: multiFilter
   };
 })();

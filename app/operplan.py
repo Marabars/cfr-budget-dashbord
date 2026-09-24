@@ -1,0 +1,474 @@
+"""Вкладка «Оперплан»: планирование бюджета на следующий год.
+
+Слой планирования (layer = 'operplan') живёт отдельно от слоя исполнения:
+дашборд, сводка и карточка ЦФО его не видят и не меняются. В слой попадает
+лист «Бюджеты ЦФО» файла ликвидности как база прошлого года, поверх которой
+набирается план следующего.
+
+Два ключа сравнения строк разных лет:
+    MATCH — статья + контрагент + договор       «была в прошлом году, нет в новом»
+    FULL  — то же плюс детализация               защита от дублей при копировании года
+"""
+from __future__ import annotations
+
+import re
+from collections import Counter
+from typing import Any, Iterable, Sequence
+
+from app import calc, db, repo
+from app.importers import cfo_budgets
+
+LAYER = repo.LAYER_OPERPLAN
+DEFAULT_PLAN_YEAR = 2027
+DEFAULT_BASE_YEAR = 2026
+IT_MARKER = "ИТ-направлению"    ***REMOVED*** у ИТ «Детализация» берётся из бюджета
+
+
+***REMOVED*** ---------- параметры вкладки ----------
+
+def plan_year() -> int:
+    return int(db.get_setting("operplan_year", str(DEFAULT_PLAN_YEAR)))
+
+
+def base_year() -> int:
+    return int(db.get_setting("operplan_base_year", str(DEFAULT_BASE_YEAR)))
+
+
+def is_locked(year: int) -> bool:
+    return db.get_setting(f"operplan_lock:{year}", "0") == "1"
+
+
+def set_lock(year: int, locked: bool, author: str) -> dict:
+    db.set_setting(f"operplan_lock:{year}", "1" if locked else "0")
+    db.log(author, "Блокировка внесения изменений", f"Оперплан {year}",
+           "внесение изменений заблокировано" if locked else "внесение изменений разрешено")
+    return {"year": year, "locked": locked}
+
+
+def can_edit(user, year: int, cfo_id: int | None = None) -> bool:
+    """Финотдел правит всегда, руководитель ЦФО — только свой ЦФО и только без замка."""
+    if user.is_fin:
+        return True
+    if is_locked(year):
+        return False
+    return user.can_edit_cfo(cfo_id) if cfo_id is not None else True
+
+
+def require_edit(user, year: int, cfo_id: int | None = None) -> None:
+    if user.is_fin:
+        return
+    if is_locked(year):
+        raise ValueError(f"Внесение изменений в {year} год заблокировано финансовым отделом")
+    if cfo_id is not None and not user.can_edit_cfo(cfo_id):
+        raise ValueError("Нет доступа к этому ЦФО")
+
+
+***REMOVED*** ---------- ключи сравнения строк ----------
+
+def _norm(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def _detail_text(row: dict) -> str:
+    """Что показывать в колонке «Детализация».
+
+    У ИТ это детализация из бюджета, у остальных дирекций — наш комментарий
+    (колонка «Комментарий» листа). Управляется полем cfo.detail_source.
+    """
+    detail = (row.get("detail") or "").strip()
+    comment = (row.get("comment") or "").strip()
+    if (row.get("detail_source") or "comment") == "detail":
+        return detail or comment      ***REMOVED*** у ИТ детализация местами пустая — тогда комментарий
+    return comment
+
+
+def match_key(row: dict) -> tuple:
+    """Ключ «та же строка расхода»: статья + контрагент + договор."""
+    return (_norm(row.get("article", "")), _norm(row.get("counterparty", "")),
+            _norm(row.get("contract", "")))
+
+
+def full_key(row: dict) -> tuple:
+    """Ключ для защиты от дублей при копировании года: плюс детализация.
+
+    Берём ту детализацию, которая видна в таблице: у ИТ это колонка бюджета,
+    у остальных — комментарий. Иначе строки одной статьи без контрагента
+    и договора (а таких в файле много) схлопнулись бы в одну.
+    """
+    return match_key(row) + (_norm(_detail_text(row)),)
+
+
+***REMOVED*** ---------- представление ----------
+
+def _empty_months() -> list[float]:
+    return [0.0] * calc.MONTHS
+
+
+def _sum_months(items: Iterable[Sequence[float]]) -> list[float]:
+    out = _empty_months()
+    for months in items:
+        for m in range(calc.MONTHS):
+            out[m] += months[m]
+    return out
+
+
+def _row_view(row: dict, months: list[float], base: dict | None) -> dict:
+    return {
+        "id": int(row["id"]),
+        "row_no": row.get("row_no"),
+        "budget_id": int(row["budget_id"]),
+        "budget_name": row.get("budget_name", ""),
+        "cfo_id": int(row["cfo_id"]),
+        "cfo_name": row.get("cfo_name", ""),
+        "article": row["article"],
+        "counterparty": row["counterparty"],
+        "contract": row["contract"],
+        "detail": row["detail"],
+        "comment": row["comment"],
+        "approver_comment": row["approver_comment"],
+        "detail_source": row.get("detail_source") or "comment",
+        "detail_text": _detail_text(row),
+        "plan_year": float(row["plan_year"]),
+        "months": months,
+        "source": row.get("source", ""),
+        "base_plan_year": float(base["plan_year"]) if base else None,
+    }
+
+
+def _year_rows(year: int, cfo_ids: Iterable[int] | None = None) -> list[dict]:
+    rows = repo.list_rows(year, layer=LAYER)
+    if cfo_ids is not None:
+        allowed = set(int(i) for i in cfo_ids)
+        rows = [r for r in rows if int(r["cfo_id"]) in allowed]
+    return rows
+
+
+def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
+    """Три показателя вкладки: бюджет нового года, бюджет базового и его план-факт."""
+    py, by = plan_year(), base_year()
+    plan_rows = _year_rows(py, cfo_ids)
+    base_rows = _year_rows(by, cfo_ids)
+
+    plan_total = sum(float(r["plan_year"]) for r in plan_rows)
+    base_total = sum(float(r["plan_year"]) for r in base_rows)
+
+    fact_all = repo.fact_months(by)
+    base_ids = {int(r["id"]) for r in base_rows}
+    base_fact = sum(sum(v) for k, v in fact_all.items() if k in base_ids)
+
+    return {
+        "plan_year": py,
+        "base_year": by,
+        "plan_total": plan_total,
+        "base_total": base_total,
+        ***REMOVED*** доля прошлогоднего бюджета от нового: 100% = план не изменился
+        "base_ratio": (base_total / plan_total) if plan_total else 0.0,
+        "base_fact": base_fact,
+        "base_pct": (base_fact / base_total) if base_total else 0.0,
+        "fact_loaded": base_fact > 0,
+        "plan_rows": len(plan_rows),
+        "base_rows": len(base_rows),
+    }
+
+
+def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
+    """Таблица вкладки: блоки ЦФО со строками, итог по году и KPI."""
+    py, by = plan_year(), base_year()
+    year = int(year or py)
+
+    rows = _year_rows(year, cfo_ids)
+    months_all = repo.plan_months(year, layer=LAYER)
+
+    ***REMOVED*** строки базового года — чтобы показать рядом прошлогоднюю сумму
+    base_by_key: dict[tuple, dict] = {}
+    if year != by:
+        for r in _year_rows(by, cfo_ids):
+            base_by_key.setdefault(full_key(r), dict(r))
+
+    allowed = None if cfo_ids is None else set(int(i) for i in cfo_ids)
+    blocks: dict[int, dict] = {}
+    for b in repo.list_budgets(year, layer=LAYER):
+        if allowed is not None and int(b["cfo_id"]) not in allowed:
+            continue
+        blocks[int(b["id"])] = {
+            "budget_id": int(b["id"]),
+            "budget_name": b["name"],
+            "cfo_id": int(b["cfo_id"]),
+            "cfo_name": b["cfo_name"],
+            "detail_source": b.get("detail_source") or "comment",
+            "rows": [],
+        }
+
+    for row in rows:
+        block = blocks.get(int(row["budget_id"]))
+        if block is None:
+            continue
+        rid = int(row["id"])
+        block["rows"].append(
+            _row_view(row, months_all.get(rid, _empty_months()), base_by_key.get(full_key(row)))
+        )
+
+    out_blocks = []
+    for b in blocks.values():
+        out_blocks.append({
+            **{k: v for k, v in b.items() if k != "rows"},
+            "rows": b["rows"],
+            "rows_count": len(b["rows"]),
+            "plan_year": sum(r["plan_year"] for r in b["rows"]),
+            "months": _sum_months([r["months"] for r in b["rows"]]),
+        })
+    out_blocks.sort(key=lambda x: (x["cfo_name"], x["budget_name"]))
+
+    all_rows = [r for b in out_blocks for r in b["rows"]]
+    years = {py, by} | {int(r["year"]) for r in db.query(
+        "SELECT DISTINCT year FROM budget WHERE layer = ?", (LAYER,))}
+    return {
+        "year": year,
+        "plan_year_no": py,
+        "base_year_no": by,
+        "years": sorted(years),
+        "locked": is_locked(year),
+        "kpi": kpi(cfo_ids),
+        "totals": {
+            "plan_year": sum(r["plan_year"] for r in all_rows),
+            "months": _sum_months([r["months"] for r in all_rows]),
+            "rows_count": len(all_rows),
+        },
+        "blocks": out_blocks,
+    }
+
+
+***REMOVED*** ---------- строки, которые были в базовом году и пропали в новом ----------
+
+def missing_rows(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
+    """Расходы базового года, которых нет в плане нового (ключ: статья+контрагент+договор)."""
+    py, by = int(year or plan_year()), base_year()
+    plan_keys = {match_key(r) for r in _year_rows(py, cfo_ids)}
+    months_all = repo.plan_months(by, layer=LAYER)
+
+    items = []
+    for row in _year_rows(by, cfo_ids):
+        if match_key(row) in plan_keys:
+            continue
+        rid = int(row["id"])
+        items.append({
+            "id": rid,
+            "cfo_id": int(row["cfo_id"]),
+            "cfo_name": row.get("cfo_name", ""),
+            "budget_name": row.get("budget_name", ""),
+            "article": row["article"],
+            "counterparty": row["counterparty"],
+            "contract": row["contract"],
+            "detail_text": _detail_text(row),
+            "plan_year": float(row["plan_year"]),
+            "months": months_all.get(rid, _empty_months()),
+        })
+    items.sort(key=lambda x: (-x["plan_year"], x["cfo_name"]))
+    return {
+        "base_year": by, "plan_year": py,
+        "count": len(items),
+        "total": sum(i["plan_year"] for i in items),
+        "items": items,
+    }
+
+
+def _copy_row(row: dict, months: list[float], to_year: int, factor: float, author: str) -> int:
+    """Переносит строку в другой год слоя с коэффициентом индексации."""
+    budget_id = repo.ensure_budget(int(row["cfo_id"]), to_year, row["budget_name"], layer=LAYER)
+    new_months = [round(m * factor, 2) for m in months]
+    plan = sum(new_months) if any(new_months) else round(float(row["plan_year"]) * factor, 2)
+    return repo.create_row(
+        budget_id,
+        {
+            "article": row["article"],
+            "counterparty": row["counterparty"],
+            "contract": row["contract"],
+            "detail": row["detail"],
+            "comment": row["comment"],
+            "approver_comment": row["approver_comment"],
+            "plan_year": plan,
+            "carryover": bool(row.get("carryover", 1)),
+        },
+        months=new_months,
+        author=author,
+        source="copy",
+        row_no=repo.next_row_no(budget_id),
+    )
+
+
+def add_missing(row_id: int, author: str, to_year: int | None = None) -> dict:
+    """Кнопка «Добавить в план» у строки из списка пропавших."""
+    to_year = int(to_year or plan_year())
+    row = repo.get_row(row_id)
+    if not row or row.get("layer") != LAYER:
+        raise ValueError("Строка не найдена в слое планирования")
+    months = repo.plan_months(int(row["year"]), layer=LAYER).get(row_id, _empty_months())
+    new_id = _copy_row(dict(row), months, to_year, 1.0, author)
+    amount = f"{float(row['plan_year']):,.2f}".replace(",", " ")
+    db.log(author, "Строка перенесена в план",
+           f"{row['cfo_name']} · {row['article']}",
+           f"{row['year']} → {to_year} · {amount} ₽",
+           "Была в базовом году, не было в плане")
+    return {"id": new_id}
+
+
+***REMOVED*** ---------- повтор бюджета прошлого года ----------
+
+def copy_year(author: str, from_year: int | None = None, to_year: int | None = None,
+              index_pct: float = 0.0, cfo_id: int | None = None) -> dict:
+    """Копирует строки прошлого года в новый: помесячно 1:1, дубли пропускаются.
+
+    index_pct — индексация в процентах (7 = +7%), применяется к суммам месяцев.
+    Строка считается дублем, если в целевом году уже есть такая же по ключу
+    статья + контрагент + договор + детализация.
+    """
+    from_year = int(from_year or base_year())
+    to_year = int(to_year or plan_year())
+    if from_year == to_year:
+        raise ValueError("Год-источник и год-приёмник совпадают")
+
+    factor = 1.0 + (float(index_pct) / 100.0)
+    if factor <= 0:
+        raise ValueError("Индексация не может обнулить бюджет")
+
+    source_rows = _year_rows(from_year, [cfo_id] if cfo_id else None)
+    if not source_rows:
+        raise ValueError(f"В {from_year} году нет строк для копирования")
+
+    ***REMOVED*** Дубли считаем по кратности, а не по множеству: в году легально лежат несколько
+    ***REMOVED*** строк с одинаковым ключом (одна статья без контрагента, разные назначения).
+    ***REMOVED*** Каждая строка целевого года «гасит» одну исходную — повторный запуск ничего не добавит.
+    quota = Counter(full_key(r) for r in _year_rows(to_year))
+    months_all = repo.plan_months(from_year, layer=LAYER)
+
+    copied = skipped = 0
+    total = 0.0
+    for row in source_rows:
+        key = full_key(row)
+        if quota[key] > 0:
+            quota[key] -= 1
+            skipped += 1
+            continue
+        rid = int(row["id"])
+        _copy_row(dict(row), months_all.get(rid, _empty_months()), to_year, factor, author)
+        copied += 1
+        total += float(row["plan_year"]) * factor
+
+    note = f"скопировано строк: {copied}, пропущено дублей: {skipped}"
+    if index_pct:
+        note += f", индексация {index_pct:+.1f}%"
+    amount = f"{total:,.2f}".replace(",", " ")
+    db.log(author, "Повтор бюджета прошлого года", f"{from_year} → {to_year}", note,
+           f"Сумма после переноса: {amount} ₽")
+    return {"copied": copied, "skipped": skipped, "total": total,
+            "from_year": from_year, "to_year": to_year, "index_pct": index_pct}
+
+
+***REMOVED*** ---------- справочники для форм ----------
+
+def references(year: int | None = None) -> dict:
+    """Статьи, контрагенты и договоры для выпадающих списков.
+
+    Для каждого ЦФО отдаём свой набор, плюс общий список по всем дирекциям —
+    его показывает галочка «показать все». Договоры сгруппированы по контрагенту,
+    чтобы список сужался после его выбора.
+    """
+    year = int(year or plan_year())
+    by_cfo: dict[int, dict[str, Any]] = {}
+
+    def bucket(cfo_id: int) -> dict:
+        return by_cfo.setdefault(int(cfo_id), {
+            "articles": set(), "counterparties": set(), "contracts": {}
+        })
+
+    for ref in repo.list_article_refs():
+        bucket(ref["cfo_id"])["articles"].add(ref["article"])
+
+    for source_year in {year, base_year()}:
+        for row in repo.used_values(source_year, layer=LAYER):
+            b = bucket(row["cfo_id"])
+            if row["article"]:
+                b["articles"].add(row["article"])
+            if row["counterparty"]:
+                b["counterparties"].add(row["counterparty"])
+            if row["contract"]:
+                b["contracts"].setdefault(row["counterparty"] or "", set()).add(row["contract"])
+
+    out: dict[str, Any] = {
+        "by_cfo": {},
+        "all": {"articles": set(), "counterparties": set(), "contracts": set()},
+    }
+    for cfo_id, b in by_cfo.items():
+        out["by_cfo"][str(cfo_id)] = {
+            "articles": sorted(b["articles"]),
+            "counterparties": sorted(b["counterparties"]),
+            "contracts": {cp: sorted(items) for cp, items in b["contracts"].items()},
+        }
+        out["all"]["articles"] |= b["articles"]
+        out["all"]["counterparties"] |= b["counterparties"]
+        for items in b["contracts"].values():
+            out["all"]["contracts"] |= items
+
+    out["all"] = {k: sorted(v) for k, v in out["all"].items()}
+    return out
+
+
+***REMOVED*** ---------- импорт листа «Бюджеты ЦФО» ----------
+
+def import_budgets(content: bytes, filename: str, year: int, author: str,
+                   replace: bool = True) -> dict:
+    """Заливает лист «Бюджеты ЦФО» в слой планирования за указанный год."""
+    parsed = cfo_budgets.parse(content)
+    mismatches = cfo_budgets.check_totals(parsed)
+
+    removed = repo.delete_budgets(year, LAYER) if replace else 0
+
+    created = 0
+    other_label = 0
+    for row in parsed["rows"]:
+        cfo_id = repo.ensure_cfo(row["cfo"])
+        if IT_MARKER in row["cfo"].lower():
+            repo.set_detail_source(cfo_id, "detail")
+        budget_id = repo.ensure_budget(cfo_id, year, row["budget"], layer=LAYER)
+        repo.create_row(budget_id, row, months=row["months"], author=author,
+                        source="import", row_no=repo.next_row_no(budget_id))
+        created += 1
+        if row.get("approver_comment"):
+            other_label += 1
+
+    repo.create_import("cfo_budgets", filename, year, author, created, len(mismatches),
+                       note=f"строк: {created}, блоков: {len(parsed['blocks'])}, "
+                            f"удалено прежних: {removed}")
+    db.log(author, "Импорт листа «Бюджеты ЦФО»", filename,
+           f"строк: {created}, расхождений с ИТОГО: {len(mismatches)}",
+           f"Слой планирования, {year} год")
+    return {
+        "year": year, "rows": created, "blocks": len(parsed["blocks"]),
+        "removed": removed, "other_cfo_label": other_label,
+        "total": sum(r["plan_year"] for r in parsed["rows"]),
+        "mismatches": mismatches,
+    }
+
+
+def import_articles(content: bytes, filename: str, author: str) -> dict:
+    """Заливает справочник «ЦФО Статьи»: какие статьи закреплены за дирекцией."""
+    parsed = cfo_budgets.parse_articles(content)
+    by_cfo: dict[int, set[str]] = {}
+    unknown: list[str] = []
+    for pair in parsed["pairs"]:
+        found = repo.find_cfo(pair["cfo"])
+        if not found:
+            if pair["cfo"] not in unknown:
+                unknown.append(pair["cfo"])
+            continue
+        by_cfo.setdefault(int(found["id"]), set()).add(pair["article"])
+
+    saved = 0
+    for cfo_id, articles in by_cfo.items():
+        saved += repo.set_article_refs(cfo_id, articles)
+
+    db.log(author, "Импорт справочника «ЦФО Статьи»", filename,
+           f"дирекций: {len(by_cfo)}, статей: {saved}",
+           f"не найдено в справочнике ЦФО: {', '.join(unknown)}" if unknown else "")
+    return {"cfo": len(by_cfo), "articles": saved, "pairs": len(parsed["pairs"]),
+            "unknown_cfo": unknown}

@@ -6,10 +6,16 @@
   var pending = null;      // выбранный файл
   var inspected = null;    // результат разбора
 
+  var OPERPLAN_KINDS = { "cfo-budgets": true, "cfo-articles": true };
+
   function syncKind() {
     var isPlan = kind === "plan";
     document.getElementById("w-io-cfo").hidden = !isPlan;
     document.getElementById("w-io-budget").hidden = !isPlan;
+    document.getElementById("w-io-year").hidden = kind !== "cfo-budgets";
+    document.getElementById("io-layer-note").hidden = !OPERPLAN_KINDS[kind];
+    var year = document.getElementById("io-year");
+    if (kind === "cfo-budgets" && !year.value) year.value = String(App.year());
   }
 
   function renderMapping(info) {
@@ -21,6 +27,36 @@
     document.getElementById("mapping-sub").textContent =
       "файл: " + info.filename + " · лист «" + info.sheet + "»" +
       (info.header_row ? " · шапка в строке " + info.header_row : "");
+
+    if (kind === "cfo-budgets") {
+      var lines = ["Лист «" + info.sheet + "» распознан: блоков " + info.blocks +
+        ", строк " + info.rows + ", сумма " + U.fmt(info.total) + " ₽."];
+      if (info.mismatches && info.mismatches.length) {
+        info.mismatches.forEach(function (m) {
+          lines.push("ИТОГО блока «" + m.cfo + "» в файле " + U.fmt(m.declared) +
+            " ₽, сумма строк " + U.fmt(m.actual) + " ₽ (расхождение " +
+            U.fmt(m.diff) + " ₽, строка Excel " + m.excel_row + ")");
+        });
+      }
+      body.appendChild(U.el("tr", {}, [
+        U.el("td", { colspan: 4, class: "wrap" }, lines.map(function (text, i) {
+          return U.el("div", { class: i ? "mono-s" : "", text: text });
+        }))
+      ]));
+      return;
+    }
+
+    if (kind === "cfo-articles") {
+      body.appendChild(U.el("tr", {}, [
+        U.el("td", { colspan: 4, class: "wrap" }, [
+          U.el("div", { text: "Лист «" + info.sheet + "»: " + info.pairs +
+            " пар ЦФО — статья по " + info.cfo + " дирекциям." }),
+          U.el("div", { class: "mono-s", text:
+            "Справочник используется в выпадающих списках при добавлении строки плана." })
+        ])
+      ]));
+      return;
+    }
 
     if (kind === "operplan") {
       body.appendChild(U.el("tr", {}, [
@@ -70,6 +106,10 @@
     if (kind === "plan") {
       params.cfo_name = document.getElementById("io-cfo").value;
       params.budget_name = document.getElementById("io-budget").value || "Основной бюджет";
+    } else if (kind === "cfo-budgets") {
+      params.year = Number(document.getElementById("io-year").value) || App.year();
+    } else if (kind === "cfo-articles") {
+      params = {};
     }
     var result = document.getElementById("io-result");
     U.clear(result);
@@ -85,21 +125,32 @@
       if (data.skipped !== undefined) lines.push("пропущено дублей: " + data.skipped);
       if (data.matched !== undefined) lines.push("сопоставлено автоматически: " + data.matched);
       if (data.closed_through) lines.push("факт закрыт по месяц: " + data.closed_through);
+      if (data.removed) lines.push("заменено прежних строк слоя: " + data.removed);
+      if (data.articles !== undefined) lines.push("статей в справочнике: " + data.articles);
+      if (data.cfo !== undefined) lines.push("дирекций: " + data.cfo);
+      if (data.total) lines.push("сумма: " + U.fmt(data.total) + " ₽");
 
       result.appendChild(U.el("div", { class: "alert" }, [
         U.badge("good", "загружено"), U.el("div", { text: lines.join(" · ") })
       ]));
 
       if (data.mismatches && data.mismatches.length) {
+        var detail = data.mismatches.map(function (m) {
+          return m.cfo
+            ? m.cfo + ": ИТОГО в файле " + U.fmt(m.declared) + " ₽, сумма строк " +
+              U.fmt(m.actual) + " ₽"
+            : null;
+        }).filter(Boolean);
         result.appendChild(U.el("div", { class: "alert", style: "margin-top:8px" }, [
           U.badge("warning", "проверьте суммы"),
-          U.el("div", { text: "Строк, где годовая сумма не совпадает с суммой месяцев: " +
-            data.mismatches.length })
+          U.el("div", { text: "Расхождений с контрольной суммой: " + data.mismatches.length }),
+          detail.length ? U.el("div", { class: "mono-s wrap", text: detail.join(" · ") }) : null
         ]));
       }
       document.getElementById("mapping-card").hidden = true;
       pending = null;
       App.reload();
+      if (OPERPLAN_KINDS[kind]) Operplan.load();
     }).catch(function (e) {
       U.clear(result);
       result.appendChild(U.el("div", { class: "alert crit" }, [
@@ -115,7 +166,8 @@
       body.appendChild(U.empty(6, "Загрузок ещё не было."));
       return;
     }
-    var titles = { operplan: "Оперплан ЦФО", plan: "План дирекции", fact: "Факт" };
+    var titles = { operplan: "Оперплан ЦФО", plan: "План дирекции", fact: "Факт",
+      cfo_budgets: "Бюджеты ЦФО (Оперплан)" };
     items.forEach(function (item) {
       body.appendChild(U.el("tr", {}, [
         U.td(item.uploaded_at),

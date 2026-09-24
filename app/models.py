@@ -113,3 +113,89 @@ class RenameIn(BaseModel):
 
 class AliasIn(BaseModel):
     alias: str = Field(min_length=2)
+
+class RowPatch(BaseModel):
+    """Точечная правка строки бюджета из режима редактирования таблицы.
+
+    Присылаются только изменённые поля. Если пришли месяцы, годовая сумма
+    пересчитывается по ним: в таблице ИТОГО — это всегда сумма двенадцати месяцев.
+    """
+    article: str | None = None
+    counterparty: str | None = None
+    contract: str | None = None
+    detail: str | None = None
+    comment: str | None = None
+    approver_comment: str | None = None
+    plan_year: float | None = None
+    carryover: bool | None = None
+    months: list[float] | None = None
+
+    @field_validator("months")
+    @classmethod
+    def twelve_months(cls, value: list[float] | None) -> list[float] | None:
+        if value is None:
+            return None
+        if len(value) != MONTHS:
+            raise ValueError(f"Ожидается {MONTHS} месяцев, пришло {len(value)}")
+        if any(v < 0 for v in value):
+            raise ValueError("Сумма месяца не может быть отрицательной")
+        return [float(v or 0) for v in value]
+
+    @field_validator("article")
+    @classmethod
+    def article_filled(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Статья оборотов не может быть пустой")
+        return value.strip() if value else value
+
+    def changes(self) -> dict:
+        """Изменённые поля строки без месяцев."""
+        data = self.model_dump(exclude_none=True)
+        data.pop("months", None)
+        if self.months is not None:
+            data["plan_year"] = round(sum(self.months), 2)
+        return data
+
+
+class OperplanRowIn(BaseModel):
+    """Новая строка плана: ЦФО и бюджет обязательны, суммы — по месяцам."""
+    cfo_id: int
+    budget_name: str = "Основной бюджет"
+    article: str = Field(min_length=1)
+    counterparty: str = ""
+    contract: str = ""
+    detail: str = ""
+    comment: str = ""
+    plan_year: float = 0
+    months: list[float] | None = None
+
+    @field_validator("article")
+    @classmethod
+    def article_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Укажите статью оборотов")
+        return value.strip()
+
+    def month_plan(self) -> list[float]:
+        out = [float(v or 0) for v in (self.months or [])][:MONTHS]
+        return out + [0.0] * (MONTHS - len(out))
+
+
+class CopyYearIn(BaseModel):
+    """Повтор бюджета прошлого года с необязательной индексацией."""
+    from_year: int | None = None
+    to_year: int | None = None
+    cfo_id: int | None = None
+    index_pct: float = 0
+
+    @field_validator("index_pct")
+    @classmethod
+    def sane_index(cls, value: float) -> float:
+        if value <= -100 or value > 500:
+            raise ValueError("Индексация должна быть в пределах от −100% до +500%")
+        return value
+
+
+class LockIn(BaseModel):
+    year: int | None = None
+    locked: bool

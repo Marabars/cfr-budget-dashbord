@@ -75,6 +75,7 @@
       IO.renderImports(results[6]);
       Matching.render(results[7]);
 
+      Operplan.setCfoList(state.cfoList);
       U.fillSelect(document.getElementById("cfo-pick"), state.cfoList, "id", "name",
         state.currentCfo || (state.cfoList[0] && state.cfoList[0].id));
       U.fillSelect(document.getElementById("c-cfo"), state.cfoList, "id", "name");
@@ -120,6 +121,7 @@
         var name = tab.getAttribute("data-p");
         selectTab(name);
         if (name === "reg") Registry.load();      // справочник грузим по открытию
+        if (name === "op") Operplan.load();       // оперплан — тоже по открытию
       };
     });
     var refresh = document.getElementById("reg-refresh");
@@ -129,6 +131,7 @@
     Dash.init();
     Sum.init();
     CfoCard.init();
+    Operplan.init();
     Matching.init();
     IO.init();
     Claims.init([]);

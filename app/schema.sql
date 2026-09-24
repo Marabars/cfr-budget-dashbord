@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS cfo (
   id        INTEGER PRIMARY KEY,
   name      TEXT NOT NULL UNIQUE,       -- каноничное название дирекции
   parent_id INTEGER REFERENCES cfo(id), -- иерархия (используется редко)
-  active    INTEGER NOT NULL DEFAULT 1
+  active    INTEGER NOT NULL DEFAULT 1,
+  -- что показывать в колонке «Детализация»: свой комментарий или детализацию из бюджета
+  detail_source TEXT NOT NULL DEFAULT 'comment'   -- comment | detail
 );
 
 -- варианты написания названий ЦФО из выгрузок -> каноничный ЦФО
@@ -16,12 +18,17 @@ CREATE TABLE IF NOT EXISTS cfo_alias (
   cfo_id INTEGER NOT NULL REFERENCES cfo(id) ON DELETE CASCADE
 );
 
+-- Бюджет живёт в одном из двух слоёв:
+--   main     — исполнение текущего года: дашборд, сводка, карточка ЦФО, факт из 1С;
+--   operplan — планирование на вкладке «Оперплан»: лист «Бюджеты ЦФО» и план будущего года.
+-- Слои не смешиваются: запросы исполнения всегда спрашивают layer = 'main'.
 CREATE TABLE IF NOT EXISTS budget (
   id     INTEGER PRIMARY KEY,
   cfo_id INTEGER NOT NULL REFERENCES cfo(id) ON DELETE CASCADE,
   year   INTEGER NOT NULL,
   name   TEXT NOT NULL,                 -- «Бюджет обязательных затрат», «Бюджет развития», «Основной бюджет»
-  UNIQUE (cfo_id, year, name)
+  layer  TEXT NOT NULL DEFAULT 'main',  -- main | operplan
+  UNIQUE (cfo_id, year, name, layer)
 );
 
 -- ---------- строки бюджета ----------
@@ -137,6 +144,14 @@ CREATE TABLE IF NOT EXISTS import_batch (
   rows_error  INTEGER NOT NULL DEFAULT 0,
   mapping     TEXT NOT NULL DEFAULT '',   -- JSON сопоставления колонок
   note        TEXT NOT NULL DEFAULT ''
+);
+
+-- Справочник статей ЦФО (лист «ЦФО Статьи» файла ликвидности).
+-- Источник 'ref' — утверждённое соответствие, 'used' — статья реально встречается в строках.
+CREATE TABLE IF NOT EXISTS article_ref (
+  cfo_id  INTEGER NOT NULL REFERENCES cfo(id) ON DELETE CASCADE,
+  article TEXT NOT NULL,
+  PRIMARY KEY (cfo_id, article)
 );
 
 -- запомненное сопоставление колонок для файлов дирекции

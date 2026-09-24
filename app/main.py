@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__, db
-from app.routers import edit, files, registry, views
+from app.routers import edit, files, operplan, registry, views
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
@@ -38,6 +38,7 @@ app.include_router(views.router)
 app.include_router(edit.router)
 app.include_router(files.router)
 app.include_router(registry.router)
+app.include_router(operplan.router)
 
 
 @app.middleware("http")

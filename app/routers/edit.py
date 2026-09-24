@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from app import auth, calc, db, repo, service
-from app.models import ClaimIn, FactIn, MatchIn, RowIn, TransferIn
+from app import auth, calc, db, operplan, repo, service
+from app.models import ClaimIn, FactIn, MatchIn, RowIn, RowPatch, TransferIn
 
 router = APIRouter(prefix="/api", tags=["edit"])
 
@@ -45,18 +45,54 @@ def create_row(payload: RowIn, u: auth.User = Depends(user)) -> dict:
     return {"id": row_id, "row": row}
 
 
+FIELD_NAMES = {
+    "article": "статья", "counterparty": "контрагент", "contract": "договор",
+    "detail": "детализация", "comment": "комментарий", "approver_comment": "комм наш",
+    "plan_year": "бюджет года", "carryover": "перенос остатка",
+}
+
+
+def _describe(row: dict, changes: dict, months: list[float] | None) -> str:
+    """Человекочитаемое «было → стало» для журнала изменений."""
+    parts = []
+    for field, value in changes.items():
+        before, after = row.get(field), value
+        if field == "plan_year":
+            before, after = _money(float(before or 0)), _money(float(after or 0))
+        if str(before) == str(after):
+            continue
+        parts.append(f"{FIELD_NAMES.get(field, field)}: {before or '—'} → {after or '—'}")
+    if months is not None:
+        parts.append("помесячная разбивка изменена")
+    return "; ".join(parts) or "без изменений"
+
+
 @router.patch("/rows/{row_id}")
-def update_row(row_id: int, payload: RowIn, u: auth.User = Depends(user)) -> dict:
+def update_row(row_id: int, payload: RowPatch, u: auth.User = Depends(user)) -> dict:
+    """Точечная правка строки из режима редактирования таблицы.
+
+    Работает и для карточки ЦФО, и для Оперплана — в слое планирования
+    дополнительно проверяется замок «внесение изменений заблокировано».
+    """
     row = repo.get_row(row_id)
     if not row:
         raise HTTPException(404, "Строка не найдена")
-    if not u.can_edit_cfo(int(row["cfo_id"])):
+    if row.get("layer") == operplan.LAYER:
+        try:
+            operplan.require_edit(u, int(row["year"]), int(row["cfo_id"]))
+        except ValueError as exc:
+            raise HTTPException(403, str(exc)) from exc
+    elif not u.can_edit_cfo(int(row["cfo_id"])):
         raise HTTPException(403, "Нет доступа к этому ЦФО")
-    months = payload.months if payload.months is not None else None
-    repo.update_row(row_id, payload.model_dump(), months=months)
+
+    changes = payload.changes()
+    if not changes and payload.months is None:
+        return {"ok": True, "row": row}
+
+    repo.update_row(row_id, changes, months=payload.months)
     db.log(u.name, "Изменение строки бюджета",
-           f"{row['cfo_name']} · {row['article']}",
-           f"{_money(row['plan_year'])} → {_money(payload.plan_year)}")
+           f"{row['cfo_name']} · №{row.get('row_no') or '-'} · {row['article']}",
+           _describe(row, changes, payload.months))
     return {"ok": True, "row": repo.get_row(row_id)}
 
 
@@ -65,7 +101,12 @@ def delete_row(row_id: int, reason: str = "", u: auth.User = Depends(user)) -> d
     row = repo.get_row(row_id)
     if not row:
         raise HTTPException(404, "Строка не найдена")
-    if not u.can_edit_cfo(int(row["cfo_id"])):
+    if row.get("layer") == operplan.LAYER:
+        try:
+            operplan.require_edit(u, int(row["year"]), int(row["cfo_id"]))
+        except ValueError as exc:
+            raise HTTPException(403, str(exc)) from exc
+    elif not u.can_edit_cfo(int(row["cfo_id"])):
         raise HTTPException(403, "Нет доступа к этому ЦФО")
     repo.delete_row(row_id)
     db.log(u.name, "Удаление строки",

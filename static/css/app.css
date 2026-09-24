@@ -422,3 +422,74 @@ thead th { border-right-color: var(--axis); }
   display: block; font-size: 11px; font-weight: 400; letter-spacing: .02em;
   color: var(--ink2); text-transform: none;
 }
+
+/* ---------- фильтры колонок с поиском ---------- */
+.filters { display: flex; gap: 6px; flex-wrap: wrap; }
+.fwrap { position: relative; }
+.fbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; font-size: 13px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink2);
+}
+.fbtn:hover { border-color: var(--axis); color: var(--ink); }
+.fbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
+.fcount {
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: var(--accent); color: ***REMOVED***fff; font-size: 11px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.fcaret { font-size: 10px; color: var(--muted); }
+.fpop {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; width: 320px;
+  background: var(--surface); border: 1px solid var(--axis); border-radius: 7px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28); padding: 9px;
+}
+.fsearch {
+  width: 100%; box-sizing: border-box; padding: 6px 9px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--plane);
+}
+.fsearch:focus { border-color: var(--accent); outline: none; }
+.frow { display: flex; gap: 12px; padding: 7px 2px 5px; }
+.flink { background: none; border: none; padding: 0; font-size: 12px; color: var(--accent-2); }
+.flink:hover { text-decoration: underline; }
+.flist { max-height: 280px; overflow-y: auto; }
+.fopt {
+  display: flex; align-items: flex-start; gap: 8px; padding: 4px 2px;
+  font-size: 13px; cursor: pointer; line-height: 1.35;
+}
+.fopt:hover { background: var(--hover); }
+.fopt input { margin-top: 2px; flex: none; }
+.fempty { padding: 8px 2px; font-size: 12px; }
+.f-check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink2); }
+
+/* ---------- Оперплан ---------- */
+***REMOVED***t-op th:nth-child(1), ***REMOVED***t-op td:nth-child(1),
+***REMOVED***t-op th:nth-child(2), ***REMOVED***t-op td:nth-child(2) {
+  position: sticky; background: var(--surface); z-index: 2;
+}
+***REMOVED***t-op th:nth-child(1), ***REMOVED***t-op td:nth-child(1) { left: 0; min-width: 64px; }
+***REMOVED***t-op th:nth-child(2), ***REMOVED***t-op td:nth-child(2) { left: 64px; box-shadow: 1px 0 0 var(--grid); }
+***REMOVED***t-op thead th:nth-child(1), ***REMOVED***t-op thead th:nth-child(2) { z-index: 3; }
+***REMOVED***t-op tr:hover td:nth-child(1), ***REMOVED***t-op tr:hover td:nth-child(2) { background: var(--plane); }
+***REMOVED***t-op tr.group td { position: static; }
+
+.total-row td {
+  position: sticky; top: 0; background: var(--raised); font-weight: 700;
+  border-bottom: 2px solid var(--axis); z-index: 2;
+}
+.total-row .total-label { text-transform: none; letter-spacing: 0; color: var(--ink2); font-weight: 600; }
+.total-row .total-sum { color: var(--accent-2); }
+
+tr.group .grp-caret { display: inline-block; width: 14px; color: var(--muted); }
+tr.group .grp-sum { float: right; font-weight: 400; color: var(--ink2); font-variant-numeric: tabular-nums; }
+tr.group { cursor: pointer; }
+
+table.editing td[contenteditable] {
+  background: var(--plane); box-shadow: inset 0 0 0 1px var(--border); cursor: text;
+}
+table.editing td[contenteditable]:focus {
+  outline: none; box-shadow: inset 0 0 0 2px var(--accent); background: var(--surface);
+}
+td.saving { opacity: .55; }
+.btn.locked { border-color: var(--critical); color: var(--critical); font-weight: 600; }
+.batt-note { font-size: 12px; color: var(--ink2); margin-top: 3px; }
