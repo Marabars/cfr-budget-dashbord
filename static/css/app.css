@@ -462,7 +462,19 @@ thead th { border-right-color: var(--axis); }
 .fempty { padding: 8px 2px; font-size: 12px; }
 .f-check { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink2); }
 
-/* ---------- Оперплан ---------- */
+/* ---------- выпадающий список к полю ввода ---------- */
+.combo { position: relative; display: block; }
+.combo .f-in { width: 100%; box-sizing: border-box; padding-right: 28px; }
+.combo-caret {
+  position: absolute; right: 2px; top: 2px; bottom: 2px; width: 24px;
+  border: none; background: none; color: var(--ink2); font-size: 12px;
+  cursor: pointer; border-radius: 4px;
+}
+.combo-caret:hover { color: var(--ink); background: var(--hover); }
+.combo-pop { width: 100%; min-width: 260px; }
+.copt { display: block; padding: 5px 6px; border-radius: 4px; cursor: pointer; }
+
+/* ---------- вкладка «Бюджет» ---------- */
 ***REMOVED***t-op th:nth-child(1), ***REMOVED***t-op td:nth-child(1),
 ***REMOVED***t-op th:nth-child(2), ***REMOVED***t-op td:nth-child(2) {
   position: sticky; background: var(--surface); z-index: 2;

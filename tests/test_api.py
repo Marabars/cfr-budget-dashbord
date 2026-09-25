@@ -248,6 +248,26 @@ def test_руководитель_цфо_не_добавляет_строки_в
     assert response.status_code == 403
 
 
+def test_руководителю_цфо_закрыты_журнал_и_история_загрузок(client, budget):
+    """Вкладки «Корректировки» и «Импорт / экспорт» — только финотдел."""
+    as_cfo = {"X-User": f"cfo:{budget['cfo_id']}"}
+    assert client.get("/api/audit", headers=as_cfo).status_code == 403
+    assert client.get("/api/imports", headers=as_cfo).status_code == 403
+    assert client.get("/api/audit").status_code == 200
+    assert client.get("/api/imports").status_code == 200
+
+
+def test_руководитель_цфо_не_смотрит_лимит_чужой_строки(client, budget):
+    other_cfo = repo.ensure_cfo("Финансовый отдел")
+    made = client.post("/api/rows", json={
+        "cfo_id": other_cfo, "article": "4106_Аудит", "plan_year": 500_000,
+    }).json()
+    as_cfo = {"X-User": f"cfo:{budget['cfo_id']}"}
+    assert client.get(f"/api/rows/{made['id']}/limit?amount=1", headers=as_cfo).status_code == 403
+    own = client.get(f"/api/rows/{budget['row_id']}/limit?amount=1", headers=as_cfo)
+    assert own.status_code == 200
+
+
 ***REMOVED*** ---------- дашборд и тепловая карта ----------
 
 def test_дашборд_считает_итоги_и_статусы(client, budget):

@@ -1,4 +1,4 @@
-/* Вкладка «Оперплан»: план следующего года по всем ЦФО, фильтры, правка таблицы. */
+/* Вкладка «Бюджет»: план следующего года по всем ЦФО, фильтры, правка таблицы. */
 (function () {
   "use strict";
 
@@ -10,6 +10,7 @@
     editing: false,
     collapsed: {},       // budget_id -> свёрнут ли блок
     filters: null,
+    combos: null,       // выпадающие списки формы новой строки
     year: null
   };
 
@@ -399,19 +400,24 @@
     return { own: own || { articles: [], counterparties: [], contracts: {} }, all: all };
   }
 
-  function fillDatalist(id, values) {
-    var list = document.getElementById(id);
-    U.clear(list);
-    values.forEach(function (value) { list.appendChild(U.el("option", { value: value })); });
+  function initCombos() {
+    if (state.combos) return;
+    state.combos = {
+      budget: U.combo(document.getElementById("op-a-budget")),
+      article: U.combo(document.getElementById("op-a-article")),
+      cp: U.combo(document.getElementById("op-a-cp"), function () { syncAddLists(); }),
+      contract: U.combo(document.getElementById("op-a-contract"))
+    };
   }
 
   function syncAddLists() {
+    initCombos();
     var cfoId = Number(document.getElementById("op-a-cfo").value);
     var refs = cfoRefs(cfoId);
     var showAll = document.getElementById("op-a-all").checked;
 
-    fillDatalist("dl-op-article", showAll ? refs.all.articles : refs.own.articles);
-    fillDatalist("dl-op-cp", showAll ? refs.all.counterparties : refs.own.counterparties);
+    state.combos.article.setOptions(showAll ? refs.all.articles : refs.own.articles);
+    state.combos.cp.setOptions(showAll ? refs.all.counterparties : refs.own.counterparties);
 
     var cp = document.getElementById("op-a-cp").value;
     var contracts = showAll ? refs.all.contracts : (refs.own.contracts[cp] || []);
@@ -420,7 +426,7 @@
         return acc.concat(refs.own.contracts[key]);
       }, []);
     }
-    fillDatalist("dl-op-contract", contracts);
+    state.combos.contract.setOptions(contracts);
 
     var hint = document.getElementById("op-a-hint");
     hint.textContent = showAll
@@ -428,15 +434,19 @@
       : "Показаны значения этого ЦФО: статей " + refs.own.articles.length +
         ", контрагентов " + refs.own.counterparties.length;
 
+    /* Бюджет выбирают только там, где их несколько: у ИТ-дирекции это бюджет
+       обязательных затрат и бюджет развития. У остальных ЦФО бюджет один —
+       поле прячем и подставляем его молча. */
     var budgets = {};
-    state.data.blocks.forEach(function (b) {
+    (state.data ? state.data.blocks : []).forEach(function (b) {
       if (b.cfo_id === cfoId) budgets[b.budget_name] = true;
     });
     var names = Object.keys(budgets);
     if (!names.length) names = ["Основной бюджет"];
-    fillDatalist("dl-op-budget", names);
-    var budget = document.getElementById("op-a-budget");
-    if (!budget.value || budgets[budget.value] === undefined) budget.value = names[0];
+    var field = document.getElementById("op-a-budget");
+    if (!field.value || budgets[field.value] === undefined) field.value = names[0];
+    state.combos.budget.setOptions(names);
+    document.getElementById("op-a-budget-wrap").hidden = names.length < 2;
   }
 
   function monthPlan() {
@@ -523,13 +533,14 @@
           syncAddLists();
         })
       ]);
-    }).catch(function (e) { U.toast("Оперплан: " + e.message, "error"); });
+    }).catch(function (e) { U.toast("Бюджет: " + e.message, "error"); });
   }
 
   window.Operplan = {
     setCfoList: function (list) { state.cfoList = list; },
     load: reloadAll,
     init: function () {
+      initCombos();
       U.fillSelect(document.getElementById("op-a-month"),
         U.MONTHS_FULL.map(function (name, i) { return { value: String(i), text: name }; }),
         "value", "text");
@@ -575,7 +586,6 @@
         document.getElementById("op-add-form").hidden = true;
       };
       document.getElementById("op-a-cfo").onchange = syncAddLists;
-      document.getElementById("op-a-cp").oninput = syncAddLists;
       document.getElementById("op-a-all").onchange = syncAddLists;
       document.getElementById("op-a-spread").onchange = function () {
         document.getElementById("op-a-month-wrap").hidden = this.value !== "one";

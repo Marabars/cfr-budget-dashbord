@@ -5,6 +5,7 @@
   var card = null;
   var cfoId = null;
   var addKind = "budget";
+  var articleCombo = null;     // выпадающий список статей вместо нативного datalist
   var editing = false;
   var filters = null;
   var rowsById = {};
@@ -282,17 +283,14 @@
       select.appendChild(U.el("option", { value: "", text: "нет строк бюджета — сначала создайте лимит" }));
     }
 
-    var articles = document.getElementById("dl-articles");
-    U.clear(articles);
+    if (!articleCombo) articleCombo = U.combo(document.getElementById("a-article"));
     var seen = {};
     card.budgets.forEach(function (b) {
       b.rows.forEach(function (row) {
-        if (row.article && !seen[row.article]) {
-          seen[row.article] = true;
-          articles.appendChild(U.el("option", { value: row.article }));
-        }
+        if (row.article) seen[row.article] = true;
       });
     });
+    articleCombo.setOptions(Object.keys(seen));
   }
 
   function syncForm() {

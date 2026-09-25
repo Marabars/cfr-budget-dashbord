@@ -99,17 +99,27 @@ def out_of_budget(year: int | None = None, u: auth.User = Depends(user)) -> list
 
 
 @router.get("/audit")
-def audit(limit: int = 100) -> list[dict]:
+def audit(limit: int = 100, u: auth.User = Depends(user)) -> list[dict]:
+    if not u.is_fin:
+        raise HTTPException(403, "Журнал изменений ведёт финансовый отдел")
     return repo.list_audit(limit)
 
 
 @router.get("/imports")
-def imports(limit: int = 50) -> list[dict]:
+def imports(limit: int = 50, u: auth.User = Depends(user)) -> list[dict]:
+    if not u.is_fin:
+        raise HTTPException(403, "История загрузок доступна финансовому отделу")
     return repo.list_imports(limit)
 
 
 @router.get("/rows/{row_id}/limit")
-def row_limit(row_id: int, amount: float = 0) -> dict:
+def row_limit(row_id: int, amount: float = 0, u: auth.User = Depends(user)) -> dict:
+    row = db.query_one(
+        "SELECT b.cfo_id FROM budget_row r JOIN budget b ON b.id = r.budget_id WHERE r.id = ?",
+        (row_id,),
+    )
+    if row and not u.can_edit_cfo(int(row["cfo_id"])):
+        raise HTTPException(403, "Нет доступа к этому ЦФО")
     result = service.limit_check(row_id, amount)
     if not result.get("ok"):
         raise HTTPException(404, result.get("error", "Строка не найдена"))

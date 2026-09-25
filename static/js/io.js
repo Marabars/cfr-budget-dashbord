@@ -167,7 +167,7 @@
       return;
     }
     var titles = { operplan: "Оперплан ЦФО", plan: "План дирекции", fact: "Факт",
-      cfo_budgets: "Бюджеты ЦФО (Оперплан)" };
+      cfo_budgets: "Бюджеты ЦФО (вкладка «Бюджет»)" };
     items.forEach(function (item) {
       body.appendChild(U.el("tr", {}, [
         U.td(item.uploaded_at),

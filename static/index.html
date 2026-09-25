@@ -34,7 +34,7 @@
     <button class="tab" role="tab" data-p="dash" aria-selected="true">Дашборд</button>
     <button class="tab" role="tab" data-p="sum" aria-selected="false">Сводка</button>
     <button class="tab" role="tab" data-p="cfo" aria-selected="false">Карточка ЦФО</button>
-    <button class="tab" role="tab" data-p="op" aria-selected="false">Оперплан</button>
+    <button class="tab" role="tab" data-p="op" aria-selected="false">Бюджет</button>
     <button class="tab" role="tab" data-p="claims" aria-selected="false">Заявки</button>
     <button class="tab" role="tab" data-p="match" aria-selected="false">Сопоставление</button>
     <button class="tab" role="tab" data-p="heat" aria-selected="false">Тепловая карта</button>
@@ -164,8 +164,7 @@
         <div class="form-grid">
           <div><label class="f">Бюджет</label><select class="f-in" id="a-budget"></select></div>
           <div><label class="f">Статья оборотов</label>
-            <input class="f-in" id="a-article" list="dl-articles" placeholder="4420_Расходы на приобретение ПО">
-            <datalist id="dl-articles"></datalist></div>
+            <input class="f-in" id="a-article" placeholder="4420_Расходы на приобретение ПО"></div>
           <div><label class="f">Контрагент</label><input class="f-in" id="a-cp" placeholder="Исполнитель не определён"></div>
           <div><label class="f">Договор</label><input class="f-in" id="a-contract" placeholder="Без договора"></div>
           <div><label class="f">Детализация</label><input class="f-in" id="a-detail" placeholder="на что расход"></div>
@@ -203,7 +202,7 @@
 <section class="panel" id="p-op">
   <div class="card">
     <header>
-      <h2>Оперплан</h2>
+      <h2>Бюджет</h2>
       <span class="sub" id="op-sub"></span>
       <div class="top-spacer"></div>
       <div class="ctl"><span>Год</span><select id="op-year" class="f-in" style="min-width:96px"></select></div>
@@ -254,15 +253,14 @@
     <div class="card-body">
       <div class="form-grid">
         <div><label class="f">ЦФО</label><select class="f-in" id="op-a-cfo"></select></div>
-        <div><label class="f">Бюджет</label>
-          <input class="f-in" id="op-a-budget" list="dl-op-budget"><datalist id="dl-op-budget"></datalist></div>
+        <div id="op-a-budget-wrap"><label class="f">Бюджет</label>
+          <input class="f-in" id="op-a-budget"></div>
         <div><label class="f">Статья оборотов</label>
-          <input class="f-in" id="op-a-article" list="dl-op-article" placeholder="начните вводить или выберите">
-          <datalist id="dl-op-article"></datalist></div>
+          <input class="f-in" id="op-a-article" placeholder="начните вводить или выберите"></div>
         <div><label class="f">Контрагент</label>
-          <input class="f-in" id="op-a-cp" list="dl-op-cp"><datalist id="dl-op-cp"></datalist></div>
+          <input class="f-in" id="op-a-cp"></div>
         <div><label class="f">Договор</label>
-          <input class="f-in" id="op-a-contract" list="dl-op-contract"><datalist id="dl-op-contract"></datalist></div>
+          <input class="f-in" id="op-a-contract"></div>
         <div><label class="f">Детализация</label><input class="f-in" id="op-a-detail" placeholder="на что расход"></div>
         <div><label class="f">Сумма за год, ₽ (с НДС)</label><input class="f-in" id="op-a-sum" placeholder="1 200 000"></div>
         <div><label class="f">Распределение по месяцам</label>
@@ -435,7 +433,7 @@
           <button class="chip" aria-pressed="true" data-k="plan">План (файл дирекции)</button>
           <button class="chip" aria-pressed="false" data-k="fact">Факт (выгрузка 1С)</button>
           <button class="chip" aria-pressed="false" data-k="operplan">Оперплан ЦФО</button>
-          <button class="chip" aria-pressed="false" data-k="cfo-budgets">Бюджеты ЦФО (Оперплан)</button>
+          <button class="chip" aria-pressed="false" data-k="cfo-budgets">Бюджеты ЦФО (вкладка «Бюджет»)</button>
           <button class="chip" aria-pressed="false" data-k="cfo-articles">Справочник «ЦФО Статьи»</button>
         </div>
         <div class="form-grid">
@@ -446,7 +444,7 @@
             <input class="f-in" id="io-year" placeholder="2026"></div>
         </div>
         <div class="alert" id="io-layer-note" hidden>
-          Лист «Бюджеты ЦФО» ложится в отдельный слой планирования вкладки «Оперплан».
+          Лист «Бюджеты ЦФО» ложится в отдельный слой планирования вкладки «Бюджет».
           Дашборд, сводка, карточка ЦФО и привязанный факт из 1С не затрагиваются.
           Повторная загрузка за тот же год заменяет прежние строки этого слоя.
         </div>

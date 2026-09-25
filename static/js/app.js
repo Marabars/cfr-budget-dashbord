@@ -2,16 +2,54 @@
 (function () {
   "use strict";
 
-  var state = { cfg: null, cfoList: [], rowsByCfo: {}, currentCfo: null };
+  var state = { cfg: null, cfoList: [], rowsByCfo: {}, currentCfo: null, me: null };
 
-  function selectTab(name) {
-    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {
+  /* Руководителю ЦФО доступны только эти вкладки; остальное ведёт финотдел. */
+  var CFO_TABS = ["op", "cfo"];
+
+  function tabNodes() {
+    return Array.prototype.slice.call(document.querySelectorAll(".tab"));
+  }
+
+  function showTab(name) {
+    tabNodes().forEach(function (tab) {
       tab.setAttribute("aria-selected", tab.getAttribute("data-p") === name ? "true" : "false");
     });
     Array.prototype.forEach.call(document.querySelectorAll(".panel"), function (panel) {
       panel.classList.toggle("on", panel.id === "p-" + name);
     });
     window.scrollTo(0, 0);
+  }
+
+  function activeTab() {
+    var tab = document.querySelector('.tab[aria-selected="true"]');
+    return tab ? tab.getAttribute("data-p") : "";
+  }
+
+  /* Справочник и бюджет грузим по открытию вкладки, а не при каждой перерисовке. */
+  function loadTabData(name) {
+    if (name === "reg") Registry.load();
+    if (name === "op") Operplan.load();
+  }
+
+  function selectTab(name) {
+    showTab(name);
+    loadTabData(name);
+  }
+
+  /* Вкладки под роль: скрываем лишние и уводим с закрытой вкладки. */
+  function applyRole(me) {
+    state.me = me;
+    var open = null;
+    tabNodes().forEach(function (tab) {
+      var name = tab.getAttribute("data-p");
+      var allowed = me.is_fin || CFO_TABS.indexOf(name) >= 0;
+      tab.hidden = !allowed;
+      if (allowed && !open) open = name;
+      if (allowed && tab.getAttribute("aria-selected") === "true") open = name;
+    });
+    var active = document.querySelector('.tab[aria-selected="true"]');
+    if (!active || active.hidden) showTab(open || "op");   // данные догрузит reload
   }
 
   function fillHeader(cfg) {
@@ -51,46 +89,59 @@
     }).catch(function () { return []; });
   }
 
-  function reload() {
-    return API.settings().then(function (cfg) {
-      state.cfg = cfg;
-      fillHeader(cfg);
-      return Promise.all([
-        API.dashboard(), API.cfoList(), API.heatmap(), API.claims(),
-        API.outOfBudget(), API.audit(), API.imports(),
-        API.me().then(function (me) {
-          return me.is_fin ? API.unmatched().catch(function () { return []; }) : [];
-        })
-      ]);
-    }).then(function (results) {
-      var dash = results[0];
-      state.cfoList = results[1];
-
-      Dash.render(dash);
-      Sum.render(dash);
+  /* Финотделу нужны все сводные данные, руководителю — только его ЦФО:
+     лишние запросы не шлём, часть из них ему и так закрыта на сервере. */
+  function loadForFin() {
+    return Promise.all([
+      API.dashboard(), API.cfoList(), API.heatmap(), API.claims(),
+      API.outOfBudget(), API.audit(), API.imports(),
+      API.unmatched().catch(function () { return []; })
+    ]).then(function (results) {
+      Dash.render(results[0]);
+      Sum.render(results[0]);
       Heat.render(results[2]);
       Claims.renderList(results[3]);
       Sum.renderOutOfBudget(results[4]);
       Adjust.renderLog(results[5]);
       IO.renderImports(results[6]);
       Matching.render(results[7]);
+      return results[1];
+    });
+  }
 
-      Operplan.setCfoList(state.cfoList);
-      U.fillSelect(document.getElementById("cfo-pick"), state.cfoList, "id", "name",
-        state.currentCfo || (state.cfoList[0] && state.cfoList[0].id));
-      U.fillSelect(document.getElementById("c-cfo"), state.cfoList, "id", "name");
-      U.fillSelect(document.getElementById("j-cfo"), state.cfoList, "id", "name");
-      fillRoles();
+  function fillCfoPickers(cfoList) {
+    state.cfoList = cfoList;
+    Operplan.setCfoList(cfoList);
+    U.fillSelect(document.getElementById("cfo-pick"), cfoList, "id", "name",
+      state.currentCfo || (cfoList[0] && cfoList[0].id));
+    U.fillSelect(document.getElementById("c-cfo"), cfoList, "id", "name");
+    U.fillSelect(document.getElementById("j-cfo"), cfoList, "id", "name");
+    fillRoles();
 
-      var pick = document.getElementById("cfo-pick");
-      if (pick.value) {
-        state.currentCfo = Number(pick.value);
-        CfoCard.load(state.currentCfo);
-        loadRowsFor(state.currentCfo);
-      }
-      if (!state.cfoList.length) {
-        U.toast("Данных пока нет: загрузите бюджеты на вкладке «Импорт / экспорт».");
-      }
+    var pick = document.getElementById("cfo-pick");
+    if (pick.value) {
+      state.currentCfo = Number(pick.value);
+      CfoCard.load(state.currentCfo);
+      loadRowsFor(state.currentCfo);
+    }
+    if (!cfoList.length) {
+      U.toast(state.me && !state.me.is_fin
+        ? "К вашей учётной записи не привязано ни одного ЦФО — обратитесь в финансовый отдел."
+        : "Данных пока нет: загрузите бюджеты на вкладке «Импорт / экспорт».");
+    }
+  }
+
+  function reload() {
+    return API.me().then(function (me) {
+      applyRole(me);
+      return API.settings().then(function (cfg) {
+        state.cfg = cfg;
+        fillHeader(cfg);
+        return me.is_fin ? loadForFin() : API.cfoList();
+      });
+    }).then(function (cfoList) {
+      fillCfoPickers(cfoList);
+      loadTabData(activeTab());
     }).catch(function (e) {
       U.toast("Не удалось загрузить данные: " + e.message, "error");
     });
@@ -117,12 +168,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {
-      tab.onclick = function () {
-        var name = tab.getAttribute("data-p");
-        selectTab(name);
-        if (name === "reg") Registry.load();      // справочник грузим по открытию
-        if (name === "op") Operplan.load();       // оперплан — тоже по открытию
-      };
+      tab.onclick = function () { selectTab(tab.getAttribute("data-p")); };
     });
     var refresh = document.getElementById("reg-refresh");
     if (refresh) refresh.onclick = function () { Registry.load(); };

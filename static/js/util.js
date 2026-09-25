@@ -219,6 +219,79 @@
     };
   }
 
+  /* Выпадающий список к текстовому полю.
+
+     Нативный <datalist> браузер сам сужает по уже введённому тексту, поэтому
+     полный перечень значений появлялся только после очистки поля. Здесь список
+     открывается целиком по клику на поле или на стрелку, а набор текста сужает
+     его — и при этом остаётся возможность ввести значение, которого в списке нет. */
+  function combo(input, onPick) {
+    var options = [];
+    var list = el("div", { class: "flist" });
+    var pop = el("div", { class: "fpop combo-pop", hidden: "hidden" }, [list]);
+    var caret = el("button", { class: "combo-caret", type: "button", text: "▾",
+      title: "Показать все значения" });
+    var wrap = el("div", { class: "combo" });
+
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    wrap.appendChild(caret);
+    wrap.appendChild(pop);
+
+    function draw(query) {
+      var needle = (query || "").toLowerCase();
+      clear(list);
+      var shown = 0;
+      options.forEach(function (value) {
+        if (needle && value.toLowerCase().indexOf(needle) < 0) return;
+        if (shown >= 300) return;                 // длинные списки режем, поиск сузит
+        shown++;
+        list.appendChild(el("div", { class: "fopt copt", text: value,
+          on: { mousedown: function (event) {
+            event.preventDefault();               // не теряем фокус до записи значения
+            input.value = value;
+            pop.hidden = true;
+            if (onPick) onPick(value);
+          } } }));
+      });
+      if (!options.length) {
+        list.appendChild(el("div", { class: "dim fempty", text: "список пуст" }));
+      } else if (!shown) {
+        list.appendChild(el("div", { class: "dim fempty",
+          text: "ничего не найдено — значение можно ввести своё" }));
+      } else if (options.length > shown) {
+        list.appendChild(el("div", { class: "dim fempty",
+          text: "показано " + shown + " из " + options.length + " — уточните поиск" }));
+      }
+    }
+
+    function open(query) {
+      closeAllFilters();
+      pop.hidden = false;
+      draw(query);
+    }
+
+    caret.onclick = function (event) {
+      event.stopPropagation();
+      if (pop.hidden) { open(""); input.focus(); } else { pop.hidden = true; }
+    };
+    input.onfocus = function () { open(""); };            // по клику — весь список
+    input.oninput = function () { open(input.value); };   // набор текста сужает
+    wrap.onclick = function (event) { event.stopPropagation(); };
+
+    return {
+      setOptions: function (values) {
+        options = (values || []).slice().sort(function (a, b) {
+          return String(a).localeCompare(String(b), "ru");
+        });
+        if (!pop.hidden) draw(input.value);
+      },
+      value: function () { return input.value; },
+      set: function (value) { input.value = value == null ? "" : value; },
+      close: function () { pop.hidden = true; }
+    };
+  }
+
   function closeAllFilters() {
     Array.prototype.forEach.call(document.querySelectorAll(".fpop"), function (pop) {
       pop.hidden = true;
@@ -246,6 +319,6 @@
     el: el, fmt: fmt, fmtShort: fmtShort, parseSum: parseSum,
     td: td, tdn: tdn, th: th, badge: badge, meter: meter, battery: battery,
     kpi: kpi, empty: empty, clear: clear, chips: chips, fillSelect: fillSelect, toast: toast,
-    multiFilter: multiFilter
+    multiFilter: multiFilter, combo: combo
   };
 })();
