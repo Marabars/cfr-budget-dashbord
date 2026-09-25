@@ -425,6 +425,23 @@ def test_общий_список_собирает_все_цфо(client, loaded):
     assert "Астра ООО" in refs["all"]["counterparties"]
 
 
+def test_руководителю_справочник_отдаёт_только_его_цфо(client, loaded):
+    """«Показать все» — привилегия финотдела: чужие контрагенты не уезжают на клиент."""
+    it_id = repo.ensure_cfo(IT)
+    hr_id = repo.ensure_cfo(HR)
+    refs = client.get("/api/operplan/references?year=2026",
+                      headers={"X-User": f"cfo:{it_id}"}).json()
+
+    assert set(refs["by_cfo"]) == {str(it_id)}
+    assert str(hr_id) not in refs["by_cfo"]
+    assert "4411_Оборудование" in refs["all"]["articles"]      ***REMOVED*** своё
+    assert "4109_Обучение" not in refs["all"]["articles"]      ***REMOVED*** чужое
+    assert "Астра ООО" in refs["all"]["counterparties"]
+
+    у_финотдела = client.get("/api/operplan/references?year=2026").json()
+    assert "4109_Обучение" in у_финотдела["all"]["articles"]
+
+
 ***REMOVED*** ---------- импорт через API ----------
 
 def test_импорт_листа_через_api(client):

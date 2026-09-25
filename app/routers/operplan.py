@@ -31,8 +31,8 @@ def missing(year: int | None = None, u: auth.User = Depends(user)) -> dict:
 
 
 @router.get("/references")
-def references(year: int | None = None) -> dict:
-    return operplan.references(year)
+def references(year: int | None = None, u: auth.User = Depends(user)) -> dict:
+    return operplan.references(year, u.visible_cfo_ids())
 
 
 @router.post("/lock")

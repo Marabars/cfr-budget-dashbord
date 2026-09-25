@@ -500,6 +500,12 @@
       state.data = data;
       state.year = data.year;
       U.fillSelect(document.getElementById("op-year"), data.years, null, null, data.year);
+      /* «Показать все» — привилегия финотдела: руководителю сервер и не отдаёт
+         чужие статьи с контрагентами, так что галочка ему только мешала бы. */
+      var all = document.getElementById("op-a-all");
+      all.parentNode.hidden = !data.is_fin;
+      if (!data.is_fin) all.checked = false;
+
       document.getElementById("op-sub").textContent =
         "план " + data.plan_year_no + " года, база — " + data.base_year_no;
       document.getElementById("op-copy-title").textContent =

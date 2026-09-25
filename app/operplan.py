@@ -366,27 +366,38 @@ def copy_year(author: str, from_year: int | None = None, to_year: int | None = N
 
 ***REMOVED*** ---------- справочники для форм ----------
 
-def references(year: int | None = None) -> dict:
+def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dict:
     """Статьи, контрагенты и договоры для выпадающих списков.
 
-    Для каждого ЦФО отдаём свой набор, плюс общий список по всем дирекциям —
-    его показывает галочка «показать все». Договоры сгруппированы по контрагенту,
-    чтобы список сужался после его выбора.
+    Для каждого ЦФО отдаём свой набор, плюс общий список — его показывает галочка
+    «показать все». Договоры сгруппированы по контрагенту, чтобы список сужался
+    после его выбора.
+
+    `cfo_ids` ограничивает выдачу: руководителю не уезжают контрагенты и договоры
+    чужих дирекций, поэтому и «показать все» у него не шире собственного ЦФО.
+    `None` — без ограничения, то есть финотдел.
     """
     year = int(year or plan_year())
+    allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
     by_cfo: dict[int, dict[str, Any]] = {}
 
-    def bucket(cfo_id: int) -> dict:
+    def bucket(cfo_id: int) -> dict | None:
+        if allowed is not None and int(cfo_id) not in allowed:
+            return None
         return by_cfo.setdefault(int(cfo_id), {
             "articles": set(), "counterparties": set(), "contracts": {}
         })
 
     for ref in repo.list_article_refs():
-        bucket(ref["cfo_id"])["articles"].add(ref["article"])
+        own = bucket(ref["cfo_id"])
+        if own is not None:
+            own["articles"].add(ref["article"])
 
     for source_year in {year, base_year()}:
         for row in repo.used_values(source_year, layer=LAYER):
             b = bucket(row["cfo_id"])
+            if b is None:
+                continue
             if row["article"]:
                 b["articles"].add(row["article"])
             if row["counterparty"]:
