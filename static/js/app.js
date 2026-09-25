@@ -40,19 +40,25 @@
   /* Вкладки под роль: скрываем лишние и уводим с закрытой вкладки. */
   function applyRole(me) {
     state.me = me;
-    var open = null;
+    var keep = null;
     tabNodes().forEach(function (tab) {
       var name = tab.getAttribute("data-p");
       var allowed = me.is_fin || CFO_TABS.indexOf(name) >= 0;
       tab.hidden = !allowed;
-      if (allowed && !open) open = name;
-      if (allowed && tab.getAttribute("aria-selected") === "true") open = name;
+      if (allowed && tab.getAttribute("aria-selected") === "true") keep = name;
     });
-    var active = document.querySelector('.tab[aria-selected="true"]');
-    if (!active || active.hidden) showTab(open || "op");   // данные догрузит reload
+    // с закрытой вкладки уводим на «Бюджет» — она главная и для руководителя, и после входа
+    if (!keep) showTab("op");                              // данные догрузит reload
   }
 
   function fillHeader(cfg) {
+    /* Период задаёт финотдел. Руководителю оставляем его видимым — он объясняет
+       цифры на карточке ЦФО, — но неактивным: иначе клик упирался бы в 403. */
+    var canEdit = !state.me || state.me.is_fin;
+    ["year", "closed", "asof"].forEach(function (id) {
+      document.getElementById(id).disabled = !canEdit;
+    });
+
     var years = [];
     for (var y = cfg.year - 2; y <= cfg.year + 1; y++) years.push(y);
     U.fillSelect(document.getElementById("year"), years, null, null, cfg.year);

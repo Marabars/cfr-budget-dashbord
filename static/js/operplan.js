@@ -586,6 +586,9 @@
         document.getElementById("op-add-form").hidden = true;
       };
       document.getElementById("op-a-cfo").onchange = syncAddLists;
+      // oninput у поля занят выпадающим списком, поэтому вешаем вторым слушателем:
+      // набранный вручную контрагент тоже должен сузить список договоров
+      document.getElementById("op-a-cp").addEventListener("input", syncAddLists);
       document.getElementById("op-a-all").onchange = syncAddLists;
       document.getElementById("op-a-spread").onchange = function () {
         document.getElementById("op-a-month-wrap").hidden = this.value !== "one";

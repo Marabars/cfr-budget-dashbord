@@ -227,6 +227,7 @@
      его — и при этом остаётся возможность ввести значение, которого в списке нет. */
   function combo(input, onPick) {
     var options = [];
+    var shownQuery = "";          // чем сужен открытый список
     var list = el("div", { class: "flist" });
     var pop = el("div", { class: "fpop combo-pop", hidden: "hidden" }, [list]);
     var caret = el("button", { class: "combo-caret", type: "button", text: "▾",
@@ -267,6 +268,8 @@
 
     function open(query) {
       closeAllFilters();
+      query = query || "";
+      shownQuery = query;
       pop.hidden = false;
       draw(query);
     }
@@ -275,7 +278,10 @@
       event.stopPropagation();
       if (pop.hidden) { open(""); input.focus(); } else { pop.hidden = true; }
     };
-    input.onfocus = function () { open(""); };            // по клику — весь список
+    /* Открываем и по focus, и по click: после выбора значения поле остаётся
+       сфокусированным, и одного focus на повторный клик уже не приходит. */
+    input.onfocus = function () { open(""); };
+    input.onclick = function () { if (pop.hidden) open(""); };
     input.oninput = function () { open(input.value); };   // набор текста сужает
     wrap.onclick = function (event) { event.stopPropagation(); };
 
@@ -284,7 +290,7 @@
         options = (values || []).slice().sort(function (a, b) {
           return String(a).localeCompare(String(b), "ru");
         });
-        if (!pop.hidden) draw(input.value);
+        if (!pop.hidden) draw(shownQuery);
       },
       value: function () { return input.value; },
       set: function (value) { input.value = value == null ? "" : value; },
