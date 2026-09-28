@@ -12,6 +12,7 @@
     collapsed: {},       // budget_id -> свёрнут ли блок
     sections: {},        // год -> ответ /api/operplan по этому году
     yearOpen: {},        // год -> развёрнут ли раздел года в таблице
+    missingOpen: false,  // блок замечаний свёрнут, пока его не раскроют
     filters: null,
     combos: null,       // выпадающие списки формы новой строки
     year: null           // год в фокусе: к нему привязаны замок, справочники и форма строки
@@ -137,6 +138,22 @@
       k.fact_loaded ? k.base_pct : null,
       k.fact_loaded ? "освоено от бюджета " + k.base_year
         : "факт за " + k.base_year + " год ещё не загружен"));
+    renderSummary(k);
+  }
+
+  /* Резюме: одной строкой то же, что на плитках, — чтобы не считать в уме. */
+  function renderSummary(k) {
+    var parts = [
+      "план " + k.plan_year + ": " + U.fmt(k.plan_total) + " ₽ по " + k.plan_rows + " строкам",
+      "база " + k.base_year + ": " + U.fmt(k.base_total) + " ₽ по " + k.base_rows + " строкам",
+      k.fact_loaded
+        ? "факт " + k.base_year + ": " + U.fmt(k.base_fact) + " ₽"
+        : "факт " + k.base_year + " не загружен"
+    ];
+    if (state.missing && state.missing.count) {
+      parts.push("замечаний: " + state.missing.count);
+    }
+    document.getElementById("op-sub").textContent = parts.join(" · ");
   }
 
   /* ---------- какой год перед пользователем ---------- */
@@ -339,9 +356,18 @@
           : "Все годы свёрнуты — раскройте нужный строкой года выше."));
     }
 
-    document.getElementById("op-count").textContent =
-      ctx.rows.length + " из " + ctx.total + " строк · " +
-      U.fmt(ctx.rows.reduce(function (a, r) { return a + r.plan_year; }, 0)) + " ₽";
+    /* Счётчик тоже по годам: общая сумма плана и базы вместе смысла не имеет. */
+    document.getElementById("op-count").textContent = ctx.years.length
+      ? ctx.years.map(function (year) {
+          var sec = state.sections[year];
+          var rows = ctx.rows.filter(function (r) { return state.rowYear[r.id] === year; });
+          var sum = rows.reduce(function (a, r) { return a + r.plan_year; }, 0);
+          return year + ": " + (rows.length === sec.totals.rows_count
+            ? rows.length + " строк"
+            : rows.length + " из " + sec.totals.rows_count + " строк") +
+            " · " + U.fmt(sum) + " ₽";
+        }).join("   ·   ")
+      : "все годы свёрнуты";
     document.querySelector("***REMOVED***t-op").classList.toggle("editing", state.editing);
     refreshFilterOptions();
   }
@@ -460,7 +486,9 @@
       ? data.count + " строк на " + U.fmt(data.total) + " ₽ были в " + data.base_year +
         " году и не попали в план " + data.plan_year
       : "все расходы " + data.base_year + " года учтены в плане " + data.plan_year;
-    document.getElementById("op-add-all").hidden = !data.count || !state.data.can_edit;
+    document.getElementById("op-add-all").hidden =
+      !data.count || !sectionEditable(state.data) || !state.missingOpen;
+    if (state.data && state.data.kpi) renderSummary(state.data.kpi);
 
     if (!data.count) {
       body.appendChild(U.empty(7, "Ничего не потеряно."));
@@ -703,8 +731,6 @@
       all.parentNode.hidden = !data.is_fin;
       if (!data.is_fin) all.checked = false;
 
-      document.getElementById("op-sub").textContent =
-        "план " + data.plan_year_no + " года, база — " + data.base_year_no;
       document.getElementById("op-copy-title").textContent =
         "Повторить бюджет " + data.base_year_no + " года в плане " + data.plan_year_no;
       U.fillSelect(document.getElementById("op-a-cfo"),
@@ -797,7 +823,22 @@
       document.getElementById("op-a-spread").onchange = function () {
         document.getElementById("op-a-month-wrap").hidden = this.value !== "one";
       };
-      document.getElementById("op-add-all").onclick = addAllMissing;
+      document.getElementById("op-add-all").onclick = function (event) {
+        event.stopPropagation();          // кнопка внутри кликабельного заголовка
+        addAllMissing();
+      };
+      /* Замечания свёрнуты: это справка «что потеряли», а не ежедневная работа. */
+      document.getElementById("op-missing-head").onclick = function () {
+        state.missingOpen = !state.missingOpen;
+        document.getElementById("op-missing-body").hidden = !state.missingOpen;
+        document.getElementById("op-missing-caret").textContent = state.missingOpen ? "▾" : "▸";
+        if (state.missing) renderMissing();
+      };
+      document.getElementById("op-info").onclick = function () {
+        var panel = document.getElementById("op-info-panel");
+        panel.hidden = !panel.hidden;
+        this.classList.toggle("primary", !panel.hidden);
+      };
       document.getElementById("op-reset").onclick = function () {
         Object.keys(state.filters).forEach(function (key) { state.filters[key].clear(); });
         render();

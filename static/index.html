@@ -204,14 +204,32 @@
     <header>
       <h2>Бюджет</h2>
       <span class="year-tag" id="op-year-tag-top"></span>
-      <span class="sub" id="op-sub"></span>
+      <button class="btn sm" id="op-info" title="Как устроена вкладка">ℹ Инфо</button>
       <div class="top-spacer"></div>
       <button class="btn sm" id="op-export">⭳ Выгрузить в Excel</button>
       <button class="btn sm" id="op-import">⭱ Загрузить из Excel</button>
       <button class="btn sm" id="op-lock"></button>
     </header>
     <div class="card-body">
-      <div class="kpis" id="op-kpis" style="border:1px solid var(--border);border-radius:6px;overflow:hidden"></div>
+      <div class="alert" id="op-info-panel" hidden>
+        <div style="flex:1">
+          <b>Два года в одной таблице.</b> Сверху год, который планируете, — он развёрнут
+          и подкрашен оранжевым. Под ним прошлый год серым: это база для сравнения,
+          разворачивается кликом по строке года. Складывать годы не нужно, у каждого
+          своя строка <b>ИТОГО</b>.<br>
+          <b>Правка</b> включена сразу: кликните ячейку и введите значение. Финотдел может
+          закрыть её кнопкой с перечёркнутым карандашом — тогда план доступен только
+          для просмотра.<br>
+          <b>Внесение расходов</b> — одна панель: поля новой строки и два переноса
+          прошлого года. Повтор бюджета берёт прошлогодние планы, повтор факта — то,
+          что реально потрачено; факт бывает точнее плана.<br>
+          <b>Excel</b> — выгрузка и загрузка одного и того же листа «Бюджеты ЦФО»:
+          файл можно поправить в Excel и вернуть обратно. Тот же файл принимается
+          как факт года.<br>
+          <b>Замечания</b> внизу — расходы прошлого года, которых нет в плане.
+          Блок свёрнут, раскрывается кликом по заголовку.
+        </div>
+      </div>
       <div class="alert" id="op-locked-note" hidden>
         Внесение изменений в план заблокировано — таблица доступна только для просмотра.
       </div>
@@ -221,6 +239,8 @@
         <b>Esc</b> — отменить. Красный крестик в колонке <b>№</b> удаляет строку.
         Колонка <b>ИТОГО</b> считается как сумма двенадцати месяцев и не редактируется напрямую.
       </div>
+      <div class="kpis" id="op-kpis" style="border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:12px"></div>
+      <div class="sub" id="op-sub" style="margin-bottom:2px"></div>
       <div class="alert" id="op-import-form" hidden>
         <div style="flex:1">
           <div style="margin-bottom:8px">
@@ -320,13 +340,14 @@
     </div>
   </div>
 
-  <div class="card">
-    <header><h2>Были в базовом году, нет в плане</h2>
+  <div class="card" id="op-missing-card">
+    <header class="pick" id="op-missing-head" title="Развернуть или свернуть замечания">
+      <h2><span class="grp-caret" id="op-missing-caret">▸</span>Замечания: были в базовом году, нет в плане</h2>
       <span class="sub" id="op-missing-sub"></span>
       <div class="top-spacer"></div>
       <button class="btn sm" id="op-add-all">Добавить все</button>
     </header>
-    <div class="card-body flush"><div class="scroll"><table id="t-op-missing">
+    <div class="card-body flush" id="op-missing-body" hidden><div class="scroll"><table id="t-op-missing">
       <thead><tr>
         <th class="wrap">ЦФО</th><th class="wrap">Статья оборотов</th><th class="wrap">Контрагент</th>
         <th class="wrap">Договор</th><th class="wrap">Детализация</th>
