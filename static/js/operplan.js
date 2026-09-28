@@ -70,11 +70,14 @@
 
   /* ---------- KPI ---------- */
 
+  /* battery === null — плитка без шкалы. st-plan красит заполненные сегменты:
+     без класса статуса они оставались цветом фона и шкала выглядела пустой. */
   function kpiTile(label, value, tone, battery, note) {
-    return U.el("div", { class: "kpi " + (tone || "") }, [
+    var cls = "kpi " + (tone || "") + (battery === null ? "" : " st-plan");
+    return U.el("div", { class: cls }, [
       U.el("div", { class: "lbl", text: label }),
       U.el("div", { class: "val hero", text: value }),
-      battery === null ? U.el("div", { class: "sub", text: note }) : U.battery(battery, 0),
+      battery === null ? U.el("div", { class: "sub", text: note }) : U.battery(battery, null),
       battery === null ? null : U.el("div", { class: "batt-note", text: note })
     ]);
   }
@@ -83,18 +86,39 @@
     var k = state.data.kpi;
     var host = document.getElementById("op-kpis");
     U.clear(host);
+    /* Шкала первой плитки — сколько плана уже набрано от прошлогоднего бюджета.
+       Она растёт по мере наполнения плана; 100% = повторили прошлый год. */
     host.appendChild(kpiTile(
       "Бюджет " + k.plan_year + " года", U.fmtShort(k.plan_total) + " ₽", "k-accent",
-      null, k.plan_rows + " строк плана"));
+      k.base_total ? k.plan_ratio : null,
+      k.base_total ? "от бюджета " + k.base_year + " года · " + k.plan_rows + " строк"
+        : k.plan_rows + " строк плана"));
     host.appendChild(kpiTile(
       "Бюджет " + k.base_year + " года", U.fmtShort(k.base_total) + " ₽", "k-warm",
-      k.base_ratio, "от бюджета " + k.plan_year + " года"));
+      null, k.base_rows + " строк базы"));
     host.appendChild(kpiTile(
       "План-факт " + k.base_year, U.fmtShort(k.base_fact) + " ₽",
       k.fact_loaded ? "k-good" : "",
       k.fact_loaded ? k.base_pct : null,
       k.fact_loaded ? "освоено от бюджета " + k.base_year
         : "факт за " + k.base_year + " год ещё не загружен"));
+  }
+
+  /* ---------- какой год перед пользователем ---------- */
+
+  /* На вкладке соседствуют план нового года и залитая база прошлого, а таблицы
+     у них одинаковые. Поэтому год подписан в заголовке, в метке и в строке ИТОГО. */
+  function renderYearMark() {
+    var isPlan = state.year === state.data.plan_year_no;
+    var text = state.year + " год · " + (isPlan ? "план" : "база");
+    ["op-year-tag", "op-year-tag-top"].forEach(function (id) {
+      var node = document.getElementById(id);
+      node.textContent = text;
+      node.classList.toggle("is-base", !isPlan);
+    });
+    var title = document.getElementById("op-rows-title");
+    title.textContent = (isPlan ? "Строки плана " : "Строки бюджета ") + state.year + " года";
+    title.parentNode.parentNode.classList.toggle("y-base", !isPlan);
   }
 
   /* ---------- шапка и итог ---------- */
@@ -122,7 +146,8 @@
     });
     var filtered = rows.length !== (state.data.totals.rows_count || 0);
     total.appendChild(U.el("td", { colspan: 5, class: "total-label",
-      text: "ИТОГО" + (filtered ? " по фильтру · " + rows.length + " строк" : " · " + rows.length + " строк") }));
+      text: "ИТОГО " + state.year + (filtered ? " по фильтру · " + rows.length + " строк"
+        : " · " + rows.length + " строк") }));
     total.appendChild(U.el("td", { class: "num total-sum", text: U.fmt(sum) }));
     months.forEach(function (value) {
       total.appendChild(U.el("td", { class: "num", text: value ? U.fmt(value) : "—" }));
@@ -190,6 +215,7 @@
   function render() {
     if (!state.data) return;
     renderKpi();
+    renderYearMark();
     renderHead();
 
     var body = document.querySelector("***REMOVED***t-op tbody");
@@ -222,6 +248,10 @@
     }
 
     renderTotal(visible);
+    /* Строка ИТОГО прилипает под шапкой. Высоту шапки меряем, а не задаём числом:
+       названия колонок переносятся в две строки и фиксированный отступ врёт. */
+    document.getElementById("t-op").style.setProperty(
+      "--op-head-h", document.getElementById("op-head").offsetHeight + "px");
     document.getElementById("op-count").textContent =
       visible.length + " из " + state.data.totals.rows_count + " строк · " +
       U.fmt(visible.reduce(function (a, r) { return a + r.plan_year; }, 0)) + " ₽";
@@ -305,7 +335,13 @@
 
     var banner = document.getElementById("op-locked-note");
     banner.hidden = !(locked && !state.data.can_edit);
-    document.getElementById("op-edit").hidden = !state.data.can_edit;
+    document.getElementById("op-edit-scope").textContent = state.data.is_fin
+      ? "Правка плана по всем ЦФО." : "Правка плана вашего ЦФО.";
+    var edit = document.getElementById("op-edit");
+    edit.hidden = !state.data.can_edit;
+    edit.title = state.data.is_fin
+      ? "Править любую строку плана: суммы по месяцам и текстовые поля"
+      : "Править строки своего ЦФО: суммы по месяцам и текстовые поля";
     document.getElementById("op-add").hidden = !state.data.can_edit;
     document.getElementById("op-copy").hidden = !state.data.can_edit;
   }
@@ -497,6 +533,14 @@
 
   function load(year) {
     return API.operplan(year).then(function (data) {
+      /* Первое открытие вкладки. План нового года обычно пуст, пока его не набрали,
+         и встречать пользователя пустой таблицей незачем — показываем базовый год,
+         в котором лежит залитый бюджет. Дальше год выбирается вручную. */
+      if (!state.opened && year == null && !data.totals.rows_count && data.kpi.base_rows) {
+        state.opened = true;
+        return load(data.base_year_no);
+      }
+      state.opened = true;
       state.data = data;
       state.year = data.year;
       U.fillSelect(document.getElementById("op-year"), data.years, null, null, data.year);

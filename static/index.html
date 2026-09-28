@@ -141,9 +141,9 @@
   <div class="card">
     <header><h2 id="cfo-block-title">Строки бюджета</h2>
       <span class="sub" id="cfo-count"></span>
-      <div class="top-spacer"></div>
       <div class="filters" id="cfo-filters"></div>
       <button class="btn sm" id="cfo-reset">Сбросить фильтры</button>
+      <div class="top-spacer"></div>
       <button class="btn sm" id="cfo-edit">✎ Редактировать</button>
     </header>
     <div class="card-body" style="padding-bottom:0">
@@ -203,6 +203,7 @@
   <div class="card">
     <header>
       <h2>Бюджет</h2>
+      <span class="year-tag" id="op-year-tag-top"></span>
       <span class="sub" id="op-sub"></span>
       <div class="top-spacer"></div>
       <div class="ctl"><span>Год</span><select id="op-year" class="f-in" style="min-width:96px"></select></div>
@@ -217,7 +218,9 @@
         Внесение изменений в план заблокировано финансовым отделом — таблица доступна только для просмотра.
       </div>
       <div class="alert" id="op-edit-note" hidden>
-        Режим правки: кликните ячейку и введите значение. <b>Enter</b> — сохранить, <b>Esc</b> — отменить.
+        <span id="op-edit-scope"></span>
+        Кликните ячейку и введите значение: <b>Enter</b> — сохранить, <b>Esc</b> — отменить.
+        Красный крестик в колонке <b>№</b> удаляет строку.
         Колонка <b>ИТОГО</b> считается как сумма двенадцати месяцев и не редактируется напрямую.
       </div>
     </div>
@@ -282,22 +285,24 @@
 
   <div class="card">
     <header>
-      <h2>Строки плана</h2>
+      <h2 id="op-rows-title">Строки плана</h2>
+      <span class="year-tag" id="op-year-tag"></span>
       <span class="sub" id="op-count"></span>
-      <div class="top-spacer"></div>
       <div class="filters" id="op-filters"></div>
       <button class="btn sm" id="op-reset">Сбросить фильтры</button>
       <button class="btn sm" id="op-collapse">Свернуть все</button>
+      <div class="top-spacer"></div>
     </header>
     <div class="card-body flush">
-      <div class="scroll"><table id="t-op">
+      <div class="scroll tall"><table id="t-op">
         <thead><tr id="op-head"></tr><tr id="op-total" class="total-row"></tr></thead>
         <tbody></tbody>
       </table></div>
       <div class="legend-inline" style="padding:10px 14px">
-        <span>Строка <b>ИТОГО</b> под шапкой считается по видимым строкам — она меняется вместе с фильтрами</span>
+        <span>Шапка и строка <b>ИТОГО</b> закреплены сверху; ИТОГО считается по видимым строкам</span>
         <span>Клик по названию ЦФО сворачивает блок</span>
         <span>Последняя колонка — та же строка в базовом году</span>
+        <span>Удалить строку: <b>✎ Редактировать</b>, затем крестик в колонке №</span>
       </div>
     </div>
   </div>

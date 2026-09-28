@@ -190,8 +190,9 @@
     Adjust.init([]);
 
     document.getElementById("theme").onclick = function () {
+      // по умолчанию атрибута нет и тема светлая, поэтому первый клик включает тёмную
       var current = document.documentElement.getAttribute("data-theme");
-      document.documentElement.setAttribute("data-theme", current === "light" ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", current === "dark" ? "light" : "dark");
     };
     document.getElementById("year").onchange = function () {
       saveSettings({ year: Number(this.value) });

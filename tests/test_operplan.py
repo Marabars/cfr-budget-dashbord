@@ -327,6 +327,32 @@ def test_удаление_строки_при_замке_закрыто_руко
                          headers={"X-User": f"cfo:{cfo_id}"}).status_code == 403
 
 
+def test_руководитель_правит_и_удаляет_свою_строку_залитого_бюджета(client, loaded):
+    """Без замка руководитель ЦФО редактирует уже залитый бюджет своего ЦФО."""
+    cfo_id = repo.ensure_cfo(HR)
+    head = {"X-User": f"cfo:{cfo_id}"}
+    rows = [r for r in repo.list_rows(2026, layer=operplan.LAYER) if r["cfo_id"] == cfo_id]
+    row_id = int(rows[0]["id"])
+
+    assert client.get("/api/operplan?year=2026", headers=head).json()["can_edit"] is True
+
+    patched = client.patch(f"/api/rows/{row_id}", json={"counterparty": "Свой контрагент"},
+                           headers=head)
+    assert patched.status_code == 200
+    assert patched.json()["row"]["counterparty"] == "Свой контрагент"
+
+    assert client.delete(f"/api/rows/{row_id}", headers=head).status_code == 200
+    assert repo.get_row(row_id) is None
+
+
+def test_kpi_показывает_насколько_набран_план_от_базы(client, loaded):
+    """Шкала первой плитки растёт по мере наполнения плана и не делится на ноль."""
+    assert client.get("/api/operplan").json()["kpi"]["plan_ratio"] == 0.0
+    operplan.copy_year("Тест", 2026, 2027, index_pct=25)
+    assert client.get("/api/operplan").json()["kpi"]["plan_ratio"] == pytest.approx(1.25,
+                                                                                    rel=1e-6)
+
+
 def test_руководитель_не_правит_чужое_цфо(client, loaded):
     hr_id = repo.ensure_cfo(HR)
     it_row = int(next(r for r in repo.list_rows(2026, layer=operplan.LAYER)

@@ -74,10 +74,14 @@
     for (var i = 0; i < 10; i++) {
       body.appendChild(el("div", { class: "batt-seg" + (pct * 100 >= (i + 1) * 10 - 5 ? " on" : "") }));
     }
-    var mark = el("div", { class: "batt-pace" });
-    mark.style.left = "calc(" + (pace * 100) + "% - 1px)";
-    mark.title = "Ожидаемый темп освоения: " + (pace * 100).toFixed(0) + "%";
-    body.appendChild(mark);
+    // метка ожидаемого темпа есть только там, где темп имеет смысл (дашборд);
+    // на вкладке «Бюджет» передаётся null, иначе у левого края висит лишняя чёрточка
+    if (pace != null) {
+      var mark = el("div", { class: "batt-pace" });
+      mark.style.left = "calc(" + (pace * 100) + "% - 1px)";
+      mark.title = "Ожидаемый темп освоения: " + (pace * 100).toFixed(0) + "%";
+      body.appendChild(mark);
+    }
     return el("div", { class: "batt" }, [
       el("div", { class: "batt-shell" }, [body, el("div", { class: "batt-cap" })]),
       el("span", { class: "batt-pct", text: Math.round(pct * 100) + "%" })

@@ -163,6 +163,9 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
         "base_total": base_total,
         ***REMOVED*** доля прошлогоднего бюджета от нового: 100% = план не изменился
         "base_ratio": (base_total / plan_total) if plan_total else 0.0,
+        ***REMOVED*** набранный план в долях прошлогоднего бюджета: растёт по мере наполнения,
+        ***REMOVED*** 100% = план повторил прошлый год, больше 100% = бюджет вырос
+        "plan_ratio": (plan_total / base_total) if base_total else 0.0,
         "base_fact": base_fact,
         "base_pct": (base_fact / base_total) if base_total else 0.0,
         "fact_loaded": base_fact > 0,
