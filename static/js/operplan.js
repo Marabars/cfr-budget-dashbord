@@ -9,9 +9,11 @@
     rows: {},            // id -> строка (для правки и пересчёта)
     editing: false,
     collapsed: {},       // budget_id -> свёрнут ли блок
+    sections: {},        // год -> ответ /api/operplan по этому году
+    yearOpen: {},        // год -> развёрнут ли раздел года в таблице
     filters: null,
     combos: null,       // выпадающие списки формы новой строки
-    year: null
+    year: null           // год в фокусе: к нему привязаны замок, справочники и форма строки
   };
 
   var FIELDS = [
@@ -49,13 +51,45 @@
     });
   }
 
+  /* Значения для фильтров собираем по всем загруженным годам, а не только
+     по году в фокусе: иначе, развернув базовый год, пользователь не нашёл бы
+     в списке его ЦФО и статьи. */
   function allRows() {
-    if (!state.data) return [];
-    return state.data.blocks.reduce(function (acc, block) {
-      return acc.concat(block.rows.map(function (row) {
-        return Object.assign({ cfo_name: block.cfo_name }, row);
-      }));
-    }, []);
+    var out = [];
+    Object.keys(state.sections).forEach(function (year) {
+      state.sections[year].blocks.forEach(function (block) {
+        block.rows.forEach(function (row) {
+          out.push(Object.assign({ cfo_name: block.cfo_name }, row));
+        });
+      });
+    });
+    return out;
+  }
+
+  /* Порядок разделов: год в фокусе первым, остальные ниже по убыванию. */
+  function orderedYears() {
+    var years = (state.data && state.data.years) ? state.data.years.slice() : [];
+    if (years.indexOf(state.year) < 0) years.push(state.year);
+    years.sort(function (a, b) { return b - a; });
+    return [state.year].concat(years.filter(function (y) { return y !== state.year; }));
+  }
+
+  /* Что видно сейчас: строки развёрнутых лет после фильтров и сколько их всего.
+     Свёрнутый блок ЦФО в счёт входит — свёрнутый год нет. */
+  function visibleContext() {
+    var rows = [], years = [], total = 0;
+    orderedYears().forEach(function (year) {
+      var sec = state.sections[year];
+      if (!sec || !state.yearOpen[year]) return;
+      years.push(year);
+      total += sec.totals.rows_count;
+      sec.blocks.forEach(function (block) {
+        block.rows.forEach(function (row) {
+          if (passes(row, block.cfo_name)) rows.push(row);
+        });
+      });
+    });
+    return { rows: rows, years: years, total: total };
   }
 
   function passes(row, cfoName) {
@@ -117,8 +151,39 @@
       node.classList.toggle("is-base", !isPlan);
     });
     var title = document.getElementById("op-rows-title");
-    title.textContent = (isPlan ? "Строки плана " : "Строки бюджета ") + state.year + " года";
+    title.textContent = "Строки бюджета";
     title.parentNode.parentNode.classList.toggle("y-base", !isPlan);
+  }
+
+  /* Переключатель лет. Клик по другому году переносит в него фокус (замок,
+     справочники, форма новой строки), повторный клик по текущему — сворачивает
+     и разворачивает его раздел. */
+  function renderYearSwitch() {
+    var host = document.getElementById("op-year-switch");
+    U.clear(host);
+    var years = (state.data.years || []).slice().sort(function (a, b) { return b - a; });
+    years.forEach(function (year) {
+      var isPlan = year === state.data.plan_year_no;
+      var chip = U.el("button", { class: "chip", type: "button",
+        text: year + " · " + (isPlan ? "план" : "база") });
+      chip.setAttribute("aria-pressed", year === state.year ? "true" : "false");
+      chip.title = year === state.year
+        ? "Год в фокусе. Нажмите, чтобы свернуть или развернуть его строки"
+        : "Перевести фокус на " + year + " год";
+      chip.onclick = function () { focusYear(year); };
+      host.appendChild(chip);
+    });
+  }
+
+  function focusYear(year) {
+    if (state.year === year) {
+      state.yearOpen[year] = !state.yearOpen[year];
+      render();
+      return;
+    }
+    state.year = year;
+    state.yearOpen[year] = true;
+    reloadAll();
   }
 
   /* ---------- шапка и итог ---------- */
@@ -133,7 +198,10 @@
     head.appendChild(U.th(state.data.base_year_no + " год", "num"));
   }
 
-  function renderTotal(rows) {
+  /* ctx — результат visibleContext(): строки, развёрнутые годы и их полный объём.
+     Итог считается только по развёрнутым годам, поэтому в подписи они перечислены. */
+  function renderTotal(ctx) {
+    var rows = ctx.rows;
     var total = document.getElementById("op-total");
     U.clear(total);
     var months = [];
@@ -144,9 +212,10 @@
       base += row.base_plan_year || 0;
       for (var i = 0; i < 12; i++) months[i] += row.months[i] || 0;
     });
-    var filtered = rows.length !== (state.data.totals.rows_count || 0);
+    var years = ctx.years.length ? ctx.years.join(" + ") : "—";
+    var filtered = rows.length !== ctx.total;
     total.appendChild(U.el("td", { colspan: 5, class: "total-label",
-      text: "ИТОГО " + state.year + (filtered ? " по фильтру · " + rows.length + " строк"
+      text: "ИТОГО " + years + (filtered ? " по фильтру · " + rows.length + " строк"
         : " · " + rows.length + " строк") }));
     total.appendChild(U.el("td", { class: "num total-sum", text: U.fmt(sum) }));
     months.forEach(function (value) {
@@ -157,12 +226,15 @@
 
   /* ---------- строки ---------- */
 
-  function editableCell(row, field, value, cls) {
-    return Inline.cell(row.id, field, value, cls, state.editing && state.data.can_edit);
+  function editableCell(row, field, value, cls, editable) {
+    return Inline.cell(row.id, field, value, cls, editable);
   }
 
-  function rowNode(row, cfoName) {
+  /* editable считается по году строки, а не по году в фокусе: замок стоит на год,
+     и раскрытый базовый год может быть закрыт для правки, когда плановый открыт. */
+  function rowNode(row, cfoName, canEdit) {
     var tr = U.el("tr", { "data-id": row.id });
+    var editable = state.editing && canEdit;
 
     var del = U.el("button", { class: "mini", title: "Удалить строку", text: "✕" });
     del.onclick = function (event) {
@@ -174,11 +246,11 @@
     };
     tr.appendChild(U.el("td", {}, [U.el("div", { class: "no-cell" }, [
       U.el("span", { text: row.row_no || "•" }),
-      state.editing && state.data.can_edit ? del : null
+      editable ? del : null
     ])]));
 
     FIELDS.forEach(function (f) {
-      tr.appendChild(editableCell(row, f.key, row[f.key] || "", "wrap"));
+      tr.appendChild(editableCell(row, f.key, row[f.key] || "", "wrap", editable));
     });
 
     tr.appendChild(U.el("td", { class: "num n-plan", "data-total": row.id,
@@ -187,7 +259,7 @@
     for (var i = 0; i < 12; i++) {
       var value = row.months[i] || 0;
       var td = editableCell(row, "m" + i, value ? U.fmt(value) : (state.editing ? "" : "—"),
-        "num" + (value ? "" : " dim"));
+        "num" + (value ? "" : " dim"), editable);
       tr.appendChild(td);
     }
 
@@ -212,64 +284,87 @@
     return tr;
   }
 
+  /* Объём года известен из KPI ещё до того, как раздел загружен. */
+  function yearSummary(year, sec) {
+    if (sec) return { rows: sec.totals.rows_count, total: sec.totals.plan_year };
+    var k = state.data.kpi;
+    if (year === k.plan_year) return { rows: k.plan_rows, total: k.plan_total };
+    if (year === k.base_year) return { rows: k.base_rows, total: k.base_total };
+    return { rows: 0, total: 0 };
+  }
+
+  function yearNode(year, sec, open) {
+    var isPlan = year === state.data.plan_year_no;
+    var s = yearSummary(year, sec);
+    var td = U.el("td", { colspan: COLS }, [
+      U.el("span", { class: "grp-caret", text: open ? "▾" : "▸" }),
+      U.el("b", { text: year + " год" }),
+      U.el("span", { class: "year-tag" + (isPlan ? "" : " is-base"),
+        text: isPlan ? "план" : "база" }),
+      U.el("span", { class: "grp-sum", text: U.fmt(s.total) + " ₽ · " + s.rows + " строк" })
+    ]);
+    var tr = U.el("tr", { class: "year-row" + (isPlan ? "" : " is-base") }, [td]);
+    tr.onclick = function () {
+      state.yearOpen[year] = !open;
+      render();
+    };
+    return tr;
+  }
+
   function render() {
     if (!state.data) return;
     renderKpi();
     renderYearMark();
+    renderYearSwitch();
     renderHead();
 
     var body = document.querySelector("***REMOVED***t-op tbody");
     U.clear(body);
     state.rows = {};
-    var visible = [];
 
-    state.data.blocks.forEach(function (block) {
-      var rows = block.rows.filter(function (row) { return passes(row, block.cfo_name); });
-      if (!rows.length) return;
-      var sum = rows.reduce(function (acc, row) { return acc + row.plan_year; }, 0);
-      body.appendChild(groupNode(block, rows.length, sum));
-      if (state.collapsed[block.budget_id]) {
-        visible = visible.concat(rows);
+    /* Годы идут разделами: план нового года сверху развёрнут, база прошлого —
+       свёрнута под ним. Клик по строке года разворачивает и сворачивает раздел. */
+    orderedYears().forEach(function (year) {
+      var sec = state.sections[year];
+      var open = !!state.yearOpen[year];
+      body.appendChild(yearNode(year, sec, open));
+      if (!sec || !open) return;
+      sec.blocks.forEach(function (block) {
+        var rows = block.rows.filter(function (row) { return passes(row, block.cfo_name); });
+        if (!rows.length) return;
+        var sum = rows.reduce(function (acc, row) { return acc + row.plan_year; }, 0);
+        body.appendChild(groupNode(block, rows.length, sum));
         rows.forEach(function (row) { state.rows[row.id] = row; });
-        return;
-      }
-      rows.forEach(function (row) {
-        state.rows[row.id] = row;
-        visible.push(row);
-        body.appendChild(rowNode(row, block.cfo_name));
+        if (state.collapsed[block.budget_id]) return;
+        rows.forEach(function (row) {
+          body.appendChild(rowNode(row, block.cfo_name, sec.can_edit));
+        });
       });
     });
 
-    if (!visible.length) {
-      body.appendChild(U.empty(COLS, state.data.totals.rows_count
+    var ctx = visibleContext();
+    if (!ctx.rows.length) {
+      body.appendChild(U.empty(COLS, ctx.total
         ? "Под фильтр ничего не подошло — снимите часть условий."
-        : "В плане " + state.year + " года пока нет строк. Нажмите «Повторить бюджет прошлого года» "
-          + "или добавьте строку вручную."));
+        : ctx.years.length
+          ? "Пока нет строк за " + ctx.years.join(" и ") + ". Нажмите «Повторить бюджет "
+            + "прошлого года» или добавьте строку вручную."
+          : "Все годы свёрнуты — раскройте нужный строкой года выше."));
     }
 
-    renderTotal(visible);
+    renderTotal(ctx);
     /* Строка ИТОГО прилипает под шапкой. Высоту шапки меряем, а не задаём числом:
        названия колонок переносятся в две строки и фиксированный отступ врёт. */
     document.getElementById("t-op").style.setProperty(
       "--op-head-h", document.getElementById("op-head").offsetHeight + "px");
     document.getElementById("op-count").textContent =
-      visible.length + " из " + state.data.totals.rows_count + " строк · " +
-      U.fmt(visible.reduce(function (a, r) { return a + r.plan_year; }, 0)) + " ₽";
+      ctx.rows.length + " из " + ctx.total + " строк · " +
+      U.fmt(ctx.rows.reduce(function (a, r) { return a + r.plan_year; }, 0)) + " ₽";
     document.querySelector("***REMOVED***t-op").classList.toggle("editing", state.editing);
     refreshFilterOptions();
   }
 
   /* ---------- правка ячеек ---------- */
-
-  function visibleRows() {
-    var out = [];
-    state.data.blocks.forEach(function (block) {
-      block.rows.forEach(function (row) {
-        if (passes(row, block.cfo_name)) out.push(row);
-      });
-    });
-    return out;
-  }
 
   function paint(td, row, field) {
     if (MONTH_FIELD.test(field)) {
@@ -317,7 +412,7 @@
   function afterSave(row) {
     var totalCell = document.querySelector('[data-total="' + row.id + '"]');
     if (totalCell) totalCell.textContent = U.fmt(row.plan_year);
-    renderTotal(visibleRows());
+    renderTotal(visibleContext());
     refreshFilterOptions();
   }
 
@@ -422,7 +517,7 @@
       U.toast("Скопировано строк: " + result.copied + ", пропущено дублей: " + result.skipped +
         (result.index_pct ? ", индексация " + result.index_pct + "%" : ""));
       state.year = state.data.plan_year_no;
-      document.getElementById("op-year").value = String(state.year);
+      state.yearOpen[state.year] = true;
       reloadAll();
     }).catch(function (e) { note.textContent = e.message; });
   }
@@ -533,17 +628,11 @@
 
   function load(year) {
     return API.operplan(year).then(function (data) {
-      /* Первое открытие вкладки. План нового года обычно пуст, пока его не набрали,
-         и встречать пользователя пустой таблицей незачем — показываем базовый год,
-         в котором лежит залитый бюджет. Дальше год выбирается вручную. */
-      if (!state.opened && year == null && !data.totals.rows_count && data.kpi.base_rows) {
-        state.opened = true;
-        return load(data.base_year_no);
-      }
-      state.opened = true;
       state.data = data;
       state.year = data.year;
-      U.fillSelect(document.getElementById("op-year"), data.years, null, null, data.year);
+      state.sections[data.year] = data;
+      /* Год в фокусе всегда раскрыт, остальные по умолчанию свёрнуты. */
+      state.yearOpen[data.year] = true;
       /* «Показать все» — привилегия финотдела: руководителю сервер и не отдаёт
          чужие статьи с контрагентами, так что галочка ему только мешала бы. */
       var all = document.getElementById("op-a-all");
@@ -565,15 +654,32 @@
 
   function blockCfoList() {
     var seen = {}, out = [];
-    (state.data ? state.data.blocks : []).forEach(function (b) {
-      if (!seen[b.cfo_id]) { seen[b.cfo_id] = true; out.push({ id: b.cfo_id, name: b.cfo_name }); }
+    Object.keys(state.sections).forEach(function (year) {
+      state.sections[year].blocks.forEach(function (b) {
+        if (seen[b.cfo_id]) return;
+        seen[b.cfo_id] = true;
+        out.push({ id: b.cfo_id, name: b.cfo_name });
+      });
     });
     return out.sort(function (a, b) { return a.name.localeCompare(b.name, "ru"); });
+  }
+
+  /* Остальные годы догружаем сразу: их разделы свёрнуты, но сумма и число строк
+     в заголовке года должны быть настоящими, а фильтры — знать про их значения. */
+  function loadOtherYears() {
+    var others = (state.data.years || []).filter(function (y) { return y !== state.year; });
+    return Promise.all(others.map(function (year) {
+      return API.operplan(year).then(function (data) {
+        state.sections[year] = data;
+        if (state.yearOpen[year] === undefined) state.yearOpen[year] = false;
+      });
+    }));
   }
 
   function reloadAll() {
     return load(state.year).then(function () {
       return Promise.all([
+        loadOtherYears().then(function () { render(); }),
         API.operplanMissing(state.year).then(function (data) {
           state.missing = data;
           renderMissing();
@@ -602,10 +708,6 @@
         after: afterSave
       });
 
-      document.getElementById("op-year").onchange = function () {
-        state.year = Number(this.value);
-        reloadAll();
-      };
       document.getElementById("op-edit").onclick = function () {
         state.editing = !state.editing;
         this.classList.toggle("primary", state.editing);
@@ -649,8 +751,12 @@
         render();
       };
       document.getElementById("op-collapse").onclick = function () {
-        var anyOpen = state.data.blocks.some(function (b) { return !state.collapsed[b.budget_id]; });
-        state.data.blocks.forEach(function (b) { state.collapsed[b.budget_id] = anyOpen; });
+        var blocks = [];
+        Object.keys(state.sections).forEach(function (year) {
+          if (state.yearOpen[year]) blocks = blocks.concat(state.sections[year].blocks);
+        });
+        var anyOpen = blocks.some(function (b) { return !state.collapsed[b.budget_id]; });
+        blocks.forEach(function (b) { state.collapsed[b.budget_id] = anyOpen; });
         this.textContent = anyOpen ? "Развернуть все" : "Свернуть все";
         render();
       };

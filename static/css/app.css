@@ -521,6 +521,21 @@ thead th { border-right-color: var(--axis); }
 .total-row .total-label { text-transform: none; letter-spacing: 0; color: var(--ink2); font-weight: 600; }
 .total-row .total-sum { color: var(--accent-2); }
 
+/* Раздел года в таблице: план нового года сверху развёрнут, база прошлого —
+   свёрнута под ним. Клик по строке года разворачивает раздел. */
+***REMOVED***t-op tr.year-row td {
+  position: static; cursor: pointer; padding: 10px 12px;
+  background: var(--accent-soft); font-weight: 700; font-size: 16px;
+  border-top: 2px solid var(--accent); border-bottom: 1px solid var(--border);
+}
+***REMOVED***t-op tr.year-row.is-base td { background: var(--crit-bg); border-top-color: var(--serious); }
+***REMOVED***t-op tr.year-row:hover td { box-shadow: inset 0 0 0 999px var(--hover); }
+***REMOVED***t-op tr.group td { padding-left: 28px; }
+.year-row .year-tag { margin-left: 10px; font-size: 13px; padding: 1px 9px; }
+.year-row .grp-sum {
+  float: right; font-weight: 400; color: var(--ink2); font-variant-numeric: tabular-nums;
+}
+
 tr.group .grp-caret { display: inline-block; width: 14px; color: var(--muted); }
 tr.group .grp-sum { float: right; font-weight: 400; color: var(--ink2); font-variant-numeric: tabular-nums; }
 tr.group { cursor: pointer; }
