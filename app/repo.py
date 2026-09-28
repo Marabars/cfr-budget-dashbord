@@ -81,15 +81,24 @@ def list_budgets(year: int, layer: str = LAYER_MAIN) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def delete_budgets(year: int, layer: str) -> int:
-    """Полностью очищает слой за год — используется при повторной заливке плана.
+def delete_budgets(year: int, layer: str, cfo_ids: Sequence[int] | None = None) -> int:
+    """Очищает слой за год — используется при повторной заливке плана.
+
+    `cfo_ids` ограничивает очистку своими дирекциями: руководитель перезаливает
+    бюджет своего ЦФО и не стирает чужие. `None` — весь слой за год.
 
     Возвращает число удалённых строк: именно его показывает отчёт о загрузке.
     """
     removed = 0
+    sql = "SELECT id FROM budget WHERE year = ? AND layer = ?"
+    params: list[Any] = [year, layer]
+    if cfo_ids is not None:
+        if not cfo_ids:
+            return 0
+        sql += f" AND cfo_id IN ({','.join('?' for _ in cfo_ids)})"
+        params.extend(int(i) for i in cfo_ids)
     with db.tx() as conn:
-        ids = [int(r["id"]) for r in conn.execute(
-            "SELECT id FROM budget WHERE year = ? AND layer = ?", (year, layer))]
+        ids = [int(r["id"]) for r in conn.execute(sql, params)]
         for bid in ids:
             removed += int(conn.execute(
                 "SELECT COUNT(*) c FROM budget_row WHERE budget_id = ?", (bid,)).fetchone()["c"])
@@ -190,6 +199,45 @@ def update_row(row_id: int, data: dict, months: Sequence[float] | None = None) -
                         "INSERT INTO budget_row_month(row_id, month, amount) VALUES (?, ?, ?)",
                         (row_id, m, amount),
                     )
+
+
+def set_row_fact(row_id: int, months) -> None:
+    """Факт по строке плана: перезаписывает все двенадцать месяцев."""
+    with db.tx() as conn:
+        conn.execute("DELETE FROM budget_row_fact_month WHERE row_id = ?", (row_id,))
+        for m, amount in enumerate(normalize(months), start=1):
+            if amount:
+                conn.execute(
+                    "INSERT INTO budget_row_fact_month(row_id, month, amount) VALUES (?, ?, ?)",
+                    (row_id, m, amount),
+                )
+
+
+def row_fact_months(year: int, layer: str = LAYER_MAIN) -> dict[int, list[float]]:
+    """Факт слоя по месяцам: {row_id: [12 сумм]}."""
+    rows = db.query(
+        "SELECT m.row_id, m.month, m.amount FROM budget_row_fact_month m "
+        "JOIN budget_row r ON r.id = m.row_id JOIN budget b ON b.id = r.budget_id "
+        "WHERE b.year = ? AND b.layer = ? AND r.deleted_at IS NULL",
+        (year, layer),
+    )
+    out: dict[int, list[float]] = {}
+    for r in rows:
+        out.setdefault(int(r["row_id"]), [0.0] * MONTHS)[int(r["month"]) - 1] = float(r["amount"])
+    return out
+
+
+def clear_layer_fact(year: int, layer: str) -> int:
+    """Стирает факт слоя за год перед повторной загрузкой."""
+    rows = db.query(
+        "SELECT r.id FROM budget_row r JOIN budget b ON b.id = r.budget_id "
+        "WHERE b.year = ? AND b.layer = ?", (year, layer))
+    ids = [int(r["id"]) for r in rows]
+    if not ids:
+        return 0
+    marks = ",".join("?" for _ in ids)
+    return db.execute(
+        f"DELETE FROM budget_row_fact_month WHERE row_id IN ({marks})", ids)
 
 
 def delete_row(row_id: int) -> None:

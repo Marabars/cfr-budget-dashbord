@@ -4,8 +4,9 @@
 
   var state = { cfg: null, cfoList: [], rowsByCfo: {}, currentCfo: null, me: null };
 
-  /* Руководителю ЦФО доступны только эти вкладки; остальное ведёт финотдел. */
-  var CFO_TABS = ["op", "cfo"];
+  /* Руководителю ЦФО доступна только вкладка «Бюджет»: карточка ЦФО показывает
+     слой исполнения с фактом из 1С, к планированию отношения не имеет. */
+  var CFO_TABS = ["op"];
 
   function tabNodes() {
     return Array.prototype.slice.call(document.querySelectorAll(".tab"));

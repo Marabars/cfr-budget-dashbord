@@ -37,6 +37,69 @@ def _to_bytes(wb: Workbook) -> bytes:
     return buffer.getvalue()
 
 
+def budget_sheet(year: int, cfo_ids=None) -> bytes:
+    """Лист «Бюджеты ЦФО» слоя планирования — тот же вид, что у исходного файла.
+
+    Раскладка один в один повторяет то, что читает importers.cfo_budgets:
+    блок ЦФО открывается строкой «ИТОГО» с контрольной суммой, под ней строки.
+    Поэтому выгруженный файл можно поправить в Excel и залить обратно.
+    """
+    from app import operplan as operplan_service
+
+    view = operplan_service.view(year, cfo_ids)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = cfo_budgets_sheet_name()
+
+    header = ["Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
+              "Комментарий", "ИТОГО"] + calc.MONTH_NAMES
+    ws.cell(row=1, column=1, value=f"Бюджеты ЦФО, {view['year']} год")
+    ws.cell(row=1, column=1).font = Font(bold=True, size=12)
+    for col, title in enumerate(header, start=1):
+        ws.cell(row=3, column=col, value=title)
+    _style_header(ws, 3, len(header))
+
+    def money(r: int, c: int, value: float, bold: bool = False) -> None:
+        cell = ws.cell(row=r, column=c, value=round(float(value or 0), 2))
+        cell.number_format = MONEY
+        if bold:
+            cell.font = Font(bold=True)
+
+    idx = 4
+    for block in view["blocks"]:
+        ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
+        ws.cell(row=idx, column=2, value=block["cfo_name"]).font = Font(bold=True)
+        ws.cell(row=idx, column=4, value=block["budget_name"])
+        money(idx, 7, block["plan_year"], bold=True)
+        for m, amount in enumerate(block["months"]):
+            money(idx, 8 + m, amount, bold=True)
+        for col in range(1, len(header) + 1):
+            ws.cell(row=idx, column=col).fill = TOTAL_FILL
+        idx += 1
+
+        for row in block["rows"]:
+            ws.cell(row=idx, column=1, value=row["article"])
+            ws.cell(row=idx, column=2, value=block["cfo_name"])
+            ws.cell(row=idx, column=3, value=row["counterparty"])
+            ws.cell(row=idx, column=4, value=row["contract"])
+            ws.cell(row=idx, column=5, value=row["detail"])
+            ws.cell(row=idx, column=6, value=row["comment"])
+            money(idx, 7, row["plan_year"])
+            for m, amount in enumerate(row["months"]):
+                money(idx, 8 + m, amount)
+            idx += 1
+
+    _autosize(ws, {1: 38, 2: 30, 3: 28, 4: 26, 5: 34, 6: 30, 7: 16})
+    for m in range(calc.MONTHS):
+        ws.column_dimensions[get_column_letter(8 + m)].width = 14
+    return _to_bytes(wb)
+
+
+def cfo_budgets_sheet_name() -> str:
+    from app.importers import cfo_budgets
+    return cfo_budgets.SHEET_NAME
+
+
 def operplan(year: int | None = None, cfo_ids=None) -> bytes:
     """Лист «Оперплан ЦФО» в раскладке исходного файла — для вставки в «Ликвидность».
 

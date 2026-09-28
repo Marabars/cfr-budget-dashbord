@@ -182,11 +182,15 @@ class OperplanRowIn(BaseModel):
 
 
 class CopyYearIn(BaseModel):
-    """Повтор бюджета прошлого года с необязательной индексацией."""
+    """Повтор прошлого года с необязательной индексацией.
+
+    source: "plan" — суммы из бюджета прошлого года, "fact" — из загруженного факта.
+    """
     from_year: int | None = None
     to_year: int | None = None
     cfo_id: int | None = None
     index_pct: float = 0
+    source: Literal["plan", "fact"] = "plan"
 
     @field_validator("index_pct")
     @classmethod

@@ -59,6 +59,17 @@ CREATE TABLE IF NOT EXISTS budget_row_month (
   PRIMARY KEY (row_id, month)
 );
 
+-- ---------- факт слоя планирования ----------
+-- Факт по строкам плана в той же помесячной форме, что и план. Живёт отдельно
+-- от таблицы fact: там факт — это платежи из 1С, привязанные к слою исполнения,
+-- а здесь суммы, загруженные Excel'ем прямо на строку бюджета прошлого года.
+CREATE TABLE IF NOT EXISTS budget_row_fact_month (
+  row_id INTEGER NOT NULL REFERENCES budget_row(id) ON DELETE CASCADE,
+  month  INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+  amount REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (row_id, month)
+);
+
 -- ---------- заявки (обязательства) ----------
 CREATE TABLE IF NOT EXISTS claim (
   id            INTEGER PRIMARY KEY,

@@ -7,6 +7,7 @@
     refs: null,          // справочники статей, контрагентов, договоров
     missing: null,       // строки прошлого года, которых нет в плане
     rows: {},            // id -> строка (для правки и пересчёта)
+    rowYear: {},         // id -> год строки (чтобы обновить ИТОГО нужного года)
     editing: false,
     collapsed: {},       // budget_id -> свёрнут ли блок
     sections: {},        // год -> ответ /api/operplan по этому году
@@ -155,35 +156,11 @@
     title.parentNode.parentNode.classList.toggle("y-base", !isPlan);
   }
 
-  /* Переключатель лет. Клик по другому году переносит в него фокус (замок,
-     справочники, форма новой строки), повторный клик по текущему — сворачивает
-     и разворачивает его раздел. */
-  function renderYearSwitch() {
-    var host = document.getElementById("op-year-switch");
-    U.clear(host);
-    var years = (state.data.years || []).slice().sort(function (a, b) { return b - a; });
-    years.forEach(function (year) {
-      var isPlan = year === state.data.plan_year_no;
-      var chip = U.el("button", { class: "chip", type: "button",
-        text: year + " · " + (isPlan ? "план" : "база") });
-      chip.setAttribute("aria-pressed", year === state.year ? "true" : "false");
-      chip.title = year === state.year
-        ? "Год в фокусе. Нажмите, чтобы свернуть или развернуть его строки"
-        : "Перевести фокус на " + year + " год";
-      chip.onclick = function () { focusYear(year); };
-      host.appendChild(chip);
-    });
-  }
-
-  function focusYear(year) {
-    if (state.year === year) {
-      state.yearOpen[year] = !state.yearOpen[year];
-      render();
-      return;
-    }
-    state.year = year;
-    state.yearOpen[year] = true;
-    reloadAll();
+  /* Правка года разрешена, когда у роли есть доступ и год не заблокирован.
+     Финотделу сервер разрешает править и под замком — замок для него означает
+     «я закрыл правку», поэтому таблица гасится и на его экране тоже. */
+  function sectionEditable(sec) {
+    return !!sec && !!sec.can_edit && !sec.locked;
   }
 
   /* ---------- шапка и итог ---------- */
@@ -198,12 +175,10 @@
     head.appendChild(U.th(state.data.base_year_no + " год", "num"));
   }
 
-  /* ctx — результат visibleContext(): строки, развёрнутые годы и их полный объём.
-     Итог считается только по развёрнутым годам, поэтому в подписи они перечислены. */
-  function renderTotal(ctx) {
-    var rows = ctx.rows;
-    var total = document.getElementById("op-total");
-    U.clear(total);
+  /* Итог считается по каждому году отдельно: складывать план 2027 с базой 2026
+     бессмысленно, поэтому общей строки ИТОГО у таблицы больше нет. */
+  function totalNode(year, rows, allRows) {
+    var total = U.el("tr", { class: "total-row", "data-year": year });
     var months = [];
     for (var i = 0; i < 12; i++) months.push(0);
     var sum = 0, base = 0;
@@ -212,16 +187,16 @@
       base += row.base_plan_year || 0;
       for (var i = 0; i < 12; i++) months[i] += row.months[i] || 0;
     });
-    var years = ctx.years.length ? ctx.years.join(" + ") : "—";
-    var filtered = rows.length !== ctx.total;
+    var filtered = rows.length !== allRows;
     total.appendChild(U.el("td", { colspan: 5, class: "total-label",
-      text: "ИТОГО " + years + (filtered ? " по фильтру · " + rows.length + " строк"
+      text: "ИТОГО " + year + (filtered ? " по фильтру · " + rows.length + " строк"
         : " · " + rows.length + " строк") }));
     total.appendChild(U.el("td", { class: "num total-sum", text: U.fmt(sum) }));
     months.forEach(function (value) {
       total.appendChild(U.el("td", { class: "num", text: value ? U.fmt(value) : "—" }));
     });
     total.appendChild(U.el("td", { class: "num dim", text: base ? U.fmt(base) : "—" }));
+    return total;
   }
 
   /* ---------- строки ---------- */
@@ -234,7 +209,7 @@
      и раскрытый базовый год может быть закрыт для правки, когда плановый открыт. */
   function rowNode(row, cfoName, canEdit) {
     var tr = U.el("tr", { "data-id": row.id });
-    var editable = state.editing && canEdit;
+    var editable = canEdit;
 
     var del = U.el("button", { class: "mini", title: "Удалить строку", text: "✕" });
     del.onclick = function (event) {
@@ -315,12 +290,12 @@
     if (!state.data) return;
     renderKpi();
     renderYearMark();
-    renderYearSwitch();
     renderHead();
 
     var body = document.querySelector("***REMOVED***t-op tbody");
     U.clear(body);
     state.rows = {};
+    state.rowYear = {};
 
     /* Годы идут разделами: план нового года сверху развёрнут, база прошлого —
        свёрнута под ним. Клик по строке года разворачивает и сворачивает раздел. */
@@ -329,17 +304,29 @@
       var open = !!state.yearOpen[year];
       body.appendChild(yearNode(year, sec, open));
       if (!sec || !open) return;
+      var editable = sectionEditable(sec);
+      var yearRows = [];
+      var nodes = [];
       sec.blocks.forEach(function (block) {
         var rows = block.rows.filter(function (row) { return passes(row, block.cfo_name); });
         if (!rows.length) return;
         var sum = rows.reduce(function (acc, row) { return acc + row.plan_year; }, 0);
-        body.appendChild(groupNode(block, rows.length, sum));
-        rows.forEach(function (row) { state.rows[row.id] = row; });
+        nodes.push(groupNode(block, rows.length, sum));
+        rows.forEach(function (row) {
+          state.rows[row.id] = row;
+          state.rowYear[row.id] = year;
+          yearRows.push(row);
+        });
         if (state.collapsed[block.budget_id]) return;
         rows.forEach(function (row) {
-          body.appendChild(rowNode(row, block.cfo_name, sec.can_edit));
+          var node = rowNode(row, block.cfo_name, editable);
+          if (year !== state.data.plan_year_no) node.classList.add("y-past");
+          nodes.push(node);
         });
       });
+      // ИТОГО года идёт сразу под его заголовком, до блоков ЦФО
+      body.appendChild(totalNode(year, yearRows, sec.totals.rows_count));
+      nodes.forEach(function (node) { body.appendChild(node); });
     });
 
     var ctx = visibleContext();
@@ -352,11 +339,6 @@
           : "Все годы свёрнуты — раскройте нужный строкой года выше."));
     }
 
-    renderTotal(ctx);
-    /* Строка ИТОГО прилипает под шапкой. Высоту шапки меряем, а не задаём числом:
-       названия колонок переносятся в две строки и фиксированный отступ врёт. */
-    document.getElementById("t-op").style.setProperty(
-      "--op-head-h", document.getElementById("op-head").offsetHeight + "px");
     document.getElementById("op-count").textContent =
       ctx.rows.length + " из " + ctx.total + " строк · " +
       U.fmt(ctx.rows.reduce(function (a, r) { return a + r.plan_year; }, 0)) + " ₽";
@@ -409,36 +391,63 @@
     row.plan_year = Number(saved.plan_year);
   }
 
+  /* Пересобирает строку ИТОГО одного года на месте — полная перерисовка таблицы
+     после правки ячейки выбивала бы фокус из соседней. */
+  function repaintTotal(year) {
+    var sec = state.sections[year];
+    var old = document.querySelector('***REMOVED***t-op tbody tr.total-row[data-year="' + year + '"]');
+    if (!sec || !old || !old.parentNode) return;
+    var rows = [];
+    sec.blocks.forEach(function (block) {
+      block.rows.forEach(function (row) {
+        if (passes(row, block.cfo_name)) rows.push(row);
+      });
+    });
+    var fresh = totalNode(year, rows, sec.totals.rows_count);
+    old.parentNode.insertBefore(fresh, old);
+    old.parentNode.removeChild(old);
+  }
+
   function afterSave(row) {
     var totalCell = document.querySelector('[data-total="' + row.id + '"]');
     if (totalCell) totalCell.textContent = U.fmt(row.plan_year);
-    renderTotal(visibleContext());
+    repaintTotal(state.rowYear[row.id]);
     refreshFilterOptions();
   }
 
   /* ---------- замок ---------- */
 
+  /* Правка включена по умолчанию; кнопка с перечёркнутым карандашом её закрывает.
+     Замок общий на год: финотдел закрывает правку и себе, чтобы случайно не задеть
+     утверждённый план, и тем же нажатием открывает обратно. */
   function renderLock() {
-    var button = document.getElementById("op-lock");
-    var locked = state.data.locked;
-    button.textContent = locked ? "🔒 Внесение изменений заблокировано" : "🔓 Внесение изменений разрешено";
-    button.classList.toggle("locked", locked);
-    button.hidden = !state.data.is_fin;
-    button.title = locked
-      ? "Руководители ЦФО не могут править план. Финансовый отдел — может. Нажмите, чтобы снять."
-      : "Нажмите, чтобы закрыть внесение изменений для руководителей ЦФО";
+    var locked = !!state.data.locked;
+    var editable = sectionEditable(state.data);
+    state.editing = editable;
 
-    var banner = document.getElementById("op-locked-note");
-    banner.hidden = !(locked && !state.data.can_edit);
+    var button = document.getElementById("op-lock");
+    button.hidden = !state.data.is_fin;
+    button.textContent = locked ? "✎̸ Правка заблокирована" : "✎ Правка разрешена";
+    button.classList.toggle("locked", locked);
+    button.title = locked
+      ? "Правка плана " + state.data.plan_year_no + " закрыта. Нажмите, чтобы разрешить."
+      : "Нажмите, чтобы заблокировать правку плана " + state.data.plan_year_no;
+
+    document.getElementById("op-locked-note").hidden = !locked;
+    document.getElementById("op-edit-note").hidden = !editable;
     document.getElementById("op-edit-scope").textContent = state.data.is_fin
       ? "Правка плана по всем ЦФО." : "Правка плана вашего ЦФО.";
-    var edit = document.getElementById("op-edit");
-    edit.hidden = !state.data.can_edit;
-    edit.title = state.data.is_fin
-      ? "Править любую строку плана: суммы по месяцам и текстовые поля"
-      : "Править строки своего ЦФО: суммы по месяцам и текстовые поля";
-    document.getElementById("op-add").hidden = !state.data.can_edit;
-    document.getElementById("op-copy").hidden = !state.data.can_edit;
+
+    /* Панель внесения расходов не прячется — иначе она «пропадала» после переносов.
+       Под замком гасим только действия. */
+    ["op-a-save", "op-copy-run", "op-fact-run"].forEach(function (id) {
+      document.getElementById(id).disabled = !editable;
+    });
+    document.getElementById("op-entry-title").textContent =
+      "Внесение плановых расходов на " + state.data.plan_year_no + " год";
+    document.getElementById("op-copy-title").textContent =
+      "Перенести " + state.data.base_year_no + " год в план " + state.data.plan_year_no;
+    document.getElementById("op-import").hidden = !state.data.is_fin;
   }
 
   /* ---------- пропавшие строки (п.8) ---------- */
@@ -503,23 +512,71 @@
 
   /* ---------- повтор бюджета прошлого года ---------- */
 
-  function runCopy() {
+  /* source: "plan" — суммы берутся из бюджета прошлого года, "fact" — из факта.
+     Доступные ЦФО режет сервер, руководителю переносится только его дирекция. */
+  function runCopy(source) {
     var pct = U.parseSum(document.getElementById("op-index").value);
     var note = document.getElementById("op-copy-note");
+    note.style.color = "";
     note.textContent = "Переношу строки…";
     API.copyYear({
       from_year: state.data.base_year_no,
       to_year: state.data.plan_year_no,
-      index_pct: pct
+      index_pct: pct,
+      source: source || "plan"
     }).then(function (result) {
       note.textContent = "";
-      document.getElementById("op-copy-form").hidden = true;
-      U.toast("Скопировано строк: " + result.copied + ", пропущено дублей: " + result.skipped +
-        (result.index_pct ? ", индексация " + result.index_pct + "%" : ""));
-      state.year = state.data.plan_year_no;
-      state.yearOpen[state.year] = true;
+      var what = source === "fact" ? "факт" : "бюджет";
+      if (!result.copied && result.skipped) {
+        U.toast("Всё уже в плане: пропущено дублей " + result.skipped);
+      } else if (!result.copied) {
+        U.toast("Переносить нечего: за " + state.data.base_year_no +
+          " год нет подходящих строк" + (source === "fact" ? " с фактом" : ""), "error");
+      } else {
+        U.toast("Перенесён " + what + ": строк " + result.copied +
+          ", пропущено дублей " + result.skipped +
+          (result.index_pct ? ", индексация " + result.index_pct + "%" : ""));
+      }
+      state.yearOpen[state.data.plan_year_no] = true;
       reloadAll();
-    }).catch(function (e) { note.textContent = e.message; });
+    }).catch(function (e) { note.style.color = "var(--critical)"; note.textContent = e.message; });
+  }
+
+  /* ---------- Excel ---------- */
+
+  function runExport() {
+    window.location.href = "/api/export/budget.xlsx?year=" + state.data.plan_year_no;
+  }
+
+  function runImport() {
+    var note = document.getElementById("op-import-note");
+    var input = document.getElementById("op-import-file");
+    if (!input.files || !input.files.length) {
+      note.style.color = "var(--critical)";
+      note.textContent = "Выберите файл .xlsx";
+      return;
+    }
+    var kind = "plan";
+    Array.prototype.forEach.call(
+      document.querySelectorAll('input[name="op-imp-kind"]'), function (radio) {
+        if (radio.checked) kind = radio.value;
+      });
+    note.style.color = "";
+    note.textContent = "Загружаю…";
+    // факт грузится за базовый год, бюджет — за плановый
+    var year = kind === "fact" ? state.data.base_year_no : state.data.plan_year_no;
+    API.importBudget(input.files[0], year, kind)
+      .then(function (result) {
+        note.textContent = "";
+        input.value = "";
+        document.getElementById("op-import-form").hidden = true;
+        U.toast("Загружено строк: " + result.rows +
+          (result.unmatched ? ", заведено новых: " + result.unmatched : "") +
+          (result.removed ? ", заменено прежних: " + result.removed : "") +
+          (result.foreign ? ", пропущено чужих ЦФО: " + result.foreign : ""));
+        reloadAll();
+      })
+      .catch(function (e) { note.style.color = "var(--critical)"; note.textContent = e.message; });
   }
 
   /* ---------- форма добавления строки ---------- */
@@ -600,8 +657,15 @@
     err.style.color = "";
     var article = document.getElementById("op-a-article").value.replace(/^\s+|\s+$/g, "");
     var amount = U.parseSum(document.getElementById("op-a-sum").value);
+    var spread = document.getElementById("op-a-spread").value;
     if (!article) { err.textContent = "Укажите статью оборотов"; return; }
-    if (amount <= 0) { err.textContent = "Укажите сумму больше нуля"; return; }
+    /* При «не распределять» сумма необязательна: создаётся пустая строка,
+       в которую суммы вписывают прямо в таблице по месяцам. */
+    if (spread !== "none" && amount <= 0) {
+      err.textContent = "Укажите сумму больше нуля или выберите «не распределять»";
+      return;
+    }
+    if (amount < 0) { err.textContent = "Сумма не может быть отрицательной"; return; }
 
     var months = monthPlan();
     API.createOperplanRow({
@@ -614,7 +678,7 @@
       comment: document.getElementById("op-a-detail").value,
       plan_year: amount,
       months: months
-    }, state.year).then(function () {
+    }, state.data.plan_year_no).then(function () {
       ["op-a-article", "op-a-cp", "op-a-contract", "op-a-detail", "op-a-sum"]
         .forEach(function (id) { document.getElementById(id).value = ""; });
       err.style.color = "var(--good)";
@@ -708,35 +772,23 @@
         after: afterSave
       });
 
-      document.getElementById("op-edit").onclick = function () {
-        state.editing = !state.editing;
-        this.classList.toggle("primary", state.editing);
-        this.textContent = state.editing ? "✓ Готово" : "✎ Редактировать";
-        document.getElementById("op-edit-note").hidden = !state.editing;
-        render();
-      };
       document.getElementById("op-lock").onclick = function () {
-        API.operplanLock(state.year, !state.data.locked)
+        API.operplanLock(state.data.plan_year_no, !state.data.locked)
           .then(function () { reloadAll(); })
           .catch(function (e) { U.toast(e.message, "error"); });
       };
-      document.getElementById("op-copy").onclick = function () {
-        var form = document.getElementById("op-copy-form");
+      document.getElementById("op-copy-run").onclick = function () { runCopy("plan"); };
+      document.getElementById("op-fact-run").onclick = function () { runCopy("fact"); };
+      document.getElementById("op-export").onclick = runExport;
+      document.getElementById("op-import").onclick = function () {
+        var form = document.getElementById("op-import-form");
         form.hidden = !form.hidden;
       };
-      document.getElementById("op-copy-run").onclick = runCopy;
-      document.getElementById("op-copy-cancel").onclick = function () {
-        document.getElementById("op-copy-form").hidden = true;
-      };
-      document.getElementById("op-add").onclick = function () {
-        var form = document.getElementById("op-add-form");
-        form.hidden = !form.hidden;
-        if (!form.hidden) { syncAddLists(); document.getElementById("op-a-article").focus(); }
+      document.getElementById("op-import-run").onclick = runImport;
+      document.getElementById("op-import-cancel").onclick = function () {
+        document.getElementById("op-import-form").hidden = true;
       };
       document.getElementById("op-a-save").onclick = saveNewRow;
-      document.getElementById("op-a-cancel").onclick = function () {
-        document.getElementById("op-add-form").hidden = true;
-      };
       document.getElementById("op-a-cfo").onchange = syncAddLists;
       // oninput у поля занят выпадающим списком, поэтому вешаем вторым слушателем:
       // набранный вручную контрагент тоже должен сузить список договоров

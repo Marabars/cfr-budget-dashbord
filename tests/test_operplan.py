@@ -592,3 +592,125 @@ def test_миграция_добавляет_слой_и_не_трогает_д�
     ***REMOVED*** повторный запуск безвреден
     db.init_db()
     assert repo.list_rows(2026)[0]["plan_year"] == 999000
+
+
+***REMOVED*** ---------- Excel: выгрузка, загрузка, факт ----------
+
+def make_fact_sheet(hr_amount: float = 7_000, it_amount: float = 90_000,
+                    extra: bool = False) -> bytes:
+    """Факт в той же раскладке, что «Бюджеты ЦФО»: суммы — не план, а расход."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Бюджеты ЦФО"
+    header = ["Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
+              "Комментарий", "ИТОГО"] + MONTH_NAMES
+    for col, value in enumerate(header, start=1):
+        ws.cell(row=3, column=col, value=value)
+
+    def put(row, values, months):
+        for col, value in enumerate(values, start=1):
+            ws.cell(row=row, column=col, value=value)
+        ws.cell(row=row, column=7, value=sum(months))
+        for m, amount in enumerate(months):
+            ws.cell(row=row, column=8 + m, value=amount or None)
+
+    put(4, ["ИТОГО", IT, None, "Бюджет обязательных затрат"], [it_amount] + [0] * 11)
+    put(5, ["4411_Оборудование", IT, "Астра ООО", "Договор №1", "ИТ инфраструктура",
+            "Серверы"], [it_amount] + [0] * 11)
+    put(6, ["ИТОГО", HR, None, None], [hr_amount] + [0] * 11)
+    put(7, ["4110_Соцрасходы", HR, "Подрядчик ООО", "Договор №3", None, "Подарки"],
+        [hr_amount] + [0] * 11)
+    if extra:
+        put(8, ["4999_Непредвиденное", HR, None, None, None, "Не было в бюджете"],
+            [0, 3_000] + [0] * 10)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def test_выгрузка_бюджета_читается_импортёром_обратно(client, loaded):
+    """Круг замкнут: что выгрузили, то и заливается без потери строк и сумм."""
+    before = client.get("/api/operplan?year=2026").json()["totals"]
+    data = client.get("/api/export/budget.xlsx?year=2026")
+    assert data.status_code == 200
+    assert data.headers["content-type"].startswith("application/vnd.openxml")
+
+    again = operplan.import_budgets(data.content, "выгрузка.xlsx", 2026, "Тест")
+    after = client.get("/api/operplan?year=2026").json()["totals"]
+    assert again["rows"] == before["rows_count"]
+    assert after["rows_count"] == before["rows_count"]
+    assert after["plan_year"] == pytest.approx(before["plan_year"], rel=1e-9)
+
+
+def test_руководитель_выгружает_только_свой_цфо(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    content = client.get("/api/export/budget.xlsx?year=2026",
+                         headers={"X-User": f"cfo:{hr_id}"}).content
+    parsed = cfo_budgets.parse(content)
+    assert {row["cfo"] for row in parsed["rows"]} == {HR}
+
+
+def test_загрузка_факта_ложится_на_строки_плана(client, loaded):
+    result = operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    assert result["matched"] == 2 and result["created"] == 0
+
+    kpi = client.get("/api/operplan").json()["kpi"]
+    assert kpi["fact_loaded"] is True
+    assert kpi["base_fact"] == pytest.approx(97_000)
+
+
+def test_факт_без_строки_в_плане_заводит_её_и_не_задваивает(client, loaded):
+    first = operplan.import_fact(make_fact_sheet(extra=True), "факт.xlsx", 2026, "Тест")
+    assert first["created"] == 1
+    rows_after_first = len(repo.list_rows(2026, layer=operplan.LAYER))
+
+    second = operplan.import_fact(make_fact_sheet(extra=True), "факт.xlsx", 2026, "Тест")
+    assert second["created"] == 0 and second["matched"] == 3
+    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == rows_after_first
+
+
+def test_повтор_факта_переносит_суммы_факта_а_не_бюджета(client, loaded):
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    result = client.post("/api/operplan/copy-year",
+                         json={"from_year": 2026, "to_year": 2027, "source": "fact"}).json()
+    assert result["copied"] == 2          ***REMOVED*** перенеслись только строки с фактом
+    plan = client.get("/api/operplan?year=2027").json()
+    assert plan["totals"]["plan_year"] == pytest.approx(97_000)
+
+
+def test_повтор_факта_без_факта_отклоняется(client, loaded):
+    response = client.post("/api/operplan/copy-year",
+                           json={"from_year": 2026, "to_year": 2027, "source": "fact"})
+    assert response.status_code == 422
+    assert "не загружен" in response.json()["detail"]
+
+
+def test_руководитель_повторяет_бюджет_только_своего_цфо(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    response = client.post("/api/operplan/copy-year", json={"from_year": 2026, "to_year": 2027},
+                           headers={"X-User": f"cfo:{hr_id}"})
+    assert response.status_code == 200
+
+    plan = repo.list_rows(2027, layer=operplan.LAYER)
+    assert plan, "строки должны перенестись"
+    assert {r["cfo_name"] for r in plan} == {HR}, "чужие ЦФО переноситься не должны"
+
+
+def test_руководитель_заливает_бюджет_не_стирая_чужие_цфо(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    it_before = [r for r in repo.list_rows(2026, layer=operplan.LAYER)
+                 if r["cfo_name"] == IT]
+
+    response = client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "plan"},
+        files={"file": ("бюджет.xlsx", make_budgets_sheet(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers={"X-User": f"cfo:{hr_id}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["foreign"] == 3       ***REMOVED*** три строки ИТ в файле пропущены
+
+    it_after = [r for r in repo.list_rows(2026, layer=operplan.LAYER)
+                if r["cfo_name"] == IT]
+    assert len(it_after) == len(it_before), "чужие строки не должны стираться"

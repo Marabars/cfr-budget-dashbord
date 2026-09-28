@@ -152,9 +152,14 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
     plan_total = sum(float(r["plan_year"]) for r in plan_rows)
     base_total = sum(float(r["plan_year"]) for r in base_rows)
 
-    fact_all = repo.fact_months(by)
     base_ids = {int(r["id"]) for r in base_rows}
-    base_fact = sum(sum(v) for k, v in fact_all.items() if k in base_ids)
+    ***REMOVED*** факт, загруженный Excel'ем прямо в слой планирования, точнее привязки
+    ***REMOVED*** платежей 1С к строкам: берём его, а на пустом слое падаем на привязку
+    layer_fact = repo.row_fact_months(by, LAYER)
+    base_fact = sum(sum(v) for k, v in layer_fact.items() if k in base_ids)
+    if not base_fact:
+        fact_all = repo.fact_months(by)
+        base_fact = sum(sum(v) for k, v in fact_all.items() if k in base_ids)
 
     return {
         "plan_year": py,
@@ -318,33 +323,48 @@ def add_missing(row_id: int, author: str, to_year: int | None = None) -> dict:
 ***REMOVED*** ---------- повтор бюджета прошлого года ----------
 
 def copy_year(author: str, from_year: int | None = None, to_year: int | None = None,
-              index_pct: float = 0.0, cfo_id: int | None = None) -> dict:
+              index_pct: float = 0.0, cfo_ids: Iterable[int] | None = None,
+              source: str = "plan") -> dict:
     """Копирует строки прошлого года в новый: помесячно 1:1, дубли пропускаются.
 
     index_pct — индексация в процентах (7 = +7%), применяется к суммам месяцев.
     Строка считается дублем, если в целевом году уже есть такая же по ключу
     статья + контрагент + договор + детализация.
+
+    `cfo_ids` ограничивает перенос доступными дирекциями: руководитель повторяет
+    бюджет только своего ЦФО и не задевает чужие. `None` — без ограничения.
+
+    `source`: "plan" — суммы берутся из бюджета прошлого года, "fact" — из факта,
+    загруженного в слой. Факт бывает точнее бюджета, и ЦФО вправе взять его за базу.
     """
     from_year = int(from_year or base_year())
     to_year = int(to_year or plan_year())
     if from_year == to_year:
         raise ValueError("Год-источник и год-приёмник совпадают")
+    if source not in ("plan", "fact"):
+        raise ValueError("Источник переноса — либо бюджет, либо факт")
 
     factor = 1.0 + (float(index_pct) / 100.0)
     if factor <= 0:
         raise ValueError("Индексация не может обнулить бюджет")
 
-    source_rows = _year_rows(from_year, [cfo_id] if cfo_id else None)
+    ids = None if cfo_ids is None else list(cfo_ids)
+    source_rows = _year_rows(from_year, ids)
     if not source_rows:
-        raise ValueError(f"В {from_year} году нет строк для копирования")
+        raise ValueError(f"В {from_year} году нет доступных вам строк для копирования")
+
+    months_all = (repo.row_fact_months(from_year, LAYER) if source == "fact"
+                  else repo.plan_months(from_year, layer=LAYER))
+    if source == "fact" and not months_all:
+        raise ValueError(f"Факт за {from_year} год не загружен — переносить нечего")
 
     ***REMOVED*** Дубли считаем по кратности, а не по множеству: в году легально лежат несколько
     ***REMOVED*** строк с одинаковым ключом (одна статья без контрагента, разные назначения).
     ***REMOVED*** Каждая строка целевого года «гасит» одну исходную — повторный запуск ничего не добавит.
-    quota = Counter(full_key(r) for r in _year_rows(to_year))
-    months_all = repo.plan_months(from_year, layer=LAYER)
+    ***REMOVED*** Круг ЦФО тот же, что у источника, иначе чужая строка съедала бы чужую квоту.
+    quota = Counter(full_key(r) for r in _year_rows(to_year, ids))
 
-    copied = skipped = 0
+    copied = skipped = empty = 0
     total = 0.0
     for row in source_rows:
         key = full_key(row)
@@ -353,18 +373,29 @@ def copy_year(author: str, from_year: int | None = None, to_year: int | None = N
             skipped += 1
             continue
         rid = int(row["id"])
-        _copy_row(dict(row), months_all.get(rid, _empty_months()), to_year, factor, author)
+        months = months_all.get(rid, _empty_months())
+        if source == "fact" and not any(months):
+            empty += 1           ***REMOVED*** по строке не было расхода — в план её не тянем
+            continue
+        row_data = dict(row)
+        if source == "fact":
+            row_data["plan_year"] = sum(months)
+        _copy_row(row_data, months, to_year, factor, author)
         copied += 1
-        total += float(row["plan_year"]) * factor
+        total += sum(months) * factor if source == "fact" else float(row["plan_year"]) * factor
 
+    what = "факта" if source == "fact" else "бюджета"
     note = f"скопировано строк: {copied}, пропущено дублей: {skipped}"
+    if empty:
+        note += f", без сумм: {empty}"
     if index_pct:
         note += f", индексация {index_pct:+.1f}%"
     amount = f"{total:,.2f}".replace(",", " ")
-    db.log(author, "Повтор бюджета прошлого года", f"{from_year} → {to_year}", note,
+    db.log(author, f"Повтор {what} прошлого года", f"{from_year} → {to_year}", note,
            f"Сумма после переноса: {amount} ₽")
-    return {"copied": copied, "skipped": skipped, "total": total,
-            "from_year": from_year, "to_year": to_year, "index_pct": index_pct}
+    return {"copied": copied, "skipped": skipped, "empty": empty, "total": total,
+            "from_year": from_year, "to_year": to_year, "index_pct": index_pct,
+            "source": source}
 
 
 ***REMOVED*** ---------- справочники для форм ----------
@@ -430,17 +461,28 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
 ***REMOVED*** ---------- импорт листа «Бюджеты ЦФО» ----------
 
 def import_budgets(content: bytes, filename: str, year: int, author: str,
-                   replace: bool = True) -> dict:
-    """Заливает лист «Бюджеты ЦФО» в слой планирования за указанный год."""
+                   replace: bool = True, cfo_ids: Iterable[int] | None = None) -> dict:
+    """Заливает лист «Бюджеты ЦФО» в слой планирования за указанный год.
+
+    `cfo_ids` ограничивает заливку доступными дирекциями: руководитель
+    перезаливает только свой бюджет, чужие строки файла пропускаются, чужие
+    бюджеты при замене не стираются.
+    """
     parsed = cfo_budgets.parse(content)
     mismatches = cfo_budgets.check_totals(parsed)
+    allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
 
-    removed = repo.delete_budgets(year, LAYER) if replace else 0
+    removed = repo.delete_budgets(year, LAYER,
+                                  None if allowed is None else sorted(allowed)) if replace else 0
 
     created = 0
     other_label = 0
+    foreign = 0
     for row in parsed["rows"]:
         cfo_id = repo.ensure_cfo(row["cfo"])
+        if allowed is not None and cfo_id not in allowed:
+            foreign += 1
+            continue
         if IT_MARKER in row["cfo"].lower():
             repo.set_detail_source(cfo_id, "detail")
         budget_id = repo.ensure_budget(cfo_id, year, row["budget"], layer=LAYER)
@@ -458,10 +500,70 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
            f"Слой планирования, {year} год")
     return {
         "year": year, "rows": created, "blocks": len(parsed["blocks"]),
-        "removed": removed, "other_cfo_label": other_label,
+        "removed": removed, "other_cfo_label": other_label, "foreign": foreign,
         "total": sum(r["plan_year"] for r in parsed["rows"]),
         "mismatches": mismatches,
     }
+
+
+***REMOVED*** ---------- факт слоя планирования ----------
+
+def _detail_source_of(cfo_id: int) -> str:
+    row = db.query_one("SELECT detail_source FROM cfo WHERE id = ?", (cfo_id,))
+    return (row["detail_source"] if row else "comment") or "comment"
+
+
+def import_fact(content: bytes, filename: str, year: int, author: str,
+                cfo_ids: Iterable[int] | None = None) -> dict:
+    """Заливает факт года из листа того же вида, что и «Бюджеты ЦФО».
+
+    Суммы ложатся на строки плана этого года: ищем строку по ключу
+    статья + контрагент + договор + детализация внутри того же ЦФО. Чего в плане
+    не было — заводим строкой с нулевым бюджетом, иначе расход просто исчез бы;
+    повторная загрузка такую строку уже находит и не задваивает.
+    """
+    parsed = cfo_budgets.parse(content)
+    allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
+
+    ***REMOVED*** многоключевой индекс: строк с одинаковым ключом в году легально несколько
+    index: dict[tuple, list[int]] = {}
+    for row in _year_rows(year, None if allowed is None else sorted(allowed)):
+        index.setdefault((int(row["cfo_id"]),) + full_key(row), []).append(int(row["id"]))
+
+    cleared = repo.clear_layer_fact(year, LAYER) if allowed is None else 0
+    matched = created = foreign = 0
+    total = 0.0
+    for item in parsed["rows"]:
+        cfo_id = repo.ensure_cfo(item["cfo"])
+        if allowed is not None and cfo_id not in allowed:
+            foreign += 1
+            continue
+        keyed = dict(item, detail_source=_detail_source_of(cfo_id))
+        key = (cfo_id,) + full_key(keyed)
+        ids = index.get(key)
+        if ids:
+            row_id = ids.pop(0)
+            matched += 1
+        else:
+            budget_id = repo.ensure_budget(cfo_id, year, item["budget"], layer=LAYER)
+            row_id = repo.create_row(
+                budget_id,
+                {**item, "plan_year": 0.0,
+                 "approver_comment": "Строка заведена загрузкой факта"},
+                months=_empty_months(), author=author, source="fact",
+                row_no=repo.next_row_no(budget_id),
+            )
+            created += 1
+        repo.set_row_fact(row_id, item["months"])
+        total += sum(item["months"])
+
+    repo.create_import("operplan_fact", filename, year, author, matched + created, 0,
+                       note=f"строк: {matched + created}, заведено новых: {created}")
+    db.log(author, "Загрузка факта в слой планирования", filename,
+           f"строк: {matched + created}, заведено новых: {created}",
+           f"{year} год, сумма факта: {total:,.2f} ₽".replace(",", " "))
+    return {"year": year, "rows": matched + created, "matched": matched,
+            "created": created, "foreign": foreign, "cleared": cleared, "total": total}
 
 
 def import_articles(content: bytes, filename: str, author: str) -> dict:

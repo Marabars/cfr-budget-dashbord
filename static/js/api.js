@@ -112,6 +112,14 @@
     createOperplanRow: function (payload, year) {
       return request("POST", "/api/operplan/rows?year=" + year, payload);
     },
+    /* kind: "plan" — бюджет года, "fact" — факт года. Файл один и тот же по виду. */
+    importBudget: function (file, year, kind) {
+      var form = new FormData();
+      form.append("file", file);
+      form.append("year", String(year));
+      form.append("kind", kind || "plan");
+      return request("POST", "/api/operplan/import", form, true);
+    },
     patchRow: function (rowId, payload) {
       return request("PATCH", "/api/rows/" + rowId, payload);
     },

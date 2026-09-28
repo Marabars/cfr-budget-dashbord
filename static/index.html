@@ -206,49 +206,47 @@
       <span class="year-tag" id="op-year-tag-top"></span>
       <span class="sub" id="op-sub"></span>
       <div class="top-spacer"></div>
-      <div class="ctl"><span>Год</span><div class="chips" id="op-year-switch"></div></div>
+      <button class="btn sm" id="op-export">⭳ Выгрузить в Excel</button>
+      <button class="btn sm" id="op-import">⭱ Загрузить из Excel</button>
       <button class="btn sm" id="op-lock"></button>
-      <button class="btn sm" id="op-copy">Повторить бюджет прошлого года</button>
-      <button class="btn sm" id="op-add">+ Строка</button>
-      <button class="btn sm" id="op-edit">✎ Редактировать</button>
     </header>
     <div class="card-body">
       <div class="kpis" id="op-kpis" style="border:1px solid var(--border);border-radius:6px;overflow:hidden"></div>
       <div class="alert" id="op-locked-note" hidden>
-        Внесение изменений в план заблокировано финансовым отделом — таблица доступна только для просмотра.
+        Внесение изменений в план заблокировано — таблица доступна только для просмотра.
       </div>
       <div class="alert" id="op-edit-note" hidden>
         <span id="op-edit-scope"></span>
-        Кликните ячейку и введите значение: <b>Enter</b> — сохранить, <b>Esc</b> — отменить.
-        Красный крестик в колонке <b>№</b> удаляет строку.
+        Правка включена: кликните ячейку и введите значение. <b>Enter</b> — сохранить,
+        <b>Esc</b> — отменить. Красный крестик в колонке <b>№</b> удаляет строку.
         Колонка <b>ИТОГО</b> считается как сумма двенадцати месяцев и не редактируется напрямую.
       </div>
-    </div>
-  </div>
-
-  <div class="card" id="op-copy-form" hidden>
-    <header><h2 id="op-copy-title">Повторить бюджет прошлого года</h2></header>
-    <div class="card-body">
-      <p class="dim" style="margin:0 0 12px">
-        Строки прошлого года переносятся в план вместе с помесячной разбивкой.
-        Строки, которые уже есть в плане (совпадают статья, контрагент, договор и детализация),
-        пропускаются — повторный запуск ничего не задвоит.
-      </p>
-      <div class="form-grid">
-        <div><label class="f">Индексация, %</label>
-          <input class="f-in" id="op-index" placeholder="0" value="0">
+      <div class="alert" id="op-import-form" hidden>
+        <div style="flex:1">
+          <div style="margin-bottom:8px">
+            Файл того же вида, что выгружается кнопкой «Выгрузить в Excel»:
+            шапка <b>Статья оборотов · ЦФО · Контрагент · Договор · Детализация ·
+            Комментарий · ИТОГО · Январь…Декабрь</b>.
+          </div>
+          <div class="row-btns">
+            <label class="f-check"><input type="radio" name="op-imp-kind" value="plan" checked>
+              бюджет (план года)</label>
+            <label class="f-check"><input type="radio" name="op-imp-kind" value="fact">
+              факт года</label>
+            <input type="file" id="op-import-file" accept=".xlsx,.xlsm" class="f-in"
+                   style="max-width:320px">
+            <button class="btn primary sm" id="op-import-run">Загрузить</button>
+            <button class="btn sm" id="op-import-cancel">Отмена</button>
+            <span class="err" id="op-import-note"></span>
+          </div>
         </div>
       </div>
-      <div class="row-btns" style="margin-top:14px">
-        <button class="btn primary" id="op-copy-run">Перенести</button>
-        <button class="btn" id="op-copy-cancel">Отмена</button>
-        <span class="err" id="op-copy-note"></span>
-      </div>
     </div>
   </div>
 
-  <div class="card" id="op-add-form" hidden>
-    <header><h2>Новая строка плана</h2>
+  <!-- Одна панель вместо трёх: поля новой строки и переносы прошлого года. -->
+  <div class="card" id="op-entry">
+    <header><h2 id="op-entry-title">Внесение плановых расходов</h2>
       <span class="sub" id="op-a-hint"></span>
       <div class="top-spacer"></div>
       <label class="f-check"><input type="checkbox" id="op-a-all"> показать все статьи и контрагенты</label>
@@ -277,15 +275,30 @@
       </div>
       <div class="row-btns">
         <button class="btn primary" id="op-a-save">Добавить строку</button>
-        <button class="btn" id="op-a-cancel">Отмена</button>
         <span class="err" id="op-a-err"></span>
       </div>
+
+      <div class="entry-sep"></div>
+      <div class="row-btns" id="op-repeat-row">
+        <span class="sub" id="op-copy-title">Перенести прошлый год в план</span>
+        <div class="ctl"><span>Индексация, %</span>
+          <input class="f-in" id="op-index" placeholder="0" value="0" style="max-width:90px"></div>
+        <button class="btn" id="op-copy-run">Повторить бюджет прошлого года</button>
+        <button class="btn" id="op-fact-run">Повторить факт прошлого года</button>
+        <span class="err" id="op-copy-note"></span>
+      </div>
+      <p class="dim" style="margin:8px 0 0">
+        Строки прошлого года переносятся вместе с помесячной разбивкой. Уже имеющиеся в плане
+        (совпадают статья, контрагент, договор и детализация) пропускаются — повторный запуск
+        ничего не задвоит. Повтор факта берёт суммы не из бюджета прошлого года, а из
+        загруженного факта.
+      </p>
     </div>
   </div>
 
   <div class="card">
     <header>
-      <h2 id="op-rows-title">Строки плана</h2>
+      <h2 id="op-rows-title">Строки бюджета</h2>
       <span class="year-tag" id="op-year-tag"></span>
       <span class="sub" id="op-count"></span>
       <div class="filters" id="op-filters"></div>
@@ -295,14 +308,14 @@
     </header>
     <div class="card-body flush">
       <div class="scroll tall"><table id="t-op">
-        <thead><tr id="op-head"></tr><tr id="op-total" class="total-row"></tr></thead>
+        <thead><tr id="op-head"></tr></thead>
         <tbody></tbody>
       </table></div>
       <div class="legend-inline" style="padding:10px 14px">
-        <span>Шапка и строка <b>ИТОГО</b> закреплены сверху; ИТОГО считается по видимым строкам</span>
+        <span>У каждого года своя строка <b>ИТОГО</b> — годы между собой не складываются</span>
+        <span>Клик по строке года разворачивает и сворачивает его</span>
         <span>Клик по названию ЦФО сворачивает блок</span>
-        <span>Последняя колонка — та же строка в базовом году</span>
-        <span>Удалить строку: <b>✎ Редактировать</b>, затем крестик в колонке №</span>
+        <span>Крестик в колонке № удаляет строку</span>
       </div>
     </div>
   </div>

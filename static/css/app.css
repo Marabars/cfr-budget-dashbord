@@ -28,6 +28,12 @@
   --hm-b1: ***REMOVED***D6F0EC; --hm-b2: ***REMOVED***A5DDD5; --hm-b3: ***REMOVED***5FB3A8; --hm-b4: ***REMOVED***1F8478;
   --hm-r1: ***REMOVED***FBDCDC; --hm-r2: ***REMOVED***F0AEAE; --hm-r3: ***REMOVED***DC7070; --hm-r4: ***REMOVED***B32F2F;
   --hm-ink-3: ***REMOVED***FFFFFF; --hm-ink-4: ***REMOVED***FFFFFF;
+  /* год в работе — светло-оранжевый из тёплой ветки палитры (--serious ***REMOVED***C4703A),
+     прошлый год — нейтральный серый: он только справка */
+  --year-active: ***REMOVED***FDF0E4;
+  --year-active-line: ***REMOVED***C4703A;
+  --year-past: ***REMOVED***ECECEF;
+  --year-past-line: ***REMOVED***9A97A6;
   --shadow: rgba(23, 20, 43, .18);
   --r-sm: 5px; --r: 8px; --r-lg: 12px;
 }
@@ -58,6 +64,10 @@
   --hm-b1: ***REMOVED***1D3D3A; --hm-b2: ***REMOVED***2C5C56; --hm-b3: ***REMOVED***4A8F86; --hm-b4: ***REMOVED***82D6CC;
   --hm-r1: ***REMOVED***4A1F1F; --hm-r2: ***REMOVED***7A2E2E; --hm-r3: ***REMOVED***B04545; --hm-r4: ***REMOVED***F48A8A;
   --hm-ink-3: ***REMOVED***E5E3EB; --hm-ink-4: ***REMOVED***0A0814;
+  --year-active: ***REMOVED***3A2A1C;
+  --year-active-line: ***REMOVED***E09A5F;
+  --year-past: ***REMOVED***23212E;
+  --year-past-line: ***REMOVED***6B6592;
   --shadow: rgba(0, 0, 0, .45);
 }
 
@@ -489,11 +499,18 @@ thead th { border-right-color: var(--axis); }
 .year-tag {
   font-size: 14px; font-weight: 700; letter-spacing: .02em;
   padding: 3px 11px; border-radius: 13px; white-space: nowrap;
-  border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft);
+  border: 1px solid var(--year-active-line); color: var(--year-active-line);
+  background: var(--year-active);
 }
-.year-tag.is-base { border-color: var(--serious); color: var(--serious); background: var(--crit-bg); }
-/* вертикальная черта у заголовка карточки повторяет цвет метки */
-***REMOVED***p-op .card.y-base > header h2::before { background: var(--serious); }
+.year-tag.is-base {
+  border-color: var(--year-past-line); color: var(--muted); background: var(--year-past);
+}
+/* строки прошлого года приглушены: это справка, а не то, что сейчас правят */
+***REMOVED***t-op tr.y-past td { color: var(--ink2); }
+/* разделитель внутри панели внесения расходов */
+.entry-sep { height: 1px; background: var(--border); margin: 16px 0 12px; }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+.btn[disabled]:hover { background: var(--raised); border-color: var(--border); }
 
 
 /* Заморозка двух первых колонок — только для шапки и тела таблицы.
@@ -507,17 +524,16 @@ thead th { border-right-color: var(--axis); }
 ***REMOVED***t-op th:nth-child(2), ***REMOVED***t-op tbody td:nth-child(2) { left: 64px; box-shadow: 1px 0 0 var(--grid); }
 ***REMOVED***t-op thead th:nth-child(1), ***REMOVED***t-op thead th:nth-child(2) { z-index: 3; }
 ***REMOVED***t-op tbody tr:hover td:nth-child(1), ***REMOVED***t-op tbody tr:hover td:nth-child(2) { background: var(--plane); }
-***REMOVED***t-op .total-row .total-label { left: 0; box-shadow: 1px 0 0 var(--grid); }
 ***REMOVED***t-op tr.group td { position: static; }
 
 .total-row td {
-  position: sticky; background: var(--raised); font-weight: 700;
-  border-bottom: 2px solid var(--axis); z-index: 2;
+  background: var(--raised); font-weight: 700;
+  border-bottom: 2px solid var(--axis);
 }
 ***REMOVED***t-op thead th { top: 0; z-index: 4; }
 ***REMOVED***t-op thead th:nth-child(1), ***REMOVED***t-op thead th:nth-child(2) { z-index: 5; }
-***REMOVED***t-op .total-row td { top: var(--op-head-h, 36px); z-index: 3; }
-***REMOVED***t-op .total-row td:nth-child(1) { z-index: 4; }
+/* у строки ИТОГО первая ячейка на пять колонок — заморозку слева ей не считаем */
+***REMOVED***t-op .total-row td { position: static; }
 .total-row .total-label { text-transform: none; letter-spacing: 0; color: var(--ink2); font-weight: 600; }
 .total-row .total-sum { color: var(--accent-2); }
 
@@ -525,12 +541,17 @@ thead th { border-right-color: var(--axis); }
    свёрнута под ним. Клик по строке года разворачивает раздел. */
 ***REMOVED***t-op tr.year-row td {
   position: static; cursor: pointer; padding: 10px 12px;
-  background: var(--accent-soft); font-weight: 700; font-size: 16px;
-  border-top: 2px solid var(--accent); border-bottom: 1px solid var(--border);
+  background: var(--year-active); font-weight: 700; font-size: 16px;
+  border-top: 2px solid var(--year-active-line); border-bottom: 1px solid var(--border);
 }
-***REMOVED***t-op tr.year-row.is-base td { background: var(--crit-bg); border-top-color: var(--serious); }
+***REMOVED***t-op tr.year-row.is-base td {
+  background: var(--year-past); border-top-color: var(--year-past-line);
+}
 ***REMOVED***t-op tr.year-row:hover td { box-shadow: inset 0 0 0 999px var(--hover); }
 ***REMOVED***t-op tr.group td { padding-left: 28px; }
+***REMOVED***t-op tr.total-row td:first-child { padding-left: 28px; }
+/* вертикальная черта у заголовка карточки повторяет цвет года */
+***REMOVED***p-op .card.y-base > header h2::before { background: var(--year-past-line); }
 .year-row .year-tag { margin-left: 10px; font-size: 13px; padding: 1px 9px; }
 .year-row .grp-sum {
   float: right; font-weight: 400; color: var(--ink2); font-variant-numeric: tabular-nums;

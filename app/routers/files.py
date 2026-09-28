@@ -175,6 +175,18 @@ def export_operplan(year: int | None = None, u: auth.User = Depends(user)) -> Re
     return _xlsx(data, f"Оперплан ЦФО {year or cfg['year']}.xlsx")
 
 
+@router.get("/export/budget.xlsx")
+def export_budget(year: int | None = None, u: auth.User = Depends(user)) -> Response:
+    """Бюджет слоя планирования листом «Бюджеты ЦФО» — тем же, каким его заливали.
+
+    Руководителю выгружается только его дирекция. Файл можно поправить в Excel
+    и вернуть обратно кнопкой «Загрузить из Excel».
+    """
+    target = int(year or operplan.plan_year())
+    data = excel.budget_sheet(target, u.visible_cfo_ids())
+    return _xlsx(data, f"Бюджеты ЦФО {target}.xlsx")
+
+
 @router.get("/export/summary.xlsx")
 def export_summary(year: int | None = None, u: auth.User = Depends(user)) -> Response:
     cfg = service.settings()
