@@ -95,6 +95,30 @@
     return { rows: rows, years: years, total: total };
   }
 
+  function byText(a, b) {
+    return String(a || "").localeCompare(String(b || ""), "ru");
+  }
+
+  /* Порядок строк внутри блока ЦФО: статьи по алфавиту, внутри статьи —
+     контрагенты, затем договоры. Одинаковые ключи разводит номер строки,
+     чтобы порядок не плавал между перерисовками.
+
+     Незаполненные строки держим сверху блока: их только что завели кнопкой
+     «+ расход», и уезжать вниз по алфавиту им незачем — их ещё заполняют.
+
+     Сортируем на клиенте: выгрузка в Excel повторяет раскладку исходного
+     листа, и менять там порядок нельзя — файл возвращают загрузкой обратно. */
+  function sortRows(rows) {
+    return rows.slice().sort(function (a, b) {
+      var emptyA = !(a.article || "").length, emptyB = !(b.article || "").length;
+      if (emptyA !== emptyB) return emptyA ? -1 : 1;
+      return byText(a.article, b.article)
+        || byText(a.counterparty, b.counterparty)
+        || byText(a.contract, b.contract)
+        || (a.row_no || 0) - (b.row_no || 0);
+    });
+  }
+
   /* Под активным фильтром пустые заголовки дирекций прячем: фильтр — это поиск
      по уже внесённому, и пустые блоки только мешали бы читать результат. */
   function filtering() {
@@ -622,8 +646,7 @@
         plan_year: 0, months: [], placeholder: true });
     });
     return blocks.sort(function (a, b) {
-      return a.cfo_name.localeCompare(b.cfo_name, "ru")
-        || a.budget_name.localeCompare(b.budget_name, "ru");
+      return byText(a.cfo_name, b.cfo_name) || byText(a.budget_name, b.budget_name);
     });
   }
 
@@ -682,7 +705,9 @@
       var yearRows = [];
       var nodes = [];
       blocksOf(sec, canEdit).forEach(function (block) {
-        var rows = block.rows.filter(function (row) { return passes(row, block.cfo_name); });
+        var rows = sortRows(block.rows.filter(function (row) {
+          return passes(row, block.cfo_name);
+        }));
         // заголовок пустой дирекции держим ради кнопки «+ расход», но не под фильтром
         if (!rows.length && !(block.placeholder && !filtering())) return;
         var sum = rows.reduce(function (acc, row) { return acc + row.plan_year; }, 0);

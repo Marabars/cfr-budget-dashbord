@@ -75,12 +75,13 @@ const REFS = {
 /** Поднимает вкладку в jsdom. Возвращает окно, журнал вызовов API и помощники.
     cfoList задаёт доступные дирекции: от их числа зависит, спросит ли кнопка,
     куда добавлять строку. */
-async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }]) {
+async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra = []) {
   let added = null;                       // строка, заведённая кнопкой «+ расход»
   const calls = [];
 
   const view = (year) => {
-    const rows = year === 2027 ? [FILLED, ...(added ? [added] : [])] : [BASE];
+    const rows = year === 2027
+      ? [FILLED, ...extra, ...(added ? [added] : [])] : [BASE];
     const total = rows.reduce((acc, r) => acc + r.plan_year, 0);
     return {
       year, plan_year_no: 2027, base_year_no: 2026, years: [2026, 2027],
@@ -238,6 +239,39 @@ describe("вкладка «Бюджет»: таблица", () => {
     assert.ok(lock.classList.contains("icon"));
     assert.equal(lock.textContent, "🔓", "план открыт");
     assert.match(lock.title, /для всех/, "замок общий, в отличие от карандаша");
+  });
+});
+
+describe("вкладка «Бюджет»: порядок строк", () => {
+  /* Строки одной статьи должны идти вместе, статьи — по алфавиту, внутри
+     статьи — контрагенты. Заголовков у статей нет, речь только о порядке. */
+  const row = (id, article, counterparty) => ({
+    ...FILLED, id, row_no: id, article, counterparty, contract: "",
+  });
+
+  let t;
+  before(async () => {
+    t = await mount([{ id: 1, name: IT }], [
+      row(31, "4430_Разработка", "Софт ООО"),
+      row(32, "4411_Оборудование", "Барс ООО"),
+      row(33, "4411_Оборудование", "Вектор ООО"),
+    ]);
+  });
+
+  it("собирает статьи вместе и сортирует их по алфавиту", () => {
+    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]")
+      .map((tr) => Number(tr.getAttribute("data-id")));
+    // 10 и 32, 33 — «4411_Оборудование» (Астра, Барс, Вектор), затем 31 — «4430_Разработка»
+    assert.deepEqual(shown, [10, 32, 33, 31]);
+  });
+
+  it("держит незаполненную строку сверху блока", async () => {
+    t.click(t.$("***REMOVED***op-add-row"));
+    await settle(t.window, 60);
+    const first = t.$("***REMOVED***t-op tbody tr[data-id]");
+    assert.equal(first.getAttribute("data-id"), "99",
+      "новую строку ещё заполняют — по алфавиту ей уезжать некуда");
+    assert.ok(first.classList.contains("is-new"));
   });
 });
 
