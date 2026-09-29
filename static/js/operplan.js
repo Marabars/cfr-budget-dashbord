@@ -845,10 +845,9 @@
     note.textContent = locked ? "план закрыт" : "";
     note.hidden = !state.data.is_fin || !locked;
 
+    /* Плашки-инструкции под шапкой нет: правила правки живут в «ℹ Инфо»,
+       а состояние видно по карандашу и по кнопке «Сохранить». */
     document.getElementById("op-locked-note").hidden = !locked;
-    document.getElementById("op-edit-note").hidden = !state.editing;
-    document.getElementById("op-edit-scope").textContent = state.data.is_fin
-      ? "Правка плана по всем ЦФО." : "Правка плана вашего ЦФО.";
 
     /* Переносы прошлого года переехали в шапку карточки строк; под замком
        гасим их, а кнопку «+ расход» в заголовках блоков render просто не рисует. */

@@ -197,7 +197,7 @@ describe("вкладка «Бюджет»: таблица", () => {
     assert.equal(row.querySelectorAll("td[contenteditable]").length, 0,
       "любой клик по ячейке не должен начинать правку");
     assert.equal(t.$("***REMOVED***op-save").hidden, true, "сохранять нечего");
-    assert.equal(t.$("***REMOVED***op-edit-note").hidden, true);
+    assert.equal(t.$("***REMOVED***op-edit-note"), null, "плашки-инструкции на вкладке нет");
   });
 
   it("даёт карандаш, который открывает правку", () => {
@@ -210,7 +210,6 @@ describe("вкладка «Бюджет»: таблица", () => {
     assert.ok(row.querySelector("td[contenteditable]"), "ячейки открылись");
     assert.equal(t.$("***REMOVED***op-save").hidden, false, "появилась кнопка сохранения");
     assert.equal(t.$("***REMOVED***op-edit-mode").textContent, "✎̸", "карандаш перечёркнут");
-    assert.equal(t.$("***REMOVED***op-edit-note").hidden, false, "плашка объясняет правила");
   });
 
   it("«Сохранить» закрывает правку обратно", async () => {
