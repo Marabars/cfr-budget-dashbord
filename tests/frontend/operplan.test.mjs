@@ -142,6 +142,9 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }]) {
     click: (node) => node.dispatchEvent(new window.MouseEvent("click", { bubbles: true })),
     fire: (node, type) => node.dispatchEvent(new window.Event(type)),
     focus: (node) => node.dispatchEvent(new window.FocusEvent("focus")),
+    // обработчик висит на document в фазе перехвата, поэтому всплытие не нужно
+    scrollTable: () => window.document.querySelector(".scroll.tall")
+      .dispatchEvent(new window.Event("scroll")),
     styleOf: (node) => window.getComputedStyle(node),
     lastPatch: (field) => calls.filter(
       (c) => c.kind === "patch" && c.payload[field] !== undefined).pop(),
@@ -172,6 +175,15 @@ describe("вкладка «Бюджет»: таблица", () => {
     assert.equal(button.previousElementSibling.id, "op-collapse",
       "стоит справа от «Свернуть все»");
     assert.equal(button.disabled, false, "правка разрешена — кнопка активна");
+  });
+
+  it("показывает замок правки компактной иконкой", () => {
+    const lock = t.$("***REMOVED***op-lock");
+    assert.equal(lock.hidden, false, "финотдел замок видит");
+    assert.ok(lock.classList.contains("icon"), "кнопка-иконка, не строка текста");
+    assert.equal(lock.textContent, "✎", "правка разрешена — карандаш целый");
+    assert.match(lock.title, /заблокировать/, "что будет по нажатию — в подсказке");
+    assert.equal(lock.getAttribute("aria-pressed"), "false");
   });
 
   it("заполненную строку правит текстом, без полей ввода", () => {
@@ -271,6 +283,45 @@ describe("вкладка «Бюджет»: новая строка", () => {
     const shown = Array.from(pop.querySelectorAll(".copt")).map((n) => n.textContent);
     // строку заводили в ДУП — в списке статьи ДУП, а не соседней дирекции
     assert.deepEqual(shown, ["4109_Обучение", "4110_Соцрасходы"]);
+  });
+
+  it("не захлопывает список при прокрутке таблицы", () => {
+    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    t.focus(article);
+    assert.ok(t.$(".fpop-fixed:not([hidden])"), "список раскрыт");
+    /* Клик по полю у нижнего края сам заставляет браузер подкрутить таблицу.
+       Если гасить список на любую прокрутку, он захлопывается сразу после
+       открытия — именно это и выглядело как «подсказки не показываются». */
+    t.scrollTable();
+    assert.ok(t.$(".fpop-fixed:not([hidden])"), "список остался и переложился");
+  });
+
+  it("закрывает список, когда поле ушло из окна", () => {
+    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    t.focus(article);
+    assert.ok(t.$(".fpop-fixed:not([hidden])"));
+    // уводим поле далеко выше окна: висеть списку в пустоте незачем
+    article.getBoundingClientRect = () => ({
+      top: -900, bottom: -880, left: 0, right: 200, width: 200, height: 20,
+    });
+    t.scrollTable();
+    assert.equal(t.$(".fpop-fixed:not([hidden])"), null);
+  });
+
+  it("снова раскрывает список, когда возвращаются в ту же ячейку", () => {
+    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    t.focus(article);
+    assert.ok(t.$(".fpop-fixed:not([hidden])"), "список раскрыт");
+
+    // уходим со строки: клик мимо гасит списки
+    t.window.document.body.dispatchEvent(new t.window.MouseEvent("click", { bubbles: true }));
+    assert.equal(t.$(".fpop-fixed:not([hidden])"), null, "ушли — список закрыт");
+
+    // и возвращаемся: список должен раскрыться снова, а не молчать
+    t.focus(article);
+    const pop = t.$(".fpop-fixed:not([hidden])");
+    assert.ok(pop, "вернулись — список снова раскрыт");
+    assert.ok(pop.querySelectorAll(".copt").length > 0, "и в нём есть значения");
   });
 
   it("убирает чужой список, когда фокус уходит в ячейку без списка", () => {

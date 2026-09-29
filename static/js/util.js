@@ -293,6 +293,13 @@
       }
     }
 
+    if (fixed) {
+      /* Список приклеен к полю: пересчитать его позицию должен уметь и общий
+         обработчик прокрутки, поэтому оставляем ему способ это сделать. */
+      pop.reposition = place;
+      pop.anchor = input;
+    }
+
     function open(query) {
       closeAllFilters();
       query = query || "";
@@ -333,12 +340,24 @@
   }
 
   document.addEventListener("click", closeAllFilters);
-  /* Прокрутка уводит поле из-под списка, посчитанного по координатам окна:
-     такие списки закрываем. Ловим в фазе перехвата — скроллится контейнер
+  /* Прокрутка уводит поле из-под списка, посчитанного по координатам окна.
+     Закрывать его нельзя: клик по полю внизу таблицы сам заставляет браузер
+     подкрутить контейнер, и список захлопывался бы сразу после открытия.
+     Поэтому перекладываем список за полем, а закрываем только когда поле
+     совсем ушло из окна. Ловим в фазе перехвата: скроллится контейнер
      таблицы, а не документ, и всплытия scroll не будет. */
   document.addEventListener("scroll", function () {
     Array.prototype.forEach.call(document.querySelectorAll(".fpop-fixed"),
-      function (pop) { pop.hidden = true; });
+      function (pop) {
+        if (pop.hidden) return;
+        if (!pop.reposition) { pop.hidden = true; return; }   // меню без привязки
+        var r = pop.anchor.getBoundingClientRect();
+        if (r.bottom < -4 || r.top > window.innerHeight + 4) {
+          pop.hidden = true;
+          return;
+        }
+        pop.reposition();
+      });
   }, true);
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") closeAllFilters();

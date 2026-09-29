@@ -736,13 +736,17 @@
     var editable = sectionEditable(state.data);
     state.editing = editable;
 
+    /* Замок — одна иконка: подпись занимала полшапки, а состояние и так видно
+       по цвету, по перечёркнутому карандашу и по плашке под шапкой. */
     var button = document.getElementById("op-lock");
     button.hidden = !state.data.is_fin;
-    button.textContent = locked ? "✎̸ Правка заблокирована" : "✎ Правка разрешена";
+    button.textContent = locked ? "✎̸" : "✎";
     button.classList.toggle("locked", locked);
+    button.setAttribute("aria-pressed", locked ? "true" : "false");
     button.title = locked
       ? "Правка плана " + state.data.plan_year_no + " закрыта. Нажмите, чтобы разрешить."
-      : "Нажмите, чтобы заблокировать правку плана " + state.data.plan_year_no;
+      : "Правка плана " + state.data.plan_year_no
+        + " разрешена. Нажмите, чтобы заблокировать.";
 
     document.getElementById("op-locked-note").hidden = !locked;
     document.getElementById("op-edit-note").hidden = !editable;

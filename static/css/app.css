@@ -599,4 +599,7 @@ table.editing td[contenteditable]:focus {
 }
 td.saving { opacity: .55; }
 .btn.locked { border-color: var(--critical); color: var(--critical); font-weight: 600; }
+/* Кнопка-иконка: замок правки. Подпись у неё в title — в шапке и без того тесно. */
+.btn.icon { padding: 4px 10px; font-size: 17px; line-height: 1.2; }
+.btn.icon.locked { background: var(--accent-soft); }
 .batt-note { font-size: 13px; color: var(--ink2); margin-top: 3px; }
