@@ -265,6 +265,36 @@ describe("вкладка «Бюджет»: порядок строк", () => {
     assert.deepEqual(shown, [10, 32, 33, 31]);
   });
 
+  it("нумерует строки по порядку показа, а не по номеру из файла", () => {
+    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => ({
+      id: Number(tr.getAttribute("data-id")),
+      no: tr.querySelector(".no-cell span").textContent,
+    }));
+    /* В строках лежат row_no 10, 31, 32, 33 — в отсортированной таблице они
+       выглядели вперемешку, поэтому в колонке № стоит позиция. */
+    assert.deepEqual(shown.map((r) => r.no), ["1", "2", "3", "4"]);
+    assert.deepEqual(shown.map((r) => r.id), [10, 32, 33, 31]);
+  });
+
+  it("не меняет нумерацию от фильтра", () => {
+    const chip = t.$$("***REMOVED***op-filters .fwrap")[1];        // фильтр «Статья оборотов»
+    t.click(chip.querySelector(".fbtn"));
+    const option = Array.from(chip.querySelectorAll(".fopt"))
+      .find((label) => label.textContent.indexOf("4430_Разработка") >= 0);
+    const box = option.querySelector("input");
+    box.checked = true;
+    t.fire(box, "change");
+
+    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => ({
+      id: Number(tr.getAttribute("data-id")),
+      no: tr.querySelector(".no-cell span").textContent,
+    }));
+    assert.deepEqual(shown, [{ id: 31, no: "4" }],
+      "строка сохраняет свой номер в блоке, а не получает первый");
+    box.checked = false;
+    t.fire(box, "change");
+  });
+
   it("держит незаполненную строку сверху блока", async () => {
     t.click(t.$("***REMOVED***op-add-row"));
     await settle(t.window, 60);

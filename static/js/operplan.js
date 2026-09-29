@@ -273,7 +273,7 @@
 
   /* editable считается по году строки, а не по году в фокусе: замок стоит на год,
      и раскрытый базовый год может быть закрыт для правки, когда плановый открыт. */
-  function rowNode(row, cfoName, canEdit) {
+  function rowNode(row, cfoName, canEdit, position) {
     var tr = U.el("tr", { "data-id": row.id });
     var editable = canEdit;
     var unfinished = isDraft(row);
@@ -296,8 +296,12 @@
         })
         .catch(function (e) { U.toast(e.message, "error"); });
     };
+    /* В колонке № — позиция строки в блоке, а не номер из исходного файла:
+       таблица отсортирована по статьям, и файловые номера в ней выглядели
+       вперемешку. Настоящие номера проставляются, когда план утверждают
+       замком, — тогда позиция и номер совпадают. */
     tr.appendChild(U.el("td", {}, [U.el("div", { class: "no-cell" }, [
-      U.el("span", { text: row.row_no || "•" }),
+      U.el("span", { text: position || "•" }),
       editable ? del : null
     ])]));
 
@@ -705,6 +709,12 @@
       var yearRows = [];
       var nodes = [];
       blocksOf(sec, canEdit).forEach(function (block) {
+        /* Позицию считаем по всему блоку, а не по отфильтрованному остатку:
+           иначе номера менялись бы от каждого фильтра. */
+        var position = {};
+        sortRows(block.rows).forEach(function (row, index) {
+          position[row.id] = index + 1;
+        });
         var rows = sortRows(block.rows.filter(function (row) {
           return passes(row, block.cfo_name);
         }));
@@ -719,7 +729,7 @@
         });
         if (state.collapsed[block.budget_id]) return;
         rows.forEach(function (row) {
-          var node = rowNode(row, block.cfo_name, editable);
+          var node = rowNode(row, block.cfo_name, editable, position[row.id]);
           if (year !== state.data.plan_year_no) node.classList.add("y-past");
           nodes.push(node);
         });

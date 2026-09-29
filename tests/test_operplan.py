@@ -970,3 +970,63 @@ def test_руководитель_не_заводит_строку_в_чужом
                            json={"cfo_id": it_id, "article": ""},
                            headers={"X-User": f"cfo:{hr_id}"})
     assert response.status_code == 403
+
+
+***REMOVED*** ---------- нумерация строк ----------
+
+def test_замок_закрепляет_нумерацию_по_порядку_таблицы(client, planned):
+    """До утверждения номера тянутся из файла; замок проставляет их подряд."""
+    it_id = repo.ensure_cfo(IT)
+    before = [r for r in repo.list_rows(2027, layer=operplan.LAYER)
+              if r["cfo_id"] == it_id]
+    assert before, "в плане должны быть строки ИТ"
+
+    result = client.post("/api/operplan/lock", json={"year": 2027, "locked": True}).json()
+    assert result["renumbered"] >= 0
+
+    after = repo.list_rows(2027, layer=operplan.LAYER)
+    by_budget: dict[int, list[dict]] = {}
+    for row in after:
+        by_budget.setdefault(int(row["budget_id"]), []).append(row)
+
+    for rows in by_budget.values():
+        ordered = sorted(rows, key=lambda r: int(r["row_no"]))
+        assert [int(r["row_no"]) for r in ordered] == list(range(1, len(rows) + 1)), \
+            "внутри бюджета номера должны идти подряд с единицы"
+        keys = [((r["article"] or "").lower(), (r["counterparty"] or "").lower())
+                for r in ordered]
+        assert keys == sorted(keys), "и совпадать с порядком таблицы: статья, контрагент"
+
+
+def test_снятие_замка_нумерацию_не_трогает(client, planned):
+    client.post("/api/operplan/lock", json={"year": 2027, "locked": True})
+    numbers = {int(r["id"]): int(r["row_no"])
+               for r in repo.list_rows(2027, layer=operplan.LAYER)}
+
+    result = client.post("/api/operplan/lock", json={"year": 2027, "locked": False}).json()
+    assert result["renumbered"] == 0
+    assert {int(r["id"]): int(r["row_no"])
+            for r in repo.list_rows(2027, layer=operplan.LAYER)} == numbers
+
+
+def test_перенумерация_не_трогает_другой_год_и_слой(client, planned):
+    base_before = {int(r["id"]): r["row_no"]
+                   for r in repo.list_rows(2026, layer=operplan.LAYER)}
+    main_before = {int(r["id"]): r["row_no"] for r in repo.list_rows(2026)}
+
+    client.post("/api/operplan/lock", json={"year": 2027, "locked": True})
+
+    assert {int(r["id"]): r["row_no"]
+            for r in repo.list_rows(2026, layer=operplan.LAYER)} == base_before
+    assert {int(r["id"]): r["row_no"] for r in repo.list_rows(2026)} == main_before
+
+
+def test_пустая_строка_при_перенумерации_идёт_первой(client, planned):
+    """Незаполненную строку таблица держит сверху блока — номер должен совпасть."""
+    it_id = repo.ensure_cfo(IT)
+    row_id = client.post("/api/operplan/rows?year=2027",
+                         json={"cfo_id": it_id, "budget_name": "Бюджет развития",
+                               "article": ""}).json()["id"]
+
+    client.post("/api/operplan/lock", json={"year": 2027, "locked": True})
+    assert int(repo.get_row(row_id)["row_no"]) == 1

@@ -143,6 +143,46 @@ def get_row(row_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def _order_key(row: dict) -> tuple:
+    """Порядок строк внутри бюджета: статья, контрагент, договор.
+
+    Повторяет сортировку таблицы на вкладке, чтобы закреплённые номера совпали
+    с тем, что человек видел на экране. «ё» приводим к «е»: по кодам символов
+    она встала бы перед «а», а в русском алфавите идёт за «е» — иначе порядок
+    в базе и на экране разошёлся бы.
+    """
+    def text(value: Any) -> str:
+        return str(value or "").strip().lower().replace("ё", "е")
+
+    article = text(row.get("article"))
+    return (0 if not article else 1, article, text(row.get("counterparty")),
+            text(row.get("contract")), int(row.get("row_no") or 0), int(row["id"]))
+
+
+def renumber_rows(year: int, layer: str) -> int:
+    """Проставляет номера строк подряд внутри каждого бюджета года.
+
+    Вызывается, когда план утверждают замком: до этого номера тянутся из
+    исходного файла и в отсортированной таблице выглядят вперемешку. Возвращает
+    число перенумерованных строк.
+    """
+    rows = list_rows(year, layer=layer)
+    by_budget: dict[int, list[dict]] = {}
+    for row in rows:
+        by_budget.setdefault(int(row["budget_id"]), []).append(row)
+
+    changed = 0
+    with db.tx() as conn:
+        for items in by_budget.values():
+            for number, row in enumerate(sorted(items, key=_order_key), start=1):
+                if int(row.get("row_no") or 0) == number:
+                    continue
+                conn.execute("UPDATE budget_row SET row_no = ? WHERE id = ?",
+                             (number, int(row["id"])))
+                changed += 1
+    return changed
+
+
 def next_row_no(budget_id: int) -> int:
     row = db.query_one(
         "SELECT COALESCE(MAX(row_no), 0) + 1 AS n FROM budget_row "

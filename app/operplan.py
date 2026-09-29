@@ -39,10 +39,20 @@ def is_locked(year: int) -> bool:
 
 
 def set_lock(year: int, locked: bool, author: str) -> dict:
+    """Замок на год. Закрывая план, заодно закрепляем нумерацию строк.
+
+    До утверждения номера тянутся из исходного файла, а таблица отсортирована
+    по статьям — номера идут вперемешку и читать их бессмысленно. Поэтому на
+    экране показывается позиция строки, а в базу номера проставляются один раз,
+    когда план утверждают: дальше номер строки уже что-то значит.
+    """
     db.set_setting(f"operplan_lock:{year}", "1" if locked else "0")
+    numbered = repo.renumber_rows(year, LAYER) if locked else 0
     db.log(author, "Блокировка внесения изменений", f"Оперплан {year}",
-           "внесение изменений заблокировано" if locked else "внесение изменений разрешено")
-    return {"year": year, "locked": locked}
+           ("внесение изменений заблокировано" if locked
+            else "внесение изменений разрешено")
+           + (f"; нумерация закреплена, строк: {numbered}" if numbered else ""))
+    return {"year": year, "locked": locked, "renumbered": numbered}
 
 
 def can_edit(user, year: int, cfo_id: int | None = None) -> bool:
