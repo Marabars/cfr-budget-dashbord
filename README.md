@@ -151,8 +151,17 @@ python scripts/check_real_file.py "<путь к файлу.xlsx>"
 ***REMOVED******REMOVED*** Тесты
 
 ```bash
-python -m pytest -q
+python -m pytest -q                              ***REMOVED*** сервер
+npm install && npm test                          ***REMOVED*** интерфейс (нужен jsdom)
+node --test tests/frontend/operplan.test.mjs     ***REMOVED*** то же, если проект лежит на сетевом диске
 ```
+
+Интерфейс проверяется отдельно: `npm test` поднимает `static/index.html` и `js/*`
+в jsdom, подменяет `window.API` заглушками и делает то, что делают руками —
+жмёт «+ расход» в заголовке дирекции, выбирает статью из списка, вписывает сумму
+и смотрит раскладку по месяцам. Без этого внесение расхода не покрыто ничем:
+pytest знает только про сервер. На сетевом диске `npm test` не работает —
+`cmd.exe` не умеет UNC-пути, поэтому там запускают `node --test` напрямую.
 
 112 тестов: расчётные формулы и перенос остатка, импортёры Excel (шапка не в первой
 строке, съехавшие колонки, итоговые строки, дубли платежей), API (лимиты,
@@ -183,6 +192,7 @@ static/             интерфейс: index.html, css/app.css, js/*
 docs/               спецификация и HTML-макет
 scripts/            первичная загрузка, проверка парсера
 tests/              pytest
+tests/frontend/     тесты интерфейса в jsdom (node --test)
 ```
 
 ***REMOVED******REMOVED*** Справочник ЦФО

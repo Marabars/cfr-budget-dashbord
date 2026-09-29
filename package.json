@@ -1,0 +1,12 @@
+{
+  "name": "cfo-budget-dashboard-frontend-tests",
+  "private": true,
+  "description": "Тесты интерфейса: вкладки поднимаются в jsdom, сеть заменена заглушками. Само приложение — Python/FastAPI, сборки у фронтенда нет.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/frontend/*.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^27.0.0"
+  }
+}
