@@ -6,7 +6,7 @@ from fastapi.responses import Response
 
 from app import auth, db, operplan, repo
 from app.exporters import excel
-from app.models import CopyYearIn, LockIn, OperplanRowIn
+from app.models import CopyYearIn, LockIn, OperplanRowIn, YearIn
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_UPLOAD_MB = 40
@@ -67,6 +67,22 @@ def copy_year(payload: CopyYearIn, u: auth.User = Depends(user)) -> dict:
                                   source=payload.source)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/renumber")
+def renumber(payload: YearIn, u: auth.User = Depends(user)) -> dict:
+    """Закрепить нумерацию строк — кнопка «Сохранить» на вкладке.
+
+    Круг ЦФО задаёт сервер: руководитель переставит номера только в своих
+    блоках, чужие останутся как были.
+    """
+    year = int(payload.year or operplan.plan_year())
+    try:
+        operplan.require_plan_year(year)
+        operplan.require_edit(u, year)
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    return operplan.renumber(year, u.name, u.visible_cfo_ids())
 
 
 ***REMOVED*** ---------- Excel ----------

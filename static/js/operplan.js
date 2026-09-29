@@ -873,16 +873,26 @@
     render();
   }
 
-  /* «Сохранить» дописывает начатую ячейку и выключает правку. Каждая ячейка уходит
-     на сервер, как только её покидают, поэтому кнопке остаётся снять фокус —
-     это и есть сохранение начатого — и перечитать год. */
+  /* «Сохранить» дописывает начатую ячейку, закрепляет нумерацию и выключает
+     правку. Каждая ячейка уходит на сервер, как только её покидают, поэтому
+     кнопке остаётся снять фокус — это и есть сохранение начатого, — проставить
+     номера строк по порядку таблицы и перечитать год. */
   function saveAndClose() {
     var active = document.activeElement;
     if (active && active.blur) active.blur();
     U.closePopups();
+    var button = document.getElementById("op-save");
+    button.disabled = true;
     window.setTimeout(function () {
       state.editMode = false;
-      reloadAll().then(function () { U.toast("Изменения сохранены"); });
+      API.operplanRenumber(state.data.plan_year_no)
+        .catch(function (e) { U.toast("Нумерация: " + e.message, "error"); })
+        .then(function () {
+          return reloadAll().then(function () {
+            button.disabled = false;
+            U.toast("Изменения сохранены");
+          });
+        });
     }, 60);
   }
 

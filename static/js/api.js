@@ -109,6 +109,9 @@
     addMissingRow: function (rowId, year) {
       return request("POST", "/api/operplan/missing/" + rowId + "/add?year=" + year);
     },
+    operplanRenumber: function (year) {
+      return request("POST", "/api/operplan/renumber", { year: year });
+    },
     createOperplanRow: function (payload, year) {
       return request("POST", "/api/operplan/rows?year=" + year, payload);
     },

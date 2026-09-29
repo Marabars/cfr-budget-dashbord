@@ -974,15 +974,10 @@ def test_руководитель_не_заводит_строку_в_чужом
 
 ***REMOVED*** ---------- нумерация строк ----------
 
-def test_замок_закрепляет_нумерацию_по_порядку_таблицы(client, planned):
-    """До утверждения номера тянутся из файла; замок проставляет их подряд."""
-    it_id = repo.ensure_cfo(IT)
-    before = [r for r in repo.list_rows(2027, layer=operplan.LAYER)
-              if r["cfo_id"] == it_id]
-    assert before, "в плане должны быть строки ИТ"
-
-    result = client.post("/api/operplan/lock", json={"year": 2027, "locked": True}).json()
-    assert result["renumbered"] >= 0
+def test_сохранить_закрепляет_нумерацию_по_порядку_таблицы(client, planned):
+    """До «Сохранить» номера тянутся из файла; кнопка проставляет их подряд."""
+    result = client.post("/api/operplan/renumber", json={"year": 2027}).json()
+    assert result["renumbered"] > 0
 
     after = repo.list_rows(2027, layer=operplan.LAYER)
     by_budget: dict[int, list[dict]] = {}
@@ -998,15 +993,48 @@ def test_замок_закрепляет_нумерацию_по_порядку_
         assert keys == sorted(keys), "и совпадать с порядком таблицы: статья, контрагент"
 
 
-def test_снятие_замка_нумерацию_не_трогает(client, planned):
-    client.post("/api/operplan/lock", json={"year": 2027, "locked": True})
+def test_повторное_сохранение_ничего_не_переставляет(client, planned):
+    client.post("/api/operplan/renumber", json={"year": 2027})
     numbers = {int(r["id"]): int(r["row_no"])
                for r in repo.list_rows(2027, layer=operplan.LAYER)}
 
-    result = client.post("/api/operplan/lock", json={"year": 2027, "locked": False}).json()
-    assert result["renumbered"] == 0
+    again = client.post("/api/operplan/renumber", json={"year": 2027}).json()
+    assert again["renumbered"] == 0, "порядок уже закреплён — менять нечего"
     assert {int(r["id"]): int(r["row_no"])
             for r in repo.list_rows(2027, layer=operplan.LAYER)} == numbers
+
+
+def test_замок_нумерацию_не_трогает(client, planned):
+    numbers = {int(r["id"]): r["row_no"]
+               for r in repo.list_rows(2027, layer=operplan.LAYER)}
+    result = client.post("/api/operplan/lock", json={"year": 2027, "locked": True}).json()
+    assert "renumbered" not in result
+    assert {int(r["id"]): r["row_no"]
+            for r in repo.list_rows(2027, layer=operplan.LAYER)} == numbers
+
+
+def test_руководитель_нумерует_только_свои_блоки(client, planned):
+    hr_id = repo.ensure_cfo(HR)
+    it_before = {int(r["id"]): r["row_no"]
+                 for r in repo.list_rows(2027, layer=operplan.LAYER)
+                 if r["cfo_name"] == IT}
+
+    response = client.post("/api/operplan/renumber", json={"year": 2027},
+                           headers={"X-User": f"cfo:{hr_id}"})
+    assert response.status_code == 200
+
+    assert {int(r["id"]): r["row_no"]
+            for r in repo.list_rows(2027, layer=operplan.LAYER)
+            if r["cfo_name"] == IT} == it_before, "чужие номера трогать нельзя"
+    hr_numbers = sorted(int(r["row_no"]) for r in repo.list_rows(2027, layer=operplan.LAYER)
+                        if r["cfo_name"] == HR)
+    assert hr_numbers == list(range(1, len(hr_numbers) + 1))
+
+
+def test_нумерация_прошлого_года_отклоняется(client, planned):
+    response = client.post("/api/operplan/renumber", json={"year": 2026})
+    assert response.status_code == 403
+    assert "база для сравнения" in response.json()["detail"]
 
 
 def test_перенумерация_не_трогает_другой_год_и_слой(client, planned):
@@ -1014,7 +1042,7 @@ def test_перенумерация_не_трогает_другой_год_и_�
                    for r in repo.list_rows(2026, layer=operplan.LAYER)}
     main_before = {int(r["id"]): r["row_no"] for r in repo.list_rows(2026)}
 
-    client.post("/api/operplan/lock", json={"year": 2027, "locked": True})
+    client.post("/api/operplan/renumber", json={"year": 2027})
 
     assert {int(r["id"]): r["row_no"]
             for r in repo.list_rows(2026, layer=operplan.LAYER)} == base_before
@@ -1028,5 +1056,5 @@ def test_пустая_строка_при_перенумерации_идёт_п
                          json={"cfo_id": it_id, "budget_name": "Бюджет развития",
                                "article": ""}).json()["id"]
 
-    client.post("/api/operplan/lock", json={"year": 2027, "locked": True})
+    client.post("/api/operplan/renumber", json={"year": 2027})
     assert int(repo.get_row(row_id)["row_no"]) == 1

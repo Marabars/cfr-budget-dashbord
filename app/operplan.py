@@ -39,20 +39,26 @@ def is_locked(year: int) -> bool:
 
 
 def set_lock(year: int, locked: bool, author: str) -> dict:
-    """Замок на год. Закрывая план, заодно закрепляем нумерацию строк.
-
-    До утверждения номера тянутся из исходного файла, а таблица отсортирована
-    по статьям — номера идут вперемешку и читать их бессмысленно. Поэтому на
-    экране показывается позиция строки, а в базу номера проставляются один раз,
-    когда план утверждают: дальше номер строки уже что-то значит.
-    """
     db.set_setting(f"operplan_lock:{year}", "1" if locked else "0")
-    numbered = repo.renumber_rows(year, LAYER) if locked else 0
     db.log(author, "Блокировка внесения изменений", f"Оперплан {year}",
-           ("внесение изменений заблокировано" if locked
-            else "внесение изменений разрешено")
-           + (f"; нумерация закреплена, строк: {numbered}" if numbered else ""))
-    return {"year": year, "locked": locked, "renumbered": numbered}
+           "внесение изменений заблокировано" if locked else "внесение изменений разрешено")
+    return {"year": year, "locked": locked}
+
+
+def renumber(year: int, author: str, cfo_ids: Iterable[int] | None = None) -> dict:
+    """Закрепляет нумерацию строк — вызывается кнопкой «Сохранить».
+
+    Пока правку не закончили, в колонке № показывается позиция строки: таблица
+    отсортирована по статьям, а номера тянутся из исходного файла и идут
+    вперемешку. По «Сохранить» номера проставляются подряд в том же порядке,
+    в каком строки стоят в таблице, — дальше номер строки уже что-то значит.
+    """
+    changed = repo.renumber_rows(year, LAYER,
+                                 None if cfo_ids is None else list(cfo_ids))
+    if changed:
+        db.log(author, "Нумерация строк плана", f"Оперплан {year}",
+               f"проставлено номеров: {changed}")
+    return {"year": year, "renumbered": changed}
 
 
 def can_edit(user, year: int, cfo_id: int | None = None) -> bool:

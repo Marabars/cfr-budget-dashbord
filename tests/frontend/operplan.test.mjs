@@ -125,6 +125,10 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
       added = null;
       return Promise.resolve({ ok: true });
     },
+    operplanRenumber: (year) => {
+      calls.push({ kind: "renumber", year });
+      return Promise.resolve({ year, renumbered: 3 });
+    },
   };
 
   const dom = new JSDOM(asset("index.html"), {
@@ -224,10 +228,13 @@ describe("вкладка «Бюджет»: таблица", () => {
     assert.equal(t.$("***REMOVED***op-edit-mode").textContent, "✎̸", "карандаш перечёркнут");
   });
 
-  it("«Сохранить» закрывает правку обратно", async () => {
+  it("«Сохранить» закрепляет нумерацию и закрывает правку", async () => {
     assert.equal(t.$("***REMOVED***op-save").hidden, false, "мы всё ещё в правке");
     t.click(t.$("***REMOVED***op-save"));
-    await settle(t.window, 120);
+    await settle(t.window, 150);
+    const renumber = t.calls.find((c) => c.kind === "renumber");
+    assert.ok(renumber, "номера строк проставляются по кнопке, а не замком");
+    assert.equal(renumber.year, 2027, "нумеруется планируемый год");
     assert.equal(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[contenteditable]'), null,
       "ячейки снова закрыты");
     assert.equal(t.$("***REMOVED***op-save").hidden, true);

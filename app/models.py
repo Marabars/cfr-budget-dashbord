@@ -185,6 +185,11 @@ class OperplanRowIn(BaseModel):
         return out + [0.0] * (MONTHS - len(out))
 
 
+class YearIn(BaseModel):
+    """Действие над годом планирования, которому нужен только год."""
+    year: int | None = None
+
+
 class CopyYearIn(BaseModel):
     """Повтор прошлого года с необязательной индексацией.
 

@@ -159,16 +159,19 @@ def _order_key(row: dict) -> tuple:
             text(row.get("contract")), int(row.get("row_no") or 0), int(row["id"]))
 
 
-def renumber_rows(year: int, layer: str) -> int:
+def renumber_rows(year: int, layer: str, cfo_ids: Sequence[int] | None = None) -> int:
     """Проставляет номера строк подряд внутри каждого бюджета года.
 
-    Вызывается, когда план утверждают замком: до этого номера тянутся из
-    исходного файла и в отсортированной таблице выглядят вперемешку. Возвращает
-    число перенумерованных строк.
+    Вызывается по кнопке «Сохранить»: до этого номера тянутся из исходного файла
+    и в отсортированной по статьям таблице выглядят вперемешку. `cfo_ids`
+    ограничивает перенумерацию своими дирекциями — руководитель не переставляет
+    номера в чужих блоках. Возвращает число изменённых строк.
     """
-    rows = list_rows(year, layer=layer)
+    allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
     by_budget: dict[int, list[dict]] = {}
-    for row in rows:
+    for row in list_rows(year, layer=layer):
+        if allowed is not None and int(row["cfo_id"]) not in allowed:
+            continue
         by_budget.setdefault(int(row["budget_id"]), []).append(row)
 
     changed = 0
