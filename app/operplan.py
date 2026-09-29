@@ -482,14 +482,17 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
     mismatches = cfo_budgets.check_totals(parsed)
     allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
 
-    removed = repo.delete_budgets(year, LAYER,
-                                  None if allowed is None else sorted(allowed)) if replace else 0
+    rows = [(repo.ensure_cfo(row["cfo"]), row) for row in parsed["rows"]]
+    ***REMOVED*** Замена — только по тем ЦФО, чьи строки есть в файле. Файл одной дирекции
+    ***REMOVED*** не должен стирать план остальных, даже когда его грузит финотдел. Пустой
+    ***REMOVED*** файл не удаляет ничего: сносить план целиком — отдельное действие.
+    scope = {cfo_id for cfo_id, _ in rows if allowed is None or cfo_id in allowed}
+    removed = repo.delete_budgets(year, LAYER, sorted(scope)) if replace else 0
 
     created = 0
     other_label = 0
     foreign = 0
-    for row in parsed["rows"]:
-        cfo_id = repo.ensure_cfo(row["cfo"])
+    for cfo_id, row in rows:
         if allowed is not None and cfo_id not in allowed:
             foreign += 1
             continue
@@ -511,7 +514,8 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
            f"Слой планирования, {year} год")
     return {
         "year": year, "rows": created, "blocks": len(parsed["blocks"]),
-        "removed": removed, "other_cfo_label": other_label, "foreign": foreign,
+        "removed": removed, "replaced_cfo": len(scope),
+        "other_cfo_label": other_label, "foreign": foreign,
         "total": sum(r["plan_year"] for r in parsed["rows"]),
         "mismatches": mismatches,
     }
@@ -541,11 +545,15 @@ def import_fact(content: bytes, filename: str, year: int, author: str,
     for row in _year_rows(year, None if allowed is None else sorted(allowed)):
         index.setdefault((int(row["cfo_id"]),) + full_key(row), []).append(int(row["id"]))
 
-    cleared = repo.clear_layer_fact(year, LAYER) if allowed is None else 0
+    items = [(repo.ensure_cfo(item["cfo"]), item) for item in parsed["rows"]]
+    ***REMOVED*** Прежний факт гасим тем же кругом ЦФО, что и в файле: иначе загрузка по
+    ***REMOVED*** одной дирекции обнуляла бы факт остальных, а повторная загрузка своей —
+    ***REMOVED*** оставляла бы старые суммы на строках, выпавших из файла.
+    scope = {cfo_id for cfo_id, _ in items if allowed is None or cfo_id in allowed}
+    cleared = repo.clear_layer_fact(year, LAYER, sorted(scope))
     matched = created = foreign = 0
     total = 0.0
-    for item in parsed["rows"]:
-        cfo_id = repo.ensure_cfo(item["cfo"])
+    for cfo_id, item in items:
         if allowed is not None and cfo_id not in allowed:
             foreign += 1
             continue

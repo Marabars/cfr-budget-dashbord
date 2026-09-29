@@ -227,12 +227,21 @@ def row_fact_months(year: int, layer: str = LAYER_MAIN) -> dict[int, list[float]
     return out
 
 
-def clear_layer_fact(year: int, layer: str) -> int:
-    """Стирает факт слоя за год перед повторной загрузкой."""
-    rows = db.query(
-        "SELECT r.id FROM budget_row r JOIN budget b ON b.id = r.budget_id "
-        "WHERE b.year = ? AND b.layer = ?", (year, layer))
-    ids = [int(r["id"]) for r in rows]
+def clear_layer_fact(year: int, layer: str, cfo_ids: Sequence[int] | None = None) -> int:
+    """Стирает факт слоя за год перед повторной загрузкой.
+
+    `cfo_ids` ограничивает очистку: загрузка факта по одной дирекции не должна
+    гасить факт остальных. `None` — весь слой за год.
+    """
+    sql = ("SELECT r.id FROM budget_row r JOIN budget b ON b.id = r.budget_id "
+           "WHERE b.year = ? AND b.layer = ?")
+    params: list[Any] = [year, layer]
+    if cfo_ids is not None:
+        if not cfo_ids:
+            return 0
+        sql += f" AND b.cfo_id IN ({','.join('?' for _ in cfo_ids)})"
+        params.extend(int(i) for i in cfo_ids)
+    ids = [int(r["id"]) for r in db.query(sql, params)]
     if not ids:
         return 0
     marks = ",".join("?" for _ in ids)

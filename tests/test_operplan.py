@@ -778,3 +778,97 @@ def test_заполненный_шаблон_загружается_обратн
     rows = {r["article"]: r for b in plan["blocks"] for r in b["rows"]}
     ***REMOVED*** ИТОГО пустой строки собрано из месяцев, а не осталось нулём
     assert rows["4110_Соцрасходы"]["plan_year"] == pytest.approx(40_000)
+
+
+***REMOVED*** ---------- область замены при загрузке ----------
+
+def make_one_cfo_sheet(cfo: str, article: str, amount: float) -> bytes:
+    """Лист «Бюджеты ЦФО» с одной дирекцией и одной строкой."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Бюджеты ЦФО"
+    header = ["Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
+              "Комментарий", "ИТОГО"] + MONTH_NAMES
+    for col, value in enumerate(header, start=1):
+        ws.cell(row=3, column=col, value=value)
+    ws.cell(row=4, column=1, value="ИТОГО")
+    ws.cell(row=4, column=2, value=cfo)
+    ws.cell(row=4, column=7, value=amount)
+    ws.cell(row=5, column=1, value=article)
+    ws.cell(row=5, column=2, value=cfo)
+    ws.cell(row=5, column=7, value=amount)
+    ws.cell(row=5, column=8, value=amount)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def test_финотдел_заливая_один_цфо_не_стирает_остальные(client, loaded):
+    """Файл одной дирекции заменяет только её план, даже у финотдела."""
+    it_before = [r for r in repo.list_rows(2026, layer=operplan.LAYER)
+                 if r["cfo_name"] == IT]
+    assert it_before
+
+    result = client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "plan"},
+        files={"file": ("дуп.xlsx", make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).json()
+    assert result["replaced_cfo"] == 1
+
+    rows = repo.list_rows(2026, layer=operplan.LAYER)
+    assert len([r for r in rows if r["cfo_name"] == IT]) == len(it_before), \
+        "ИТ в файле не было — его план трогать нельзя"
+    hr_rows = [r for r in rows if r["cfo_name"] == HR]
+    assert len(hr_rows) == 1 and hr_rows[0]["article"] == "4109_Обучение"
+
+
+def test_пустой_файл_не_стирает_план(client, loaded):
+    """Загрузка шаблона без заполненных строк — не способ снести год."""
+    before = len(repo.list_rows(2026, layer=operplan.LAYER))
+    template = client.get("/api/export/budget-template.xlsx?year=2026").content
+    result = client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "plan"},
+        files={"file": ("шаблон.xlsx", template,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).json()
+    assert result["rows"] == 0 and result["removed"] == 0
+    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == before
+
+
+def test_факт_по_одному_цфо_не_гасит_факт_остальных(client, loaded):
+    """Загрузка факта по одной дирекции не должна обнулять факт остальных."""
+    def fact_by_cfo() -> dict[str, float]:
+        months = repo.row_fact_months(2026, layer=operplan.LAYER)
+        out: dict[str, float] = {}
+        for row in repo.list_rows(2026, layer=operplan.LAYER):
+            amount = sum(months.get(int(row["id"]), []))
+            if amount:
+                out[row["cfo_name"]] = out.get(row["cfo_name"], 0) + amount
+        return out
+
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    before = fact_by_cfo()
+    assert IT in before and HR in before
+
+    operplan.import_fact(make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
+                         "факт-дуп.xlsx", 2026, "Тест", cfo_ids=[repo.ensure_cfo(HR)])
+    after = fact_by_cfo()
+    assert after[IT] == pytest.approx(before[IT]), "факт ИТ трогать нельзя"
+    assert after[HR] == pytest.approx(60_000), "факт ДУП заменён целиком"
+
+
+def test_повторная_загрузка_факта_убирает_суммы_выпавших_строк(client, loaded):
+    """Строка выпала из файла факта — прежний факт на ней остаться не должен."""
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    hr_id = repo.ensure_cfo(HR)
+    operplan.import_fact(make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
+                         "факт-дуп.xlsx", 2026, "Тест", cfo_ids=[hr_id])
+
+    months = repo.row_fact_months(2026, layer=operplan.LAYER)
+    stale = [r for r in repo.list_rows(2026, layer=operplan.LAYER)
+             if r["cfo_name"] == HR and r["article"] != "4109_Обучение"
+             and sum(months.get(int(r["id"]), []))]
+    assert not stale, "факт остался на строках, которых в новом файле нет"
