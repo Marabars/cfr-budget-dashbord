@@ -507,6 +507,18 @@ thead th { border-right-color: var(--axis); }
 }
 /* строки прошлого года приглушены: это справка, а не то, что сейчас правят */
 ***REMOVED***t-op tr.y-past td { color: var(--ink2); }
+/* Внесение расходов внутри карточки строк: своя подложка и отбивка, чтобы
+   панель не читалась как часть таблицы. Карточка строк идёт с flush — отступы
+   задаём здесь. */
+.entry-inline {
+  padding: 14px; background: var(--raised);
+  border-bottom: 1px solid var(--border);
+}
+.entry-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.entry-head b { font-size: 16px; }
+
 /* разделитель внутри панели внесения расходов */
 .entry-sep { height: 1px; background: var(--border); margin: 16px 0 12px; }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }

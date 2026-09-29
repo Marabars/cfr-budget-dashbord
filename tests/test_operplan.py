@@ -714,3 +714,67 @@ def test_руководитель_заливает_бюджет_не_стира�
     it_after = [r for r in repo.list_rows(2026, layer=operplan.LAYER)
                 if r["cfo_name"] == IT]
     assert len(it_after) == len(it_before), "чужие строки не должны стираться"
+
+
+***REMOVED*** ---------- шаблон Excel ----------
+
+def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блоками_и_справочником(client, loaded):
+    response = client.get("/api/export/budget-template.xlsx?year=2027")
+    assert response.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(response.content))
+    assert wb.sheetnames == ["Бюджеты ЦФО", "Как заполнять", "Справочник"]
+
+    ws = wb["Бюджеты ЦФО"]
+    header = [ws.cell(row=3, column=c).value for c in range(1, 8)]
+    assert header == ["Статья оборотов", "ЦФО", "Контрагент", "Договор",
+                      "Детализация", "Комментарий", "ИТОГО"]
+    ***REMOVED*** блоки ЦФО есть, строки под ними пустые
+    blocks = [ws.cell(row=r, column=2).value for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=1).value == "ИТОГО"]
+    assert IT in blocks and HR in blocks
+    assert not any(ws.cell(row=r, column=7).value for r in range(4, ws.max_row + 1))
+
+
+def test_шаблон_руководителю_только_его_цфо(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    response = client.get("/api/export/budget-template.xlsx?year=2027",
+                          headers={"X-User": f"cfo:{hr_id}"})
+    assert response.status_code == 200
+    ws = openpyxl.load_workbook(io.BytesIO(response.content))["Бюджеты ЦФО"]
+    blocks = {ws.cell(row=r, column=2).value for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=1).value == "ИТОГО"}
+    assert blocks == {HR}
+
+
+def test_заполненный_шаблон_загружается_обратно(client, loaded):
+    """Шаблон → заполнили две строки → загрузили: план собрался из них."""
+    template = client.get("/api/export/budget-template.xlsx?year=2027").content
+    wb = openpyxl.load_workbook(io.BytesIO(template))
+    ws = wb["Бюджеты ЦФО"]
+    start = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "ИТОГО"
+                 and ws.cell(row=r, column=2).value == HR) + 1
+    ws.cell(row=start, column=1, value="4109_Обучение")
+    ws.cell(row=start, column=7, value=60_000)
+    ws.cell(row=start, column=8, value=60_000)
+    ***REMOVED*** вторая строка: ИТОГО оставлено пустым, заполнены только месяцы
+    ws.cell(row=start + 1, column=1, value="4110_Соцрасходы")
+    ws.cell(row=start + 1, column=9, value=25_000)
+    ws.cell(row=start + 1, column=10, value=15_000)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    response = client.post(
+        "/api/operplan/import",
+        data={"year": "2027", "kind": "plan"},
+        files={"file": ("шаблон.xlsx", buffer.getvalue(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert response.status_code == 200
+    assert response.json()["rows"] == 2, "пустые заготовки не должны попасть в план"
+
+    plan = client.get("/api/operplan?year=2027").json()
+    assert plan["totals"]["plan_year"] == pytest.approx(100_000)
+    rows = {r["article"]: r for b in plan["blocks"] for r in b["rows"]}
+    ***REMOVED*** ИТОГО пустой строки собрано из месяцев, а не осталось нулём
+    assert rows["4110_Соцрасходы"]["plan_year"] == pytest.approx(40_000)

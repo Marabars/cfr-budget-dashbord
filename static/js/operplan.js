@@ -13,6 +13,7 @@
     sections: {},        // год -> ответ /api/operplan по этому году
     yearOpen: {},        // год -> развёрнут ли раздел года в таблице
     missingOpen: false,  // блок замечаний свёрнут, пока его не раскроют
+    entryOpen: false,    // панель внесения расходов внутри карточки строк
     filters: null,
     combos: null,       // выпадающие списки формы новой строки
     year: null           // год в фокусе: к нему привязаны замок, справочники и форма строки
@@ -441,6 +442,21 @@
     refreshFilterOptions();
   }
 
+  /* ---------- панель внесения расходов ---------- */
+
+  /* Панель свёрнута по умолчанию и живёт внутри карточки строк — на странице
+     одним блоком меньше. Кнопка-переключатель в шапке таблицы не прячется
+     никогда, поэтому возможность внести строку не может пропасть. */
+  function renderEntry() {
+    var editable = sectionEditable(state.data);
+    if (!editable) state.entryOpen = false;
+    var toggle = document.getElementById("op-entry-toggle");
+    toggle.hidden = !editable;
+    toggle.textContent = state.entryOpen ? "× Скрыть внесение" : "+ Внести расходы";
+    toggle.classList.toggle("primary", !state.entryOpen);
+    document.getElementById("op-entry").hidden = !state.entryOpen;
+  }
+
   /* ---------- замок ---------- */
 
   /* Правка включена по умолчанию; кнопка с перечёркнутым карандашом её закрывает.
@@ -464,8 +480,6 @@
     document.getElementById("op-edit-scope").textContent = state.data.is_fin
       ? "Правка плана по всем ЦФО." : "Правка плана вашего ЦФО.";
 
-    /* Панель внесения расходов не прячется — иначе она «пропадала» после переносов.
-       Под замком гасим только действия. */
     ["op-a-save", "op-copy-run", "op-fact-run"].forEach(function (id) {
       document.getElementById(id).disabled = !editable;
     });
@@ -473,7 +487,12 @@
       "Внесение плановых расходов на " + state.data.plan_year_no + " год";
     document.getElementById("op-copy-title").textContent =
       "Перенести " + state.data.base_year_no + " год в план " + state.data.plan_year_no;
-    document.getElementById("op-import").hidden = !state.data.is_fin;
+    /* Загрузка доступна всем, кто вправе править: круг ЦФО режет сервер, чужие
+       строки файла он пропускает. Под замком грузить нечего — кнопку убираем,
+       иначе она отвечала бы 403. Выгрузка и шаблон не зависят от замка. */
+    document.getElementById("op-import").hidden = !editable;
+    if (!editable) document.getElementById("op-import-form").hidden = true;
+    renderEntry();
   }
 
   /* ---------- пропавшие строки (п.8) ---------- */
@@ -574,6 +593,12 @@
 
   function runExport() {
     window.location.href = "/api/export/budget.xlsx?year=" + state.data.plan_year_no;
+  }
+
+  /* Шаблон — тот же лист «Бюджеты ЦФО», но пустой: блоки своих ЦФО и подсказка.
+     Заполненный файл принимается кнопкой «Загрузить из Excel». */
+  function runTemplate() {
+    window.location.href = "/api/export/budget-template.xlsx?year=" + state.data.plan_year_no;
   }
 
   function runImport() {
@@ -806,6 +831,15 @@
       document.getElementById("op-copy-run").onclick = function () { runCopy("plan"); };
       document.getElementById("op-fact-run").onclick = function () { runCopy("fact"); };
       document.getElementById("op-export").onclick = runExport;
+      document.getElementById("op-template").onclick = runTemplate;
+      document.getElementById("op-entry-toggle").onclick = function () {
+        state.entryOpen = !state.entryOpen;
+        renderEntry();
+        if (state.entryOpen) {
+          document.getElementById("op-entry").scrollIntoView({ block: "nearest" });
+          document.getElementById("op-a-article").focus();
+        }
+      };
       document.getElementById("op-import").onclick = function () {
         var form = document.getElementById("op-import-form");
         form.hidden = !form.hidden;

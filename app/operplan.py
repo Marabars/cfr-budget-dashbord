@@ -460,6 +460,16 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
 
 ***REMOVED*** ---------- импорт листа «Бюджеты ЦФО» ----------
 
+def _plan_or_months(row: dict) -> float:
+    """ИТОГО строки: из файла, а при пустой колонке — сумма месяцев.
+
+    В шаблоне ИТОГО часто оставляют пустым и заполняют только месяцы. Без этого
+    строка легла бы в план с нулём, хотя разбивка по месяцам заполнена.
+    """
+    plan = float(row.get("plan_year") or 0)
+    return plan if plan else round(sum(row.get("months") or []), 2)
+
+
 def import_budgets(content: bytes, filename: str, year: int, author: str,
                    replace: bool = True, cfo_ids: Iterable[int] | None = None) -> dict:
     """Заливает лист «Бюджеты ЦФО» в слой планирования за указанный год.
@@ -486,7 +496,8 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
         if IT_MARKER in row["cfo"].lower():
             repo.set_detail_source(cfo_id, "detail")
         budget_id = repo.ensure_budget(cfo_id, year, row["budget"], layer=LAYER)
-        repo.create_row(budget_id, row, months=row["months"], author=author,
+        repo.create_row(budget_id, {**row, "plan_year": _plan_or_months(row)},
+                        months=row["months"], author=author,
                         source="import", row_no=repo.next_row_no(budget_id))
         created += 1
         if row.get("approver_comment"):

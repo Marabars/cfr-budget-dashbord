@@ -206,6 +206,7 @@
       <span class="year-tag" id="op-year-tag-top"></span>
       <button class="btn sm" id="op-info" title="Как устроена вкладка">ℹ Инфо</button>
       <div class="top-spacer"></div>
+      <button class="btn sm" id="op-template">⭳ Выгрузить шаблон</button>
       <button class="btn sm" id="op-export">⭳ Выгрузить в Excel</button>
       <button class="btn sm" id="op-import">⭱ Загрузить из Excel</button>
       <button class="btn sm" id="op-lock"></button>
@@ -220,12 +221,14 @@
           <b>Правка</b> включена сразу: кликните ячейку и введите значение. Финотдел может
           закрыть её кнопкой с перечёркнутым карандашом — тогда план доступен только
           для просмотра.<br>
-          <b>Внесение расходов</b> — одна панель: поля новой строки и два переноса
-          прошлого года. Повтор бюджета берёт прошлогодние планы, повтор факта — то,
-          что реально потрачено; факт бывает точнее плана.<br>
-          <b>Excel</b> — выгрузка и загрузка одного и того же листа «Бюджеты ЦФО»:
-          файл можно поправить в Excel и вернуть обратно. Тот же файл принимается
-          как факт года.<br>
+          <b>Внесение расходов</b> — кнопка «+ Внести расходы» в шапке таблицы: она
+          открывает поля новой строки и два переноса прошлого года. Повтор бюджета берёт
+          прошлогодние планы, повтор факта — то, что реально потрачено; факт бывает
+          точнее плана.<br>
+          <b>Excel</b> — три кнопки. «Шаблон» даёт пустой лист «Бюджеты ЦФО» с вашими
+          ЦФО и подсказкой, как его заполнять. «Выгрузить в Excel» отдаёт тот же лист
+          с текущим планом — файл можно поправить и вернуть обратно. «Загрузить из
+          Excel» принимает оба варианта: как бюджет года или как факт года.<br>
           <b>Замечания</b> внизу — расходы прошлого года, которых нет в плане.
           Блок свёрнут, раскрывается кликом по заголовку.
         </div>
@@ -244,9 +247,11 @@
       <div class="alert" id="op-import-form" hidden>
         <div style="flex:1">
           <div style="margin-bottom:8px">
-            Файл того же вида, что выгружается кнопкой «Выгрузить в Excel»:
-            шапка <b>Статья оборотов · ЦФО · Контрагент · Договор · Детализация ·
-            Комментарий · ИТОГО · Январь…Декабрь</b>.
+            Файл того же вида, что выгружается кнопками «Выгрузить шаблон» и
+            «Выгрузить в Excel»: шапка <b>Статья оборотов · ЦФО · Контрагент · Договор ·
+            Детализация · Комментарий · ИТОГО · Январь…Декабрь</b>.
+            <b>Бюджет</b> заменяет строки плана по вашим ЦФО целиком, <b>факт</b> ложится
+            на строки прошлого года и план не трогает.
           </div>
           <div class="row-btns">
             <label class="f-check"><input type="radio" name="op-imp-kind" value="plan" checked>
@@ -264,58 +269,8 @@
     </div>
   </div>
 
-  <!-- Одна панель вместо трёх: поля новой строки и переносы прошлого года. -->
-  <div class="card" id="op-entry">
-    <header><h2 id="op-entry-title">Внесение плановых расходов</h2>
-      <span class="sub" id="op-a-hint"></span>
-      <div class="top-spacer"></div>
-      <label class="f-check"><input type="checkbox" id="op-a-all"> показать все статьи и контрагенты</label>
-    </header>
-    <div class="card-body">
-      <div class="form-grid">
-        <div><label class="f">ЦФО</label><select class="f-in" id="op-a-cfo"></select></div>
-        <div id="op-a-budget-wrap"><label class="f">Бюджет</label>
-          <input class="f-in" id="op-a-budget"></div>
-        <div><label class="f">Статья оборотов</label>
-          <input class="f-in" id="op-a-article" placeholder="начните вводить или выберите"></div>
-        <div><label class="f">Контрагент</label>
-          <input class="f-in" id="op-a-cp"></div>
-        <div><label class="f">Договор</label>
-          <input class="f-in" id="op-a-contract"></div>
-        <div><label class="f">Детализация</label><input class="f-in" id="op-a-detail" placeholder="на что расход"></div>
-        <div><label class="f">Сумма за год, ₽ (с НДС)</label><input class="f-in" id="op-a-sum" placeholder="1 200 000"></div>
-        <div><label class="f">Распределение по месяцам</label>
-          <select class="f-in" id="op-a-spread">
-            <option value="even">Равномерно по 12 месяцам</option>
-            <option value="one">Целиком в один месяц</option>
-            <option value="none">Не распределять</option>
-          </select></div>
-        <div id="op-a-month-wrap" hidden><label class="f">Месяц</label>
-          <select class="f-in" id="op-a-month"></select></div>
-      </div>
-      <div class="row-btns">
-        <button class="btn primary" id="op-a-save">Добавить строку</button>
-        <span class="err" id="op-a-err"></span>
-      </div>
-
-      <div class="entry-sep"></div>
-      <div class="row-btns" id="op-repeat-row">
-        <span class="sub" id="op-copy-title">Перенести прошлый год в план</span>
-        <div class="ctl"><span>Индексация, %</span>
-          <input class="f-in" id="op-index" placeholder="0" value="0" style="max-width:90px"></div>
-        <button class="btn" id="op-copy-run">Повторить бюджет прошлого года</button>
-        <button class="btn" id="op-fact-run">Повторить факт прошлого года</button>
-        <span class="err" id="op-copy-note"></span>
-      </div>
-      <p class="dim" style="margin:8px 0 0">
-        Строки прошлого года переносятся вместе с помесячной разбивкой. Уже имеющиеся в плане
-        (совпадают статья, контрагент, договор и детализация) пропускаются — повторный запуск
-        ничего не задвоит. Повтор факта берёт суммы не из бюджета прошлого года, а из
-        загруженного факта.
-      </p>
-    </div>
-  </div>
-
+  <!-- Внесение расходов живёт внутри карточки строк: один блок вместо двух.
+       Панель свёрнута, кнопка в шапке её открывает и никогда не пропадает. -->
   <div class="card">
     <header>
       <h2 id="op-rows-title">Строки бюджета</h2>
@@ -325,8 +280,58 @@
       <button class="btn sm" id="op-reset">Сбросить фильтры</button>
       <button class="btn sm" id="op-collapse">Свернуть все</button>
       <div class="top-spacer"></div>
+      <button class="btn primary sm" id="op-entry-toggle">+ Внести расходы</button>
     </header>
     <div class="card-body flush">
+      <div class="entry-inline" id="op-entry" hidden>
+        <div class="entry-head">
+          <b id="op-entry-title">Внесение плановых расходов</b>
+          <span class="sub" id="op-a-hint"></span>
+          <div class="top-spacer"></div>
+          <label class="f-check"><input type="checkbox" id="op-a-all"> показать все статьи и контрагенты</label>
+        </div>
+        <div class="form-grid">
+          <div><label class="f">ЦФО</label><select class="f-in" id="op-a-cfo"></select></div>
+          <div id="op-a-budget-wrap"><label class="f">Бюджет</label>
+            <input class="f-in" id="op-a-budget"></div>
+          <div><label class="f">Статья оборотов</label>
+            <input class="f-in" id="op-a-article" placeholder="начните вводить или выберите"></div>
+          <div><label class="f">Контрагент</label>
+            <input class="f-in" id="op-a-cp"></div>
+          <div><label class="f">Договор</label>
+            <input class="f-in" id="op-a-contract"></div>
+          <div><label class="f">Детализация</label><input class="f-in" id="op-a-detail" placeholder="на что расход"></div>
+          <div><label class="f">Сумма за год, ₽ (с НДС)</label><input class="f-in" id="op-a-sum" placeholder="1 200 000"></div>
+          <div><label class="f">Распределение по месяцам</label>
+            <select class="f-in" id="op-a-spread">
+              <option value="even">Равномерно по 12 месяцам</option>
+              <option value="one">Целиком в один месяц</option>
+              <option value="none">Не распределять</option>
+            </select></div>
+          <div id="op-a-month-wrap" hidden><label class="f">Месяц</label>
+            <select class="f-in" id="op-a-month"></select></div>
+        </div>
+        <div class="row-btns">
+          <button class="btn primary" id="op-a-save">Добавить строку</button>
+          <span class="err" id="op-a-err"></span>
+        </div>
+
+        <div class="entry-sep"></div>
+        <div class="row-btns" id="op-repeat-row">
+          <span class="sub" id="op-copy-title">Перенести прошлый год в план</span>
+          <div class="ctl"><span>Индексация, %</span>
+            <input class="f-in" id="op-index" placeholder="0" value="0" style="max-width:90px"></div>
+          <button class="btn" id="op-copy-run">Повторить бюджет прошлого года</button>
+          <button class="btn" id="op-fact-run">Повторить факт прошлого года</button>
+          <span class="err" id="op-copy-note"></span>
+        </div>
+        <p class="dim" style="margin:8px 0 0">
+          Строки прошлого года переносятся вместе с помесячной разбивкой. Уже имеющиеся в плане
+          (совпадают статья, контрагент, договор и детализация) пропускаются — повторный запуск
+          ничего не задвоит. Повтор факта берёт суммы не из бюджета прошлого года, а из
+          загруженного факта.
+        </p>
+      </div>
       <div class="scroll tall"><table id="t-op">
         <thead><tr id="op-head"></tr></thead>
         <tbody></tbody>

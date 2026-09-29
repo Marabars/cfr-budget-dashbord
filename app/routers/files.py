@@ -187,6 +187,18 @@ def export_budget(year: int | None = None, u: auth.User = Depends(user)) -> Resp
     return _xlsx(data, f"Бюджеты ЦФО {target}.xlsx")
 
 
+@router.get("/export/budget-template.xlsx")
+def export_budget_template(year: int | None = None, u: auth.User = Depends(user)) -> Response:
+    """Пустой лист «Бюджеты ЦФО» под заполнение руками.
+
+    Тот же вид, что у выгрузки плана, поэтому заполненный шаблон принимает та же
+    загрузка. Руководителю в шаблон попадают только его дирекции.
+    """
+    target = int(year or operplan.plan_year())
+    data = excel.budget_template(target, u.visible_cfo_ids())
+    return _xlsx(data, f"Бюджеты ЦФО {target} — шаблон.xlsx")
+
+
 @router.get("/export/summary.xlsx")
 def export_summary(year: int | None = None, u: auth.User = Depends(user)) -> Response:
     cfg = service.settings()

@@ -100,6 +100,137 @@ def cfo_budgets_sheet_name() -> str:
     return cfo_budgets.SHEET_NAME
 
 
+TEMPLATE_ROWS = 12          ***REMOVED*** пустых строк на блок — хватает на один ЦФО без вставок
+HINT_FILL = PatternFill("solid", fgColor="FFF6E8")
+
+
+def budget_template(year: int, cfo_ids=None) -> bytes:
+    """Пустой лист «Бюджеты ЦФО» под заполнение руками.
+
+    Раскладка та же, что у `budget_sheet`, поэтому заполненный шаблон принимает
+    та же загрузка. Блок каждого ЦФО открыт строкой «ИТОГО» — держателем бюджета
+    считается блок, а не колонка «ЦФО» в самой строке, так что строки достаточно
+    вписывать под нужным заголовком.
+
+    Пустые строки при загрузке пропускаются: лишние заготовки можно не удалять.
+    """
+    from app import operplan as operplan_service, repo
+
+    allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
+    cfo_list = [c for c in repo.list_cfo()
+                if allowed is None or int(c["id"]) in allowed]
+    budgets_by_cfo: dict[int, list[str]] = {}
+    for block in operplan_service.view(year, cfo_ids)["blocks"]:
+        budgets_by_cfo.setdefault(int(block["cfo_id"]), []).append(block["budget_name"])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = cfo_budgets_sheet_name()
+
+    header = ["Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
+              "Комментарий", "ИТОГО"] + calc.MONTH_NAMES
+    ws.cell(row=1, column=1, value=f"Бюджеты ЦФО, {year} год — шаблон для заполнения")
+    ws.cell(row=1, column=1).font = Font(bold=True, size=12)
+    hint = ws.cell(row=2, column=1, value=(
+        "Как заполнять — на листе «Как заполнять». Формулы не пишите: "
+        "загрузка читает значения."))
+    hint.font = Font(size=10, italic=True)
+    hint.fill = HINT_FILL
+    for col, title in enumerate(header, start=1):
+        ws.cell(row=3, column=col, value=title)
+    _style_header(ws, 3, len(header))
+
+    idx = 4
+    for cfo in cfo_list:
+        names = budgets_by_cfo.get(int(cfo["id"])) or ["Основной бюджет"]
+        for budget_name in names:
+            ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
+            ws.cell(row=idx, column=2, value=cfo["name"]).font = Font(bold=True)
+            ws.cell(row=idx, column=4, value=budget_name)
+            for col in range(1, len(header) + 1):
+                ws.cell(row=idx, column=col).fill = TOTAL_FILL
+            idx += 1
+            for _ in range(TEMPLATE_ROWS):
+                cell = ws.cell(row=idx, column=7)
+                cell.number_format = MONEY
+                for m in range(calc.MONTHS):
+                    ws.cell(row=idx, column=8 + m).number_format = MONEY
+                idx += 1
+
+    _autosize(ws, {1: 38, 2: 30, 3: 28, 4: 26, 5: 34, 6: 30, 7: 16})
+    for m in range(calc.MONTHS):
+        ws.column_dimensions[get_column_letter(8 + m)].width = 14
+
+    _template_hints(wb, year)
+    _template_refs(wb, year, cfo_ids)
+    return _to_bytes(wb)
+
+
+HOW_TO = [
+    "Лист «Бюджеты ЦФО» — то, что читает загрузка. Не переименовывайте его "
+    "и не меняйте порядок колонок.",
+    "Расходы вписывайте строками под серым заголовком своей дирекции: "
+    "держателем бюджета считается заголовок блока, а не подпись в самой строке.",
+    "Обязательна первая колонка — название расходной статьи. Пишите его так же, "
+    "как на листе «Справочник»: название с опечаткой заведёт в плане отдельную строку.",
+    "Суммы — в колонку ИТОГО и по месяцам. Если заполнены только месяцы, "
+    "ИТОГО будет посчитано как их сумма.",
+    "Формулы загрузка не видит — вписывайте числа. Excel-файл со формулами "
+    "сначала сохраните как значения.",
+    "Серые строки «ИТОГО» и пустые заготовки при загрузке пропускаются — "
+    "лишние строки удалять не нужно, а недостающие можно вставить.",
+    "Загрузка бюджета заменяет план года по вашим дирекциям целиком: "
+    "в файле должно быть всё, что нужно в плане, а не только новое.",
+]
+
+
+def _template_hints(wb: Workbook, year: int) -> None:
+    """Инструкция отдельным листом.
+
+    На самом листе «Бюджеты ЦФО» её держать нельзя: разборщик ищет шапку как
+    первую строку, где встречаются слова «статья оборотов» и «ЦФО», и длинная
+    подсказка с этими словами перебивала бы настоящую шапку.
+    """
+    ws = wb.create_sheet("Как заполнять")
+    title = ws.cell(row=1, column=1, value=f"Как заполнить бюджет на {year} год")
+    title.font = Font(bold=True, size=12)
+    for i, line in enumerate(HOW_TO):
+        cell = ws.cell(row=3 + i * 2, column=1, value=f"{i + 1}. {line}")
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+        cell.fill = HINT_FILL
+    _autosize(ws, {1: 118})
+
+
+def _template_refs(wb: Workbook, year: int, cfo_ids=None) -> None:
+    """Лист-справочник: какие статьи и контрагенты уже встречались у ЦФО.
+
+    Нужен, чтобы в шаблоне писали существующие названия, а не новые варианты
+    написания того же: статья с опечаткой заведёт в плане отдельную строку.
+    """
+    from app import operplan as operplan_service, repo
+
+    refs = operplan_service.references(year, None if cfo_ids is None else list(cfo_ids))
+    names = {int(c["id"]): c["name"] for c in repo.list_cfo()}
+    ws = wb.create_sheet("Справочник")
+    for col, title in enumerate(["ЦФО", "Статьи оборотов", "Контрагенты"], start=1):
+        ws.cell(row=1, column=col, value=title)
+    _style_header(ws, 1, 3)
+
+    idx = 2
+    for cfo_id, bucket in sorted(refs["by_cfo"].items(),
+                                 key=lambda kv: names.get(int(kv[0]), "")):
+        articles = bucket["articles"] or [""]
+        counterparties = bucket["counterparties"] or [""]
+        ws.cell(row=idx, column=1, value=names.get(int(cfo_id), "")).font = Font(bold=True)
+        for offset in range(max(len(articles), len(counterparties))):
+            if offset < len(articles):
+                ws.cell(row=idx + offset, column=2, value=articles[offset])
+            if offset < len(counterparties):
+                ws.cell(row=idx + offset, column=3, value=counterparties[offset])
+        idx += max(len(articles), len(counterparties)) + 1
+    _autosize(ws, {1: 30, 2: 44, 3: 34})
+
+
 def operplan(year: int | None = None, cfo_ids=None) -> bytes:
     """Лист «Оперплан ЦФО» в раскладке исходного файла — для вставки в «Ликвидность».
 
