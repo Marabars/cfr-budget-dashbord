@@ -337,6 +337,10 @@
     input.placeholder = PLACEHOLDER[field] || "";
     td.appendChild(input);
     var options = cellOptions(row, field);
+    if (!options) {
+      // у детализации списка нет — иначе чужой список висел бы поверх таблицы
+      input.addEventListener("focus", U.closePopups);
+    }
     if (options) {
       var box = U.combo(input, function (value) { commitCell(row, field, value, td); }, true);
       box.setOptions(options);
@@ -415,8 +419,85 @@
     }
   }
 
-  /* Кнопка «+ расход» в заголовке блока: строка заводится сразу, пустой,
-     и заполняется прямо в таблице. ЦФО и бюджет известны из заголовка. */
+  /* Куда положить новую строку. Список тот же, что и заголовки блоков плана:
+     ЦФО плюс бюджет, потому что у ИТ-дирекции бюджетов два. */
+  function addTargets() {
+    var sec = state.sections[state.data.plan_year_no];
+    if (!sec || !sectionEditable(sec)) return [];
+    var targets = blocksOf(sec, true);
+    var chosen = state.filters && state.filters.cfo_name
+      ? state.filters.cfo_name.selected() : [];
+    if (chosen.length) {
+      // фильтр сузил таблицу до одной дирекции — не спрашиваем лишний раз
+      targets = targets.filter(function (b) { return chosen.indexOf(b.cfo_name) >= 0; });
+    }
+    return targets;
+  }
+
+  /* Выбор дирекции для новой строки. У руководителя вариант один и списка
+     не будет; финотделу список нужен — по заголовку таблицы не угадать. */
+  function addMenu(button, targets) {
+    U.closePopups();
+    var stale = document.getElementById("op-add-menu");
+    if (stale) stale.parentNode.removeChild(stale);   // иначе меню копятся в body
+    var list = U.el("div", { class: "flist" });
+    var pop = U.el("div", { class: "fpop fpop-fixed", id: "op-add-menu" });
+    var search = null;
+    if (targets.length > 8) {
+      search = U.el("input", { class: "fsearch" });
+      search.placeholder = "поиск дирекции";
+      pop.appendChild(search);
+    }
+    pop.appendChild(list);
+
+    function draw() {
+      var needle = (search && search.value || "").toLowerCase();
+      U.clear(list);
+      targets.forEach(function (block) {
+        var label = block.cfo_name + (block.budget_name === "Основной бюджет"
+          ? "" : " · " + block.budget_name);
+        if (needle && label.toLowerCase().indexOf(needle) < 0) return;
+        list.appendChild(U.el("div", { class: "fopt copt" + (block.placeholder ? " dim" : ""),
+          text: label,
+          on: { mousedown: function (event) {
+            event.preventDefault();
+            pop.parentNode.removeChild(pop);
+            addRow(block, state.data.plan_year_no, button);
+          } } }));
+      });
+      if (!list.childNodes.length) {
+        list.appendChild(U.el("div", { class: "dim fempty", text: "ничего не найдено" }));
+      }
+    }
+
+    if (search) search.oninput = draw;
+    pop.onclick = function (event) { event.stopPropagation(); };
+    document.body.appendChild(pop);
+    var r = button.getBoundingClientRect();
+    pop.style.width = "320px";
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 332)) + "px";
+    pop.style.top = (r.bottom + 4) + "px";
+    list.style.maxHeight = Math.max(160, window.innerHeight - r.bottom - 60) + "px";
+    draw();
+    if (search) search.focus();
+  }
+
+  function addRowFromHeader() {
+    var button = document.getElementById("op-add-row");
+    var targets = addTargets();
+    if (!targets.length) {
+      U.toast("Некуда добавить строку: нет доступных дирекций", "error");
+      return;
+    }
+    if (targets.length === 1) {
+      addRow(targets[0], state.data.plan_year_no, button);
+      return;
+    }
+    addMenu(button, targets);
+  }
+
+  /* Строка заводится сразу, пустой, и заполняется прямо в таблице.
+     ЦФО и бюджет берутся из выбранного блока. */
   function addRow(block, year, button) {
     button.disabled = true;
     API.createOperplanRow({
@@ -441,22 +522,12 @@
 
   function groupNode(block, shown, sum, year, editable) {
     var collapsed = !!state.collapsed[block.budget_id];
-    var add = null;
-    if (editable) {
-      add = U.el("button", { class: "btn sm add-row", text: "+ расход",
-        title: "Завести пустую строку в «" + block.cfo_name + "»" });
-      add.onclick = function (event) {
-        event.stopPropagation();          // кнопка внутри кликабельного заголовка
-        addRow(block, year, add);
-      };
-    }
     var td = U.el("td", { colspan: COLS }, [
       U.el("span", { class: "grp-caret", text: collapsed ? "▸" : "▾" }),
       U.el("b", { text: block.cfo_name }),
       U.el("span", { class: "dim", text: " · " + block.budget_name }),
       U.el("span", { class: "grp-sum", text: block.placeholder
-        ? "строк нет" : U.fmt(sum) + " ₽ · " + shown + " строк" }),
-      add
+        ? "строк нет" : U.fmt(sum) + " ₽ · " + shown + " строк" })
     ]);
     var tr = U.el("tr", { class: "group" + (block.placeholder ? " is-empty" : "") }, [td]);
     tr.onclick = function () {
@@ -680,7 +751,7 @@
 
     /* Переносы прошлого года переехали в шапку карточки строк; под замком
        гасим их, а кнопку «+ расход» в заголовках блоков render просто не рисует. */
-    ["op-copy-run", "op-fact-run"].forEach(function (id) {
+    ["op-copy-run", "op-fact-run", "op-add-row"].forEach(function (id) {
       document.getElementById(id).disabled = !editable;
     });
     document.getElementById("op-index-wrap").hidden = !editable;
@@ -907,6 +978,7 @@
           .then(function () { reloadAll(); })
           .catch(function (e) { U.toast(e.message, "error"); });
       };
+      document.getElementById("op-add-row").onclick = addRowFromHeader;
       document.getElementById("op-copy-run").onclick = function () { runCopy("plan"); };
       document.getElementById("op-fact-run").onclick = function () { runCopy("fact"); };
       document.getElementById("op-export").onclick = runExport;

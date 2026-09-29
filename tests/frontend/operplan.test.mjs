@@ -62,8 +62,10 @@ const REFS = {
 
 /* ---------- стенд ---------- */
 
-/** Поднимает вкладку в jsdom. Возвращает окно, журнал вызовов API и помощники. */
-async function mount() {
+/** Поднимает вкладку в jsdom. Возвращает окно, журнал вызовов API и помощники.
+    cfoList задаёт доступные дирекции: от их числа зависит, спросит ли кнопка,
+    куда добавлять строку. */
+async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }]) {
   let added = null;                       // строка, заведённая кнопкой «+ расход»
   const calls = [];
 
@@ -117,12 +119,18 @@ async function mount() {
     runScripts: "outside-only", pretendToBeVisual: true,
   });
   const { window } = dom;
+  /* Настоящий css нужен не для красоты: позицию списка считает JS по координатам
+     окна, и без position: fixed из стилей она применялась бы относительно ячейки —
+     список уезжал бы за пределы видимой области. Проверяем это ниже. */
+  const style = window.document.createElement("style");
+  style.textContent = asset("css/app.css");
+  window.document.head.appendChild(style);
   // jsdom не умеет прокрутку, а код уводит новую строку в видимую часть таблицы
   window.Element.prototype.scrollIntoView = function () {};
   window.API = API;
   ["js/util.js", "js/inline.js", "js/operplan.js"].forEach((f) => window.eval(asset(f)));
 
-  window.Operplan.setCfoList([{ id: 1, name: IT }, { id: 2, name: HR }]);
+  window.Operplan.setCfoList(cfoList);
   window.Operplan.init();
   await window.Operplan.load();
   await settle(window);
@@ -133,6 +141,8 @@ async function mount() {
     $$: (sel) => Array.from(window.document.querySelectorAll(sel)),
     click: (node) => node.dispatchEvent(new window.MouseEvent("click", { bubbles: true })),
     fire: (node, type) => node.dispatchEvent(new window.Event(type)),
+    focus: (node) => node.dispatchEvent(new window.FocusEvent("focus")),
+    styleOf: (node) => window.getComputedStyle(node),
     lastPatch: (field) => calls.filter(
       (c) => c.kind === "patch" && c.payload[field] !== undefined).pop(),
   };
@@ -155,8 +165,13 @@ describe("вкладка «Бюджет»: таблица", () => {
       "у ДУП строк нет — должен быть заголовок-заготовка");
   });
 
-  it("ставит «+ расход» в каждый заголовок, включая пустой", () => {
-    assert.equal(t.$$("***REMOVED***t-op tr.group .add-row").length, 2);
+  it("держит «+ расход» в шапке карточки, а не в заголовках блоков", () => {
+    assert.equal(t.$$("***REMOVED***t-op tr.group .add-row").length, 0);
+    const button = t.$("***REMOVED***op-add-row");
+    assert.ok(button, "кнопка в шапке таблицы");
+    assert.equal(button.previousElementSibling.id, "op-collapse",
+      "стоит справа от «Свернуть все»");
+    assert.equal(button.disabled, false, "правка разрешена — кнопка активна");
   });
 
   it("заполненную строку правит текстом, без полей ввода", () => {
@@ -167,19 +182,65 @@ describe("вкладка «Бюджет»: таблица", () => {
   });
 });
 
+describe("вкладка «Бюджет»: выбор дирекции для новой строки", () => {
+  it("с одной доступной дирекцией заводит строку сразу, без вопросов", async () => {
+    const t = await mount([{ id: 1, name: IT }]);
+    t.click(t.$("***REMOVED***op-add-row"));
+    await settle(t.window, 60);
+    assert.equal(t.$("***REMOVED***op-add-menu"), null, "спрашивать нечего — меню не открывалось");
+    const created = t.calls.find((c) => c.kind === "create");
+    assert.ok(created, "строка заведена");
+    assert.equal(created.payload.cfo_id, 1);
+    // курсор уезжает в статью, и её список сразу раскрыт — печатать можно не целясь
+    assert.ok(t.$(".fpop-fixed:not([hidden]) .copt"), "список статей раскрыт сразу");
+  });
+
+  it("с несколькими — предлагает список тех же блоков, что в таблице", async () => {
+    const t = await mount();
+    t.click(t.$("***REMOVED***op-add-row"));
+    await settle(t.window, 30);
+    const shown = t.$$("***REMOVED***op-add-menu .copt").map((n) => n.textContent);
+    assert.deepEqual(shown, [IT, HR], "по алфавиту: с строками и пустая");
+    assert.ok(!t.calls.length, "до выбора дирекции ничего не создаём");
+  });
+
+  it("фильтр по ЦФО снимает вопрос", async () => {
+    const t = await mount();
+    // фильтр «ЦФО» — первый чип в шапке; отмечаем в нём дирекцию, как это делают мышью
+    const chip = t.$$("***REMOVED***op-filters .fwrap")[0];
+    t.click(chip.querySelector(".fbtn"));
+    const option = Array.from(chip.querySelectorAll(".fopt"))
+      .find((label) => label.textContent.indexOf(IT) >= 0);
+    assert.ok(option, "в фильтре есть дирекция со строками");
+    const box = option.querySelector("input");
+    box.checked = true;
+    t.fire(box, "change");
+    await settle(t.window, 30);
+
+    t.click(t.$("***REMOVED***op-add-row"));
+    await settle(t.window, 60);
+    const created = t.calls.find((c) => c.kind === "create");
+    assert.ok(created, "дирекция понятна из фильтра — список не нужен");
+    assert.equal(created.payload.cfo_id, 1);
+  });
+});
+
 describe("вкладка «Бюджет»: новая строка", () => {
   let t;
   before(async () => {
     t = await mount();
-    t.click(t.$("***REMOVED***t-op tr.group.is-empty .add-row"));
+    t.click(t.$("***REMOVED***op-add-row"));
+    await settle(t.window, 30);
+    const hr = t.$$("***REMOVED***op-add-menu .copt").find((n) => n.textContent === HR);
+    hr.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
     await settle(t.window, 60);
   });
 
-  it("заводит пустую строку в том ЦФО, чей заголовок нажали", () => {
+  it("заводит пустую строку в выбранном ЦФО", () => {
     const created = t.calls.find((c) => c.kind === "create");
     assert.ok(created, "запрос на создание ушёл");
     assert.equal(created.payload.article, "");
-    assert.equal(created.payload.cfo_id, 2, "ЦФО берётся из заголовка блока");
+    assert.equal(created.payload.cfo_id, 2, "ЦФО — из выбора под кнопкой");
     assert.equal(created.payload.budget_name, "Основной бюджет");
     assert.equal(created.year, 2027);
   });
@@ -202,12 +263,23 @@ describe("вкладка «Бюджет»: новая строка", () => {
 
   it("раскрывает список статей по координатам окна, а не внутри ячейки", () => {
     const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
-    article.dispatchEvent(new t.window.FocusEvent("focus"));
+    t.focus(article);
     const pop = t.$(".fpop-fixed:not([hidden])");
     assert.ok(pop, "внутри .scroll абсолютный список обрезался бы контейнером");
+    assert.equal(t.styleOf(pop).position, "fixed",
+      "координаты считаются по окну — без fixed список уедет мимо экрана");
     const shown = Array.from(pop.querySelectorAll(".copt")).map((n) => n.textContent);
     // строку заводили в ДУП — в списке статьи ДУП, а не соседней дирекции
     assert.deepEqual(shown, ["4109_Обучение", "4110_Соцрасходы"]);
+  });
+
+  it("убирает чужой список, когда фокус уходит в ячейку без списка", () => {
+    const inputs = t.$$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    t.focus(inputs[2]);                                  // договор — список есть
+    assert.ok(t.$(".fpop-fixed:not([hidden])"), "список договоров раскрыт");
+    t.focus(inputs[3]);                                  // детализация — списка нет
+    assert.equal(t.$(".fpop-fixed:not([hidden])"), null,
+      "иначе список висел бы поверх таблицы");
   });
 
   it("сохраняет выбранную статью", async () => {
@@ -235,8 +307,8 @@ describe("вкладка «Бюджет»: сумма за год", () => {
   let t, sum, spread;
 
   before(async () => {
-    t = await mount();
-    t.click(t.$("***REMOVED***t-op tr.group .add-row"));
+    t = await mount([{ id: 1, name: IT }]);
+    t.click(t.$("***REMOVED***op-add-row"));
     await settle(t.window, 60);
     sum = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-sum .sum-in');
     spread = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-sum .spread-in');

@@ -463,6 +463,12 @@ thead th { border-right-color: var(--axis); }
   background: var(--surface); border: 1px solid var(--axis); border-radius: 7px;
   box-shadow: 0 10px 28px var(--shadow); padding: 9px;
 }
+/* Список внутри прокручиваемой таблицы: координаты считает U.combo по окну,
+   и без position: fixed они применялись бы относительно ячейки — список уезжал
+   за пределы видимой области, выглядело это как «подсказки не всплывают».
+   Правило стоит после .fpop намеренно: так оно выигрывает и по порядку, а не
+   только по специфичности. */
+.fpop.fpop-fixed { position: fixed; top: auto; left: auto; }
 .fsearch {
   width: 100%; box-sizing: border-box; padding: 6px 9px; font-size: 14px;
   border: 1px solid var(--border); border-radius: 5px; background: var(--plane);
@@ -531,10 +537,8 @@ thead th { border-right-color: var(--axis); }
 
 /* Заголовок дирекции без строк: место, с которого начинают планировать. */
 ***REMOVED***t-op tr.group.is-empty td { color: var(--muted); box-shadow: inset 3px 0 0 var(--border); }
-***REMOVED***t-op tr.group .add-row {
-  float: right; margin-left: 12px; text-transform: none; letter-spacing: 0;
-  font-weight: 600; padding: 2px 9px;
-}
+/* Список дирекций под кнопкой «+ расход»: те же строки, что заголовки блоков. */
+***REMOVED***op-add-row { white-space: nowrap; }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 .btn[disabled]:hover { background: var(--raised); border-color: var(--border); }
 

@@ -356,6 +356,7 @@
   }
 
   window.U = {
+    closePopups: closeAllFilters,
     MONTHS_FULL: MONTHS_FULL, MONTHS_SHORT: MONTHS_SHORT,
     el: el, fmt: fmt, fmtShort: fmtShort, parseSum: parseSum,
     td: td, tdn: tdn, th: th, badge: badge, meter: meter, battery: battery,
