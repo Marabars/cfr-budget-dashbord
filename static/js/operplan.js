@@ -13,10 +13,9 @@
     sections: {},        // год -> ответ /api/operplan по этому году
     yearOpen: {},        // год -> развёрнут ли раздел года в таблице
     missingOpen: false,  // блок замечаний свёрнут, пока его не раскроют
-    entryOpen: false,    // панель внесения расходов внутри карточки строк
     filters: null,
-    combos: null,       // выпадающие списки формы новой строки
-    year: null           // год в фокусе: к нему привязаны замок, справочники и форма строки
+    fresh: {},           // id строк, заведённых в этой сессии: подсвечены и правятся списками
+    year: null           // год в фокусе: к нему привязаны замок и справочники
   };
 
   var FIELDS = [
@@ -93,6 +92,14 @@
       });
     });
     return { rows: rows, years: years, total: total };
+  }
+
+  /* Под активным фильтром пустые заголовки дирекций прячем: фильтр — это поиск
+     по уже внесённому, и пустые блоки только мешали бы читать результат. */
+  function filtering() {
+    return Object.keys(state.filters || {}).some(function (key) {
+      return state.filters[key].selected().length > 0;
+    });
   }
 
   function passes(row, cfoName) {
@@ -223,18 +230,33 @@
     return Inline.cell(row.id, field, value, cls, editable);
   }
 
+  /* Строка считается новой, пока её заводили в этой сессии или пока в ней нет
+     статьи: такую подсвечиваем и правим списками, а не голым текстом. Пустая
+     статья переживает перезагрузку страницы, поэтому брошенную строку видно
+     и после F5. */
+  function isDraft(row) {
+    return !!state.fresh[row.id] || !(row.article || "").length;
+  }
+
   /* editable считается по году строки, а не по году в фокусе: замок стоит на год,
      и раскрытый базовый год может быть закрыт для правки, когда плановый открыт. */
   function rowNode(row, cfoName, canEdit) {
     var tr = U.el("tr", { "data-id": row.id });
     var editable = canEdit;
+    var draft = editable && isDraft(row);
+    if (draft) tr.classList.add("is-new");
 
     var del = U.el("button", { class: "mini", title: "Удалить строку", text: "✕" });
     del.onclick = function (event) {
       event.stopPropagation();
-      if (!window.confirm("Удалить строку «" + row.article + "»?")) return;
+      var what = row.article ? "строку «" + row.article + "»" : "пустую строку";
+      if (!window.confirm("Удалить " + what + "?")) return;
       API.deleteRow(row.id)
-        .then(function () { U.toast("Строка удалена"); load(state.year); })
+        .then(function () {
+          delete state.fresh[row.id];
+          U.toast("Строка удалена");
+          load(state.rowYear[row.id] || state.year);
+        })
         .catch(function (e) { U.toast(e.message, "error"); });
     };
     tr.appendChild(U.el("td", {}, [U.el("div", { class: "no-cell" }, [
@@ -243,11 +265,12 @@
     ])]));
 
     FIELDS.forEach(function (f) {
-      tr.appendChild(editableCell(row, f.key, row[f.key] || "", "wrap", editable));
+      tr.appendChild(draft ? pickCell(row, f.key)
+        : editableCell(row, f.key, row[f.key] || "", "wrap", editable));
     });
 
-    tr.appendChild(U.el("td", { class: "num n-plan", "data-total": row.id,
-      text: U.fmt(row.plan_year) }));
+    tr.appendChild(draft ? sumCell(row) : U.el("td", { class: "num n-plan",
+      "data-total": row.id, text: U.fmt(row.plan_year) }));
 
     for (var i = 0; i < 12; i++) {
       var value = row.months[i] || 0;
@@ -261,20 +284,205 @@
     return tr;
   }
 
-  function groupNode(block, shown, sum) {
+  /* ---------- ячейки новой строки ---------- */
+
+  var PLACEHOLDER = {
+    article: "статья оборотов", counterparty: "контрагент",
+    contract: "договор", detail_text: "на что расход"
+  };
+
+  /* Значения списка для ячейки. Договоры сужаются по контрагенту строки, как
+     это было в прежней форме: иначе список тянул бы все договоры дирекции. */
+  function cellOptions(row, field) {
+    var refs = cfoRefs(row.cfo_id);
+    var all = document.getElementById("op-a-all").checked;
+    if (field === "article") return all ? refs.all.articles : refs.own.articles;
+    if (field === "counterparty") {
+      return all ? refs.all.counterparties : refs.own.counterparties;
+    }
+    if (field === "contract") {
+      if (all) return refs.all.contracts;
+      var byCp = refs.own.contracts || {};
+      if (row.counterparty && byCp[row.counterparty]) return byCp[row.counterparty];
+      return Object.keys(byCp).reduce(function (acc, key) {
+        return acc.concat(byCp[key]);
+      }, []);
+    }
+    return null;                      // детализация — свободный текст, списка нет
+  }
+
+  function commitCell(row, field, text, td) {
+    var value = (text || "").replace(/^\s+|\s+$/g, "");
+    if (value === (row[field] || "")) return;
+    var payload = {};
+    if (field === "detail_text") {
+      payload[row.detail_source === "detail" ? "detail" : "comment"] = value;
+    } else {
+      payload[field] = value;
+    }
+    td.classList.add("saving");
+    API.patchRow(row.id, payload).then(function (result) {
+      td.classList.remove("saving");
+      applied(row, result.row, field, payload);
+      afterSave(row);
+    }).catch(function (e) {
+      td.classList.remove("saving");
+      U.toast(e.message, "error");
+    });
+  }
+
+  function pickCell(row, field) {
+    var td = U.el("td", { class: "wrap cell-pick" });
+    var input = U.el("input", { class: "f-in", value: row[field] || "" });
+    input.placeholder = PLACEHOLDER[field] || "";
+    td.appendChild(input);
+    var options = cellOptions(row, field);
+    if (options) {
+      var box = U.combo(input, function (value) { commitCell(row, field, value, td); }, true);
+      box.setOptions(options);
+      // список договоров пересобираем на фокусе: контрагента могли выбрать секунду назад
+      input.addEventListener("focus", function () { box.setOptions(cellOptions(row, field)); });
+    }
+    input.addEventListener("change", function () { commitCell(row, field, input.value, td); });
+    return td;
+  }
+
+  /* Как разложить годовую сумму по месяцам. Один список вместо двух полей:
+     «равномерно», «не раскладывать» и двенадцать месяцев подряд. */
+  function spreadOptions() {
+    var out = [{ value: "even", text: "равномерно" },
+               { value: "none", text: "не раскладывать" }];
+    U.MONTHS_FULL.forEach(function (name, i) {
+      out.push({ value: String(i), text: "весь в " + name.toLowerCase() });
+    });
+    return out;
+  }
+
+  function spreadMonths(amount, mode) {
+    var months = [];
+    for (var i = 0; i < 12; i++) months.push(0);
+    if (!amount || mode === "none") return months;
+    if (mode === "even") {
+      for (var j = 0; j < 12; j++) months[j] = Math.round(amount / 12 * 100) / 100;
+      return months;
+    }
+    months[Number(mode)] = amount;
+    return months;
+  }
+
+  function sumCell(row) {
+    var td = U.el("td", { class: "num n-plan cell-sum", "data-total": row.id });
+    var input = U.el("input", { class: "f-in sum-in",
+      value: row.plan_year ? U.fmt(row.plan_year) : "" });
+    input.placeholder = "сумма за год";
+    var spread = U.el("select", { class: "f-in spread-in" });
+    U.fillSelect(spread, spreadOptions(), "value", "text");
+    spread.value = state.spread || "even";
+
+    function apply() {
+      state.spread = spread.value;
+      var amount = U.parseSum(input.value);
+      if (amount < 0) { U.toast("Сумма не может быть отрицательной", "error"); return; }
+      if (!amount && !row.plan_year) return;
+      var months = spreadMonths(amount, spread.value);
+      td.classList.add("saving");
+      API.patchRow(row.id, { months: months }).then(function (result) {
+        td.classList.remove("saving");
+        applied(row, result.row, "months", { months: months });
+        input.value = row.plan_year ? U.fmt(row.plan_year) : "";
+        paintMonths(row);
+        afterSave(row);
+      }).catch(function (e) {
+        td.classList.remove("saving");
+        U.toast(e.message, "error");
+      });
+    }
+    input.addEventListener("change", apply);
+    spread.addEventListener("change", function () { if (U.parseSum(input.value)) apply(); });
+
+    td.appendChild(input);
+    td.appendChild(spread);
+    return td;
+  }
+
+  /* Месяцы строки перерисовываем на месте: раскладка суммы меняет двенадцать
+     ячеек сразу, а полная перерисовка таблицы выбила бы фокус из строки. */
+  function paintMonths(row) {
+    for (var i = 0; i < 12; i++) {
+      var td = document.querySelector(
+        '***REMOVED***t-op td[data-id="' + row.id + '"][data-f="m' + i + '"]');
+      if (td) paint(td, row, "m" + i);
+    }
+  }
+
+  /* Кнопка «+ расход» в заголовке блока: строка заводится сразу, пустой,
+     и заполняется прямо в таблице. ЦФО и бюджет известны из заголовка. */
+  function addRow(block, year, button) {
+    button.disabled = true;
+    API.createOperplanRow({
+      cfo_id: block.cfo_id,
+      budget_name: block.budget_name,
+      article: "", counterparty: "", contract: "", detail: "", comment: "",
+      plan_year: 0, months: null
+    }, year).then(function (result) {
+      var id = result.id || (result.row && result.row.id);
+      state.fresh[id] = true;
+      state.collapsed[block.budget_id] = false;
+      return load(year).then(function () {
+        var tr = document.querySelector('***REMOVED***t-op tr[data-id="' + id + '"]');
+        if (!tr) return;
+        tr.scrollIntoView({ block: "center" });
+        var first = tr.querySelector("input");
+        if (first) first.focus();
+      });
+    }).catch(function (e) { U.toast(e.message, "error"); })
+      .then(function () { button.disabled = false; });
+  }
+
+  function groupNode(block, shown, sum, year, editable) {
     var collapsed = !!state.collapsed[block.budget_id];
+    var add = null;
+    if (editable) {
+      add = U.el("button", { class: "btn sm add-row", text: "+ расход",
+        title: "Завести пустую строку в «" + block.cfo_name + "»" });
+      add.onclick = function (event) {
+        event.stopPropagation();          // кнопка внутри кликабельного заголовка
+        addRow(block, year, add);
+      };
+    }
     var td = U.el("td", { colspan: COLS }, [
       U.el("span", { class: "grp-caret", text: collapsed ? "▸" : "▾" }),
       U.el("b", { text: block.cfo_name }),
       U.el("span", { class: "dim", text: " · " + block.budget_name }),
-      U.el("span", { class: "grp-sum", text: U.fmt(sum) + " ₽ · " + shown + " строк" })
+      U.el("span", { class: "grp-sum", text: block.placeholder
+        ? "строк нет" : U.fmt(sum) + " ₽ · " + shown + " строк" }),
+      add
     ]);
-    var tr = U.el("tr", { class: "group" }, [td]);
+    var tr = U.el("tr", { class: "group" + (block.placeholder ? " is-empty" : "") }, [td]);
     tr.onclick = function () {
       state.collapsed[block.budget_id] = !collapsed;
       render();
     };
     return tr;
+  }
+
+  /* Дирекции без единой строки тоже показываем заголовком: иначе в пустом году
+     планировать было бы не с чего — блоков нет, значит нет и кнопки «+ расход». */
+  function blocksOf(sec, editable) {
+    var blocks = sec.blocks.slice();
+    if (!editable || sec.year !== state.data.plan_year_no) return blocks;
+    var have = {};
+    blocks.forEach(function (b) { have[b.cfo_id] = true; });
+    (state.cfoList || []).forEach(function (cfo) {
+      if (have[cfo.id]) return;
+      blocks.push({ budget_id: "new-" + cfo.id, cfo_id: cfo.id, cfo_name: cfo.name,
+        budget_name: "Основной бюджет", rows: [], rows_count: 0,
+        plan_year: 0, months: [], placeholder: true });
+    });
+    return blocks.sort(function (a, b) {
+      return a.cfo_name.localeCompare(b.cfo_name, "ru")
+        || a.budget_name.localeCompare(b.budget_name, "ru");
+    });
   }
 
   /* Объём года известен из KPI ещё до того, как раздел загружен. */
@@ -325,11 +533,12 @@
       var editable = sectionEditable(sec);
       var yearRows = [];
       var nodes = [];
-      sec.blocks.forEach(function (block) {
+      blocksOf(sec, editable).forEach(function (block) {
         var rows = block.rows.filter(function (row) { return passes(row, block.cfo_name); });
-        if (!rows.length) return;
+        // заголовок пустой дирекции держим ради кнопки «+ расход», но не под фильтром
+        if (!rows.length && !(block.placeholder && !filtering())) return;
         var sum = rows.reduce(function (acc, row) { return acc + row.plan_year; }, 0);
-        nodes.push(groupNode(block, rows.length, sum));
+        nodes.push(groupNode(block, rows.length, sum, year, editable));
         rows.forEach(function (row) {
           state.rows[row.id] = row;
           state.rowYear[row.id] = year;
@@ -352,8 +561,8 @@
       body.appendChild(U.empty(COLS, ctx.total
         ? "Под фильтр ничего не подошло — снимите часть условий."
         : ctx.years.length
-          ? "Пока нет строк за " + ctx.years.join(" и ") + ". Нажмите «Повторить бюджет "
-            + "прошлого года» или добавьте строку вручную."
+          ? "Пока нет строк за " + ctx.years.join(" и ") + ". Нажмите «⟳ Бюджет "
+            + "прошлого года» или заведите строку кнопкой «+ расход» у нужной дирекции."
           : "Все годы свёрнуты — раскройте нужный строкой года выше."));
     }
 
@@ -437,24 +646,13 @@
 
   function afterSave(row) {
     var totalCell = document.querySelector('[data-total="' + row.id + '"]');
-    if (totalCell) totalCell.textContent = U.fmt(row.plan_year);
+    /* У новой строки в этой колонке поле ввода с раскладкой — текст туда писать
+       нельзя, иначе ввод суммы стёр бы сам себя. Его обновляет sumCell. */
+    if (totalCell && !totalCell.classList.contains("cell-sum")) {
+      totalCell.textContent = U.fmt(row.plan_year);
+    }
     repaintTotal(state.rowYear[row.id]);
     refreshFilterOptions();
-  }
-
-  /* ---------- панель внесения расходов ---------- */
-
-  /* Панель свёрнута по умолчанию и живёт внутри карточки строк — на странице
-     одним блоком меньше. Кнопка-переключатель в шапке таблицы не прячется
-     никогда, поэтому возможность внести строку не может пропасть. */
-  function renderEntry() {
-    var editable = sectionEditable(state.data);
-    if (!editable) state.entryOpen = false;
-    var toggle = document.getElementById("op-entry-toggle");
-    toggle.hidden = !editable;
-    toggle.textContent = state.entryOpen ? "× Скрыть внесение" : "+ Внести расходы";
-    toggle.classList.toggle("primary", !state.entryOpen);
-    document.getElementById("op-entry").hidden = !state.entryOpen;
   }
 
   /* ---------- замок ---------- */
@@ -480,19 +678,21 @@
     document.getElementById("op-edit-scope").textContent = state.data.is_fin
       ? "Правка плана по всем ЦФО." : "Правка плана вашего ЦФО.";
 
-    ["op-a-save", "op-copy-run", "op-fact-run"].forEach(function (id) {
+    /* Переносы прошлого года переехали в шапку карточки строк; под замком
+       гасим их, а кнопку «+ расход» в заголовках блоков render просто не рисует. */
+    ["op-copy-run", "op-fact-run"].forEach(function (id) {
       document.getElementById(id).disabled = !editable;
     });
-    document.getElementById("op-entry-title").textContent =
-      "Внесение плановых расходов на " + state.data.plan_year_no + " год";
-    document.getElementById("op-copy-title").textContent =
-      "Перенести " + state.data.base_year_no + " год в план " + state.data.plan_year_no;
+    document.getElementById("op-index-wrap").hidden = !editable;
+    document.getElementById("op-copy-run").title = "Повторить бюджет "
+      + state.data.base_year_no + " года в плане " + state.data.plan_year_no;
+    document.getElementById("op-fact-run").title = "Перенести в план "
+      + state.data.plan_year_no + " суммы факта " + state.data.base_year_no + " года";
     /* Загрузка доступна всем, кто вправе править: круг ЦФО режет сервер, чужие
        строки файла он пропускает. Под замком грузить нечего — кнопку убираем,
        иначе она отвечала бы 403. Выгрузка и шаблон не зависят от замка. */
     document.getElementById("op-import").hidden = !editable;
     if (!editable) document.getElementById("op-import-form").hidden = true;
-    renderEntry();
   }
 
   /* ---------- пропавшие строки (п.8) ---------- */
@@ -632,113 +832,13 @@
       .catch(function (e) { note.style.color = "var(--critical)"; note.textContent = e.message; });
   }
 
-  /* ---------- форма добавления строки ---------- */
+  /* ---------- справочники для списков в ячейках ---------- */
 
   function cfoRefs(cfoId) {
     var all = state.refs && state.refs.all ? state.refs.all
       : { articles: [], counterparties: [], contracts: [] };
     var own = state.refs && state.refs.by_cfo ? state.refs.by_cfo[String(cfoId)] : null;
     return { own: own || { articles: [], counterparties: [], contracts: {} }, all: all };
-  }
-
-  function initCombos() {
-    if (state.combos) return;
-    state.combos = {
-      budget: U.combo(document.getElementById("op-a-budget")),
-      article: U.combo(document.getElementById("op-a-article")),
-      cp: U.combo(document.getElementById("op-a-cp"), function () { syncAddLists(); }),
-      contract: U.combo(document.getElementById("op-a-contract"))
-    };
-  }
-
-  function syncAddLists() {
-    initCombos();
-    var cfoId = Number(document.getElementById("op-a-cfo").value);
-    var refs = cfoRefs(cfoId);
-    var showAll = document.getElementById("op-a-all").checked;
-
-    state.combos.article.setOptions(showAll ? refs.all.articles : refs.own.articles);
-    state.combos.cp.setOptions(showAll ? refs.all.counterparties : refs.own.counterparties);
-
-    var cp = document.getElementById("op-a-cp").value;
-    var contracts = showAll ? refs.all.contracts : (refs.own.contracts[cp] || []);
-    if (!showAll && !contracts.length) {
-      contracts = Object.keys(refs.own.contracts).reduce(function (acc, key) {
-        return acc.concat(refs.own.contracts[key]);
-      }, []);
-    }
-    state.combos.contract.setOptions(contracts);
-
-    var hint = document.getElementById("op-a-hint");
-    hint.textContent = showAll
-      ? "Показаны значения по всем ЦФО"
-      : "Показаны значения этого ЦФО: статей " + refs.own.articles.length +
-        ", контрагентов " + refs.own.counterparties.length;
-
-    /* Бюджет выбирают только там, где их несколько: у ИТ-дирекции это бюджет
-       обязательных затрат и бюджет развития. У остальных ЦФО бюджет один —
-       поле прячем и подставляем его молча. */
-    var budgets = {};
-    (state.data ? state.data.blocks : []).forEach(function (b) {
-      if (b.cfo_id === cfoId) budgets[b.budget_name] = true;
-    });
-    var names = Object.keys(budgets);
-    if (!names.length) names = ["Основной бюджет"];
-    var field = document.getElementById("op-a-budget");
-    if (!field.value || budgets[field.value] === undefined) field.value = names[0];
-    state.combos.budget.setOptions(names);
-    document.getElementById("op-a-budget-wrap").hidden = names.length < 2;
-  }
-
-  function monthPlan() {
-    var amount = U.parseSum(document.getElementById("op-a-sum").value);
-    var spread = document.getElementById("op-a-spread").value;
-    var month = Number(document.getElementById("op-a-month").value);
-    var months = [];
-    for (var i = 0; i < 12; i++) months.push(0);
-    if (!amount) return months;
-    if (spread === "even") {
-      for (var j = 0; j < 12; j++) months[j] = Math.round(amount / 12 * 100) / 100;
-    } else if (spread === "one") {
-      months[month] = amount;
-    }
-    return months;
-  }
-
-  function saveNewRow() {
-    var err = document.getElementById("op-a-err");
-    err.style.color = "";
-    var article = document.getElementById("op-a-article").value.replace(/^\s+|\s+$/g, "");
-    var amount = U.parseSum(document.getElementById("op-a-sum").value);
-    var spread = document.getElementById("op-a-spread").value;
-    if (!article) { err.textContent = "Укажите статью оборотов"; return; }
-    /* При «не распределять» сумма необязательна: создаётся пустая строка,
-       в которую суммы вписывают прямо в таблице по месяцам. */
-    if (spread !== "none" && amount <= 0) {
-      err.textContent = "Укажите сумму больше нуля или выберите «не распределять»";
-      return;
-    }
-    if (amount < 0) { err.textContent = "Сумма не может быть отрицательной"; return; }
-
-    var months = monthPlan();
-    API.createOperplanRow({
-      cfo_id: Number(document.getElementById("op-a-cfo").value),
-      budget_name: document.getElementById("op-a-budget").value || "Основной бюджет",
-      article: article,
-      counterparty: document.getElementById("op-a-cp").value,
-      contract: document.getElementById("op-a-contract").value,
-      detail: document.getElementById("op-a-detail").value,
-      comment: document.getElementById("op-a-detail").value,
-      plan_year: amount,
-      months: months
-    }, state.data.plan_year_no).then(function () {
-      ["op-a-article", "op-a-cp", "op-a-contract", "op-a-detail", "op-a-sum"]
-        .forEach(function (id) { document.getElementById(id).value = ""; });
-      err.style.color = "var(--good)";
-      err.textContent = "Строка добавлена";
-      window.setTimeout(function () { err.textContent = ""; err.style.color = ""; }, 2500);
-      reloadAll();
-    }).catch(function (e) { err.textContent = e.message; });
   }
 
   /* ---------- загрузка ---------- */
@@ -753,30 +853,13 @@
       /* «Показать все» — привилегия финотдела: руководителю сервер и не отдаёт
          чужие статьи с контрагентами, так что галочка ему только мешала бы. */
       var all = document.getElementById("op-a-all");
-      all.parentNode.hidden = !data.is_fin;
+      document.getElementById("op-all-wrap").hidden = !data.is_fin;
       if (!data.is_fin) all.checked = false;
 
-      document.getElementById("op-copy-title").textContent =
-        "Повторить бюджет " + data.base_year_no + " года в плане " + data.plan_year_no;
-      U.fillSelect(document.getElementById("op-a-cfo"),
-        (state.cfoList || []).length ? state.cfoList : blockCfoList(), "id", "name");
       initFilters();
       renderLock();
       render();
-      syncAddLists();
     });
-  }
-
-  function blockCfoList() {
-    var seen = {}, out = [];
-    Object.keys(state.sections).forEach(function (year) {
-      state.sections[year].blocks.forEach(function (b) {
-        if (seen[b.cfo_id]) return;
-        seen[b.cfo_id] = true;
-        out.push({ id: b.cfo_id, name: b.cfo_name });
-      });
-    });
-    return out.sort(function (a, b) { return a.name.localeCompare(b.name, "ru"); });
   }
 
   /* Остальные годы догружаем сразу: их разделы свёрнуты, но сумма и число строк
@@ -801,7 +884,7 @@
         }),
         API.operplanRefs(state.year).then(function (data) {
           state.refs = data;
-          syncAddLists();
+          render();                     // списки в ячейках новых строк берут их отсюда
         })
       ]);
     }).catch(function (e) { U.toast("Бюджет: " + e.message, "error"); });
@@ -811,10 +894,6 @@
     setCfoList: function (list) { state.cfoList = list; },
     load: reloadAll,
     init: function () {
-      initCombos();
-      U.fillSelect(document.getElementById("op-a-month"),
-        U.MONTHS_FULL.map(function (name, i) { return { value: String(i), text: name }; }),
-        "value", "text");
       Inline.bind(document.getElementById("t-op"), {
         row: function (id) { return state.rows[id]; },
         payload: payloadFor,
@@ -832,14 +911,6 @@
       document.getElementById("op-fact-run").onclick = function () { runCopy("fact"); };
       document.getElementById("op-export").onclick = runExport;
       document.getElementById("op-template").onclick = runTemplate;
-      document.getElementById("op-entry-toggle").onclick = function () {
-        state.entryOpen = !state.entryOpen;
-        renderEntry();
-        if (state.entryOpen) {
-          document.getElementById("op-entry").scrollIntoView({ block: "nearest" });
-          document.getElementById("op-a-article").focus();
-        }
-      };
       document.getElementById("op-import").onclick = function () {
         var form = document.getElementById("op-import-form");
         form.hidden = !form.hidden;
@@ -848,15 +919,8 @@
       document.getElementById("op-import-cancel").onclick = function () {
         document.getElementById("op-import-form").hidden = true;
       };
-      document.getElementById("op-a-save").onclick = saveNewRow;
-      document.getElementById("op-a-cfo").onchange = syncAddLists;
-      // oninput у поля занят выпадающим списком, поэтому вешаем вторым слушателем:
-      // набранный вручную контрагент тоже должен сузить список договоров
-      document.getElementById("op-a-cp").addEventListener("input", syncAddLists);
-      document.getElementById("op-a-all").onchange = syncAddLists;
-      document.getElementById("op-a-spread").onchange = function () {
-        document.getElementById("op-a-month-wrap").hidden = this.value !== "one";
-      };
+      /* Галочка меняет наполнение списков в ячейках — перерисовываем таблицу. */
+      document.getElementById("op-a-all").onchange = render;
       document.getElementById("op-add-all").onclick = function (event) {
         event.stopPropagation();          // кнопка внутри кликабельного заголовка
         addAllMissing();

@@ -158,10 +158,16 @@ class RowPatch(BaseModel):
 
 
 class OperplanRowIn(BaseModel):
-    """Новая строка плана: ЦФО и бюджет обязательны, суммы — по месяцам."""
+    """Новая строка плана: ЦФО и бюджет обязательны, суммы — по месяцам.
+
+    Статья может быть пустой: строку заводят кнопкой в заголовке блока ЦФО
+    и заполняют прямо в таблице. Пустая строка подсвечена в интерфейсе, чтобы
+    её не бросили незаполненной; правка уже существующей строки статью
+    стереть не даёт (см. RowPatch).
+    """
     cfo_id: int
     budget_name: str = "Основной бюджет"
-    article: str = Field(min_length=1)
+    article: str = ""
     counterparty: str = ""
     contract: str = ""
     detail: str = ""
@@ -171,10 +177,8 @@ class OperplanRowIn(BaseModel):
 
     @field_validator("article")
     @classmethod
-    def article_not_blank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Укажите статью оборотов")
-        return value.strip()
+    def article_trimmed(cls, value: str) -> str:
+        return (value or "").strip()
 
     def month_plan(self) -> list[float]:
         out = [float(v or 0) for v in (self.months or [])][:MONTHS]

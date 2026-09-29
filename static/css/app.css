@@ -507,20 +507,34 @@ thead th { border-right-color: var(--axis); }
 }
 /* строки прошлого года приглушены: это справка, а не то, что сейчас правят */
 ***REMOVED***t-op tr.y-past td { color: var(--ink2); }
-/* Внесение расходов внутри карточки строк: своя подложка и отбивка, чтобы
-   панель не читалась как часть таблицы. Карточка строк идёт с flush — отступы
-   задаём здесь. */
-.entry-inline {
-  padding: 14px; background: var(--raised);
-  border-bottom: 1px solid var(--border);
-}
-.entry-head {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
-}
-.entry-head b { font-size: 16px; }
+/* Новая строка: заведена кнопкой «+ расход» и ещё не заполнена. Подсветка
+   акцентным фиолетовым — глазу сразу видно, где продолжать. Первые две колонки
+   закреплены и красятся своим фоном, поэтому им цвет задаём отдельно. */
+***REMOVED***t-op tr.is-new td,
+***REMOVED***t-op tr.is-new td:nth-child(1),
+***REMOVED***t-op tr.is-new td:nth-child(2) { background: var(--accent-soft); }
+***REMOVED***t-op tr.is-new td:first-child { box-shadow: inset 3px 0 0 var(--accent-2); }
+***REMOVED***t-op tr.is-new:hover td:nth-child(1),
+***REMOVED***t-op tr.is-new:hover td:nth-child(2) { background: var(--accent-soft); }
 
-/* разделитель внутри панели внесения расходов */
-.entry-sep { height: 1px; background: var(--border); margin: 16px 0 12px; }
+/* Поля прямо в ячейке: списки статей, контрагентов и договоров у новой строки. */
+***REMOVED***t-op td.cell-pick { min-width: 210px; }
+***REMOVED***t-op td.cell-pick .f-in { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 14px; }
+***REMOVED***t-op td.cell-sum { min-width: 170px; }
+***REMOVED***t-op td.cell-sum .sum-in {
+  width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 14px; text-align: right;
+}
+***REMOVED***t-op td.cell-sum .spread-in {
+  width: 100%; box-sizing: border-box; margin-top: 4px; padding: 3px 6px;
+  font-size: 13px; color: var(--ink2);
+}
+
+/* Заголовок дирекции без строк: место, с которого начинают планировать. */
+***REMOVED***t-op tr.group.is-empty td { color: var(--muted); box-shadow: inset 3px 0 0 var(--border); }
+***REMOVED***t-op tr.group .add-row {
+  float: right; margin-left: 12px; text-transform: none; letter-spacing: 0;
+  font-weight: 600; padding: 2px 9px;
+}
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 .btn[disabled]:hover { background: var(--raised); border-color: var(--border); }
 

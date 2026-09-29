@@ -872,3 +872,52 @@ def test_повторная_загрузка_факта_убирает_сумм�
              if r["cfo_name"] == HR and r["article"] != "4109_Обучение"
              and sum(months.get(int(r["id"]), []))]
     assert not stale, "факт остался на строках, которых в новом файле нет"
+
+
+***REMOVED*** ---------- пустая строка, заводимая кнопкой в заголовке блока ----------
+
+def test_строка_заводится_без_статьи(client, loaded):
+    """Кнопка «+ расход» создаёт пустую строку — заполняют её уже в таблице."""
+    hr_id = repo.ensure_cfo(HR)
+    response = client.post("/api/operplan/rows?year=2027",
+                           json={"cfo_id": hr_id, "budget_name": "Основной бюджет",
+                                 "article": ""})
+    assert response.status_code == 201
+    row_id = response.json()["id"]
+
+    row = repo.get_row(row_id)
+    assert row["article"] == "" and row["plan_year"] == 0
+    assert row["cfo_name"] == HR
+
+
+def test_пустая_строка_дозаполняется_правкой(client, loaded):
+    """Статья, контрагент и месяцы дописываются в уже созданную строку."""
+    hr_id = repo.ensure_cfo(HR)
+    row_id = client.post("/api/operplan/rows?year=2027",
+                         json={"cfo_id": hr_id, "article": ""}).json()["id"]
+
+    assert client.patch(f"/api/rows/{row_id}",
+                        json={"article": "4109_Обучение"}).status_code == 200
+    assert client.patch(f"/api/rows/{row_id}",
+                        json={"counterparty": "Подрядчик ООО"}).status_code == 200
+    ***REMOVED*** равномерная раскладка 120 000 по месяцам: ИТОГО пересчитывается по ним
+    months = [10_000.0] * 12
+    result = client.patch(f"/api/rows/{row_id}", json={"months": months}).json()
+    assert result["row"]["plan_year"] == pytest.approx(120_000)
+    assert result["row"]["article"] == "4109_Обучение"
+
+
+def test_правка_не_даёт_стереть_статью(client, loaded):
+    """Пустую строку завести можно, а обнулить статью у заполненной — нет."""
+    row = repo.list_rows(2026, layer=operplan.LAYER)[0]
+    response = client.patch(f"/api/rows/{row['id']}", json={"article": "  "})
+    assert response.status_code == 422
+
+
+def test_руководитель_не_заводит_строку_в_чужом_цфо(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    it_id = repo.ensure_cfo(IT)
+    response = client.post("/api/operplan/rows?year=2027",
+                           json={"cfo_id": it_id, "article": ""},
+                           headers={"X-User": f"cfo:{hr_id}"})
+    assert response.status_code == 403

@@ -229,11 +229,14 @@
      полный перечень значений появлялся только после очистки поля. Здесь список
      открывается целиком по клику на поле или на стрелку, а набор текста сужает
      его — и при этом остаётся возможность ввести значение, которого в списке нет. */
-  function combo(input, onPick) {
+  /* fixed — для списков внутри прокручиваемой таблицы: абсолютный попап обрезался
+     бы контейнером .scroll, поэтому кладём его по координатам окна. */
+  function combo(input, onPick, fixed) {
     var options = [];
     var shownQuery = "";          // чем сужен открытый список
     var list = el("div", { class: "flist" });
-    var pop = el("div", { class: "fpop combo-pop", hidden: "hidden" }, [list]);
+    var pop = el("div", { class: "fpop combo-pop" + (fixed ? " fpop-fixed" : ""),
+      hidden: "hidden" }, [list]);
     var caret = el("button", { class: "combo-caret", type: "button", text: "▾",
       title: "Показать все значения" });
     var wrap = el("div", { class: "combo" });
@@ -270,11 +273,32 @@
       }
     }
 
+    /* Список раскрывается вниз, а если внизу не хватает места — вверх. */
+    function place() {
+      if (!fixed) return;
+      var r = input.getBoundingClientRect();
+      var width = Math.max(r.width, 280);
+      pop.style.width = width + "px";
+      pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 12)) + "px";
+      var below = window.innerHeight - r.bottom - 12;
+      var above = r.top - 12;
+      if (below >= 220 || below >= above) {
+        pop.style.top = (r.bottom + 4) + "px";
+        pop.style.bottom = "auto";
+        list.style.maxHeight = Math.max(120, Math.min(280, below - 40)) + "px";
+      } else {
+        pop.style.top = "auto";
+        pop.style.bottom = (window.innerHeight - r.top + 4) + "px";
+        list.style.maxHeight = Math.max(120, Math.min(280, above - 40)) + "px";
+      }
+    }
+
     function open(query) {
       closeAllFilters();
       query = query || "";
       shownQuery = query;
       pop.hidden = false;
+      place();
       draw(query);
     }
 
@@ -309,6 +333,13 @@
   }
 
   document.addEventListener("click", closeAllFilters);
+  /* Прокрутка уводит поле из-под списка, посчитанного по координатам окна:
+     такие списки закрываем. Ловим в фазе перехвата — скроллится контейнер
+     таблицы, а не документ, и всплытия scroll не будет. */
+  document.addEventListener("scroll", function () {
+    Array.prototype.forEach.call(document.querySelectorAll(".fpop-fixed"),
+      function (pop) { pop.hidden = true; });
+  }, true);
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") closeAllFilters();
   });
