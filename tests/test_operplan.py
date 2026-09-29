@@ -108,6 +108,21 @@ def loaded(client):
     return result
 
 
+@pytest.fixture()
+def planned(loaded):
+    """План 2027, наполненный повтором базы: правят только планируемый год."""
+    return operplan.copy_year("Тест", 2026, 2027)
+
+
+def plan_row(cfo_name: str | None = None) -> dict:
+    """Строка плана 2027 — при необходимости конкретной дирекции."""
+    rows = repo.list_rows(2027, layer=operplan.LAYER)
+    if cfo_name:
+        rows = [r for r in rows if r["cfo_name"] == cfo_name]
+    assert rows, "в плане нет подходящей строки"
+    return rows[0]
+
+
 ***REMOVED*** ---------- разбор листа ----------
 
 def test_держатель_бюджета_берётся_из_строки_итого(loaded):
@@ -286,13 +301,12 @@ def test_kpi_считает_оба_года_и_помнит_что_факта_н
 
 ***REMOVED*** ---------- замок ----------
 
-def test_замок_закрывает_правку_руководителю_но_не_финотделу(client, loaded):
+def test_замок_закрывает_правку_руководителю_но_не_финотделу(client, planned):
     cfo_id = repo.ensure_cfo(HR)
-    row_id = int(next(r for r in repo.list_rows(2026, layer=operplan.LAYER)
-                      if r["cfo_id"] == cfo_id)["id"])
+    row_id = int(plan_row(HR)["id"])
 
     assert client.post("/api/operplan/lock",
-                       json={"year": 2026, "locked": True}).status_code == 200
+                       json={"year": 2027, "locked": True}).status_code == 200
 
     blocked = client.patch(f"/api/rows/{row_id}", json={"counterparty": "Нельзя"},
                            headers={"X-User": f"cfo:{cfo_id}"})
@@ -327,14 +341,13 @@ def test_удаление_строки_при_замке_закрыто_руко
                          headers={"X-User": f"cfo:{cfo_id}"}).status_code == 403
 
 
-def test_руководитель_правит_и_удаляет_свою_строку_залитого_бюджета(client, loaded):
-    """Без замка руководитель ЦФО редактирует уже залитый бюджет своего ЦФО."""
+def test_руководитель_правит_и_удаляет_свою_строку_плана(client, planned):
+    """Без замка руководитель ЦФО редактирует план своего ЦФО."""
     cfo_id = repo.ensure_cfo(HR)
     head = {"X-User": f"cfo:{cfo_id}"}
-    rows = [r for r in repo.list_rows(2026, layer=operplan.LAYER) if r["cfo_id"] == cfo_id]
-    row_id = int(rows[0]["id"])
+    row_id = int(plan_row(HR)["id"])
 
-    assert client.get("/api/operplan?year=2026", headers=head).json()["can_edit"] is True
+    assert client.get("/api/operplan?year=2027", headers=head).json()["can_edit"] is True
 
     patched = client.patch(f"/api/rows/{row_id}", json={"counterparty": "Свой контрагент"},
                            headers=head)
@@ -362,18 +375,55 @@ def test_руководитель_не_правит_чужое_цфо(client, lo
     assert response.status_code == 403
 
 
+***REMOVED*** ---------- прошлый год не правится ----------
+
+def test_прошлый_год_не_правится_по_ячейке(client, loaded):
+    """База для сравнения: ни правки, ни удаления — даже финотделу."""
+    row_id = int(repo.list_rows(2026, layer=operplan.LAYER)[0]["id"])
+
+    patched = client.patch(f"/api/rows/{row_id}", json={"counterparty": "Нельзя"})
+    assert patched.status_code == 403
+    assert "база для сравнения" in patched.json()["detail"]
+
+    deleted = client.delete(f"/api/rows/{row_id}")
+    assert deleted.status_code == 403
+    assert repo.get_row(row_id) is not None, "строка должна остаться"
+
+
+def test_строку_в_прошлый_год_не_завести(client, loaded):
+    response = client.post("/api/operplan/rows?year=2026",
+                           json={"cfo_id": repo.ensure_cfo(HR), "article": "4109_Обучение"})
+    assert response.status_code == 403
+
+
+def test_прошлый_год_по_прежнему_заливается_целиком(client, loaded):
+    """Запрет на правку по ячейке не мешает перезалить базу или залить факт."""
+    assert client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "plan"},
+        files={"file": ("бюджеты.xlsx", make_budgets_sheet(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).status_code == 200
+    assert client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "fact"},
+        files={"file": ("факт.xlsx", make_fact_sheet(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    ).status_code == 200
+
+
 ***REMOVED*** ---------- правка строки ----------
 
-def test_правка_месяцев_пересчитывает_годовую_сумму(client, loaded):
-    row_id = int(repo.list_rows(2026, layer=operplan.LAYER)[0]["id"])
+def test_правка_месяцев_пересчитывает_годовую_сумму(client, planned):
+    row_id = int(plan_row()["id"])
     months = [1000.0] * 12
     response = client.patch(f"/api/rows/{row_id}", json={"months": months})
     assert response.status_code == 200
     assert response.json()["row"]["plan_year"] == pytest.approx(12_000)
 
 
-def test_правка_одного_поля_не_трогает_остальные(client, loaded):
-    row = repo.list_rows(2026, layer=operplan.LAYER)[0]
+def test_правка_одного_поля_не_трогает_остальные(client, planned):
+    row = plan_row()
     before = dict(row)
     client.patch(f"/api/rows/{row['id']}", json={"counterparty": "Новый контрагент"})
     after = repo.get_row(int(row["id"]))
@@ -382,24 +432,24 @@ def test_правка_одного_поля_не_трогает_остальны
     assert after["plan_year"] == before["plan_year"]
 
 
-def test_пустая_статья_при_правке_отклоняется(client, loaded):
-    row_id = int(repo.list_rows(2026, layer=operplan.LAYER)[0]["id"])
+def test_пустая_статья_при_правке_отклоняется(client, planned):
+    row_id = int(plan_row()["id"])
     assert client.patch(f"/api/rows/{row_id}", json={"article": "  "}).status_code == 422
 
 
-def test_отрицательный_месяц_отклоняется(client, loaded):
-    row_id = int(repo.list_rows(2026, layer=operplan.LAYER)[0]["id"])
+def test_отрицательный_месяц_отклоняется(client, planned):
+    row_id = int(plan_row()["id"])
     months = [-1.0] + [0.0] * 11
     assert client.patch(f"/api/rows/{row_id}", json={"months": months}).status_code == 422
 
 
-def test_неполный_список_месяцев_отклоняется(client, loaded):
-    row_id = int(repo.list_rows(2026, layer=operplan.LAYER)[0]["id"])
+def test_неполный_список_месяцев_отклоняется(client, planned):
+    row_id = int(plan_row()["id"])
     assert client.patch(f"/api/rows/{row_id}", json={"months": [1, 2, 3]}).status_code == 422
 
 
-def test_правка_пишется_в_журнал(client, loaded):
-    row_id = int(repo.list_rows(2026, layer=operplan.LAYER)[0]["id"])
+def test_правка_пишется_в_журнал(client, planned):
+    row_id = int(plan_row()["id"])
     client.patch(f"/api/rows/{row_id}", json={"counterparty": "Журнальный"})
     audit = client.get("/api/audit").json()
     entry = next(a for a in audit if a["action"] == "Изменение строки бюджета")
@@ -907,10 +957,9 @@ def test_пустая_строка_дозаполняется_правкой(cli
     assert result["row"]["article"] == "4109_Обучение"
 
 
-def test_правка_не_даёт_стереть_статью(client, loaded):
+def test_правка_не_даёт_стереть_статью(client, planned):
     """Пустую строку завести можно, а обнулить статью у заполненной — нет."""
-    row = repo.list_rows(2026, layer=operplan.LAYER)[0]
-    response = client.patch(f"/api/rows/{row['id']}", json={"article": "  "})
+    response = client.patch(f"/api/rows/{plan_row()['id']}", json={"article": "  "})
     assert response.status_code == 422
 
 

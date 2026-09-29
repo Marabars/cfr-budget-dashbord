@@ -526,14 +526,20 @@ thead th { border-right-color: var(--axis); }
 /* Поля прямо в ячейке: списки статей, контрагентов и договоров у новой строки. */
 ***REMOVED***t-op td.cell-pick { min-width: 210px; }
 ***REMOVED***t-op td.cell-pick .f-in { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 14px; }
-***REMOVED***t-op td.cell-sum { min-width: 170px; }
-***REMOVED***t-op td.cell-sum .sum-in {
-  width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 14px; text-align: right;
-}
+/* Сумма и раскладка — друг под другом. У ячеек таблицы white-space: nowrap,
+   из-за чего select оставался на одной строке с полем и наезжал на соседние
+   колонки; поэтому перенос здесь разрешаем явно и делаем оба поля блочными. */
+***REMOVED***t-op td.cell-sum { min-width: 190px; white-space: normal; }
+***REMOVED***t-op td.cell-sum .sum-in,
 ***REMOVED***t-op td.cell-sum .spread-in {
-  width: 100%; box-sizing: border-box; margin-top: 4px; padding: 3px 6px;
-  font-size: 13px; color: var(--ink2);
+  display: block; width: 100%; box-sizing: border-box;
 }
+***REMOVED***t-op td.cell-sum .sum-in { padding: 5px 8px; font-size: 14px; text-align: right; }
+***REMOVED***t-op td.cell-sum .spread-in {
+  margin-top: 4px; padding: 3px 6px; font-size: 13px; color: var(--ink2);
+}
+/* Подсказка к ячейке, которую правят на месте. */
+.cell-suggest .copt { font-size: 14px; }
 
 /* Заголовок дирекции без строк: место, с которого начинают планировать. */
 ***REMOVED***t-op tr.group.is-empty td { color: var(--muted); box-shadow: inset 3px 0 0 var(--border); }

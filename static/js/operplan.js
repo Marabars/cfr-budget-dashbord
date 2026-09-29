@@ -15,6 +15,7 @@
     missingOpen: false,  // блок замечаний свёрнут, пока его не раскроют
     filters: null,
     fresh: {},           // id строк, заведённых в этой сессии: подсвечены и правятся списками
+    editMode: false,     // правка по ячейкам включается карандашом, а не всегда
     year: null           // год в фокусе: к нему привязаны замок и справочники
   };
 
@@ -184,8 +185,16 @@
   /* Правка года разрешена, когда у роли есть доступ и год не заблокирован.
      Финотделу сервер разрешает править и под замком — замок для него означает
      «я закрыл правку», поэтому таблица гасится и на его экране тоже. */
+  /* Право на правку: планируемый год, доступ есть, замок снят. Прошлый год —
+     база для сравнения, его сервер править и не даст. */
   function sectionEditable(sec) {
-    return !!sec && !!sec.can_edit && !sec.locked;
+    return !!sec && !!sec.can_edit && !sec.locked
+      && !!state.data && sec.year === state.data.plan_year_no;
+  }
+
+  /* Правят ли сейчас: к праву добавляется включённый карандаш. */
+  function sectionEditing(sec) {
+    return sectionEditable(sec) && state.editMode;
   }
 
   /* ---------- шапка и итог ---------- */
@@ -243,8 +252,12 @@
   function rowNode(row, cfoName, canEdit) {
     var tr = U.el("tr", { "data-id": row.id });
     var editable = canEdit;
-    var draft = editable && isDraft(row);
-    if (draft) tr.classList.add("is-new");
+    var unfinished = isDraft(row);
+    var draft = editable && unfinished;
+    // подсветка держится и вне режима правки: брошенную заготовку надо видеть
+    if (unfinished && state.rowYear[row.id] !== state.data.base_year_no) {
+      tr.classList.add("is-new");
+    }
 
     var del = U.el("button", { class: "mini", title: "Удалить строку", text: "✕" });
     del.onclick = function (event) {
@@ -282,6 +295,44 @@
     tr.appendChild(U.el("td", { class: "num dim",
       text: row.base_plan_year == null ? "—" : U.fmt(row.base_plan_year) }));
     return tr;
+  }
+
+  /* ---------- подсказки при правке ячейки ---------- */
+
+  var SUGGEST = ["article", "counterparty", "contract"];
+  var openSuggest = null;
+
+  /* Ячейку правят на месте, contenteditable, — но значения те же, что в новой
+     строке: статьи, контрагенты и договоры своего ЦФО. Список подставляется
+     к ячейке по фокусу и сужается по набранному тексту. */
+  function bindSuggest(table) {
+    table.addEventListener("focusin", function (event) {
+      var td = event.target;
+      if (openSuggest) { openSuggest.close(); openSuggest = null; }
+      if (td.tagName !== "TD" || !td.hasAttribute("contenteditable")) return;
+      var field = td.getAttribute("data-f");
+      var row = state.rows[Number(td.getAttribute("data-id"))];
+      if (!row || SUGGEST.indexOf(field) < 0) { U.closePopups(); return; }
+      var options = cellOptions(row, field);
+      if (!options || !options.length) { U.closePopups(); return; }
+      /* На фокусе показываем весь список, не сужая его тем, что уже в ячейке:
+         в неё заходят как раз затем, чтобы поменять значение. Сужает набор
+         текста — это обрабатывается ниже. */
+      openSuggest = U.suggest(td, options, function (value) {
+        td.textContent = value;
+        td.blur();                       // Inline сохранит по focusout
+      });
+    });
+
+    table.addEventListener("input", function (event) {
+      if (openSuggest && event.target.hasAttribute("contenteditable")) {
+        openSuggest.filter(event.target.textContent);
+      }
+    });
+
+    table.addEventListener("focusout", function () {
+      if (openSuggest) { openSuggest.close(); openSuggest = null; }
+    });
   }
 
   /* ---------- ячейки новой строки ---------- */
@@ -484,6 +535,7 @@
 
   function addRowFromHeader() {
     var button = document.getElementById("op-add-row");
+    if (!state.editMode) setEditMode(true);   // заполнять строку без правки нечем
     var targets = addTargets();
     if (!targets.length) {
       U.toast("Некуда добавить строку: нет доступных дирекций", "error");
@@ -520,7 +572,7 @@
       .then(function () { button.disabled = false; });
   }
 
-  function groupNode(block, shown, sum, year, editable) {
+  function groupNode(block, shown, sum) {
     var collapsed = !!state.collapsed[block.budget_id];
     var td = U.el("td", { colspan: COLS }, [
       U.el("span", { class: "grp-caret", text: collapsed ? "▸" : "▾" }),
@@ -601,15 +653,18 @@
       var open = !!state.yearOpen[year];
       body.appendChild(yearNode(year, sec, open));
       if (!sec || !open) return;
-      var editable = sectionEditable(sec);
+      /* Заголовки пустых дирекций показываем по праву правки: они говорят, где
+         можно планировать. Ячейки открываем только по карандашу. */
+      var canEdit = sectionEditable(sec);
+      var editable = sectionEditing(sec);
       var yearRows = [];
       var nodes = [];
-      blocksOf(sec, editable).forEach(function (block) {
+      blocksOf(sec, canEdit).forEach(function (block) {
         var rows = block.rows.filter(function (row) { return passes(row, block.cfo_name); });
         // заголовок пустой дирекции держим ради кнопки «+ расход», но не под фильтром
         if (!rows.length && !(block.placeholder && !filtering())) return;
         var sum = rows.reduce(function (acc, row) { return acc + row.plan_year; }, 0);
-        nodes.push(groupNode(block, rows.length, sum, year, editable));
+        nodes.push(groupNode(block, rows.length, sum));
         rows.forEach(function (row) {
           state.rows[row.id] = row;
           state.rowYear[row.id] = year;
@@ -731,25 +786,67 @@
   /* Правка включена по умолчанию; кнопка с перечёркнутым карандашом её закрывает.
      Замок общий на год: финотдел закрывает правку и себе, чтобы случайно не задеть
      утверждённый план, и тем же нажатием открывает обратно. */
+  /* Карандаш включает правку по ячейкам, «Сохранить» её выключает. Так таблица
+     по умолчанию читается как отчёт, а не как форма: раньше любой клик по ячейке
+     начинал правку, и задеть чужую цифру было легко. */
+  function renderEditMode() {
+    var can = sectionEditable(state.data);
+    if (!can) state.editMode = false;
+    var pencil = document.getElementById("op-edit-mode");
+    var save = document.getElementById("op-save");
+    pencil.hidden = !can;
+    pencil.textContent = state.editMode ? "✎̸" : "✎";
+    pencil.classList.toggle("locked", state.editMode);
+    pencil.setAttribute("aria-pressed", state.editMode ? "true" : "false");
+    pencil.title = state.editMode
+      ? "Правка включена. Нажмите, чтобы закрыть ячейки от случайных изменений."
+      : "Разрешить правку ячеек";
+    save.hidden = !state.editMode;
+  }
+
+  function setEditMode(on) {
+    state.editMode = !!on;
+    renderLock();
+    render();
+  }
+
+  /* «Сохранить» дописывает начатую ячейку и выключает правку. Каждая ячейка уходит
+     на сервер, как только её покидают, поэтому кнопке остаётся снять фокус —
+     это и есть сохранение начатого — и перечитать год. */
+  function saveAndClose() {
+    var active = document.activeElement;
+    if (active && active.blur) active.blur();
+    U.closePopups();
+    window.setTimeout(function () {
+      state.editMode = false;
+      reloadAll().then(function () { U.toast("Изменения сохранены"); });
+    }, 60);
+  }
+
   function renderLock() {
     var locked = !!state.data.locked;
     var editable = sectionEditable(state.data);
-    state.editing = editable;
+    state.editing = sectionEditing(state.data);
 
-    /* Замок — одна иконка: подпись занимала полшапки, а состояние и так видно
-       по цвету, по перечёркнутому карандашу и по плашке под шапкой. */
+    /* Два разных запрета, поэтому и две кнопки. Замок в шапке вкладки —
+       общий на год и на всех, его ставит финотдел: утверждённый план правке
+       не подлежит. Карандаш в шапке таблицы — личный и на сессию: защита
+       от случайного клика по ячейке. */
     var button = document.getElementById("op-lock");
     button.hidden = !state.data.is_fin;
-    button.textContent = locked ? "✎̸" : "✎";
+    button.textContent = locked ? "🔒" : "🔓";
     button.classList.toggle("locked", locked);
     button.setAttribute("aria-pressed", locked ? "true" : "false");
     button.title = locked
-      ? "Правка плана " + state.data.plan_year_no + " закрыта. Нажмите, чтобы разрешить."
-      : "Правка плана " + state.data.plan_year_no
-        + " разрешена. Нажмите, чтобы заблокировать.";
+      ? "План " + state.data.plan_year_no + " закрыт для всех. Нажмите, чтобы открыть."
+      : "План " + state.data.plan_year_no
+        + " открыт. Нажмите, чтобы закрыть правку для всех.";
+    var note = document.getElementById("op-lock-note");
+    note.textContent = locked ? "план закрыт" : "";
+    note.hidden = !state.data.is_fin || !locked;
 
     document.getElementById("op-locked-note").hidden = !locked;
-    document.getElementById("op-edit-note").hidden = !editable;
+    document.getElementById("op-edit-note").hidden = !state.editing;
     document.getElementById("op-edit-scope").textContent = state.data.is_fin
       ? "Правка плана по всем ЦФО." : "Правка плана вашего ЦФО.";
 
@@ -768,6 +865,7 @@
        иначе она отвечала бы 403. Выгрузка и шаблон не зависят от замка. */
     document.getElementById("op-import").hidden = !editable;
     if (!editable) document.getElementById("op-import-form").hidden = true;
+    renderEditMode();
   }
 
   /* ---------- пропавшие строки (п.8) ---------- */
@@ -969,6 +1067,7 @@
     setCfoList: function (list) { state.cfoList = list; },
     load: reloadAll,
     init: function () {
+      bindSuggest(document.getElementById("t-op"));
       Inline.bind(document.getElementById("t-op"), {
         row: function (id) { return state.rows[id]; },
         payload: payloadFor,
@@ -983,6 +1082,10 @@
           .catch(function (e) { U.toast(e.message, "error"); });
       };
       document.getElementById("op-add-row").onclick = addRowFromHeader;
+      document.getElementById("op-edit-mode").onclick = function () {
+        setEditMode(!state.editMode);
+      };
+      document.getElementById("op-save").onclick = saveAndClose;
       document.getElementById("op-copy-run").onclick = function () { runCopy("plan"); };
       document.getElementById("op-fact-run").onclick = function () { runCopy("fact"); };
       document.getElementById("op-export").onclick = runExport;

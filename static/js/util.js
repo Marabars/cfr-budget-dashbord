@@ -231,6 +231,83 @@
      его — и при этом остаётся возможность ввести значение, которого в списке нет. */
   /* fixed — для списков внутри прокручиваемой таблицы: абсолютный попап обрезался
      бы контейнером .scroll, поэтому кладём его по координатам окна. */
+  /* Кладёт список по координатам окна: вниз от поля, а если внизу не хватает
+     места — вверх. Нужен всем спискам внутри прокручиваемой таблицы: абсолютный
+     попап обрезался бы её контейнером. */
+  function placeFixed(pop, list, anchor) {
+    var r = anchor.getBoundingClientRect();
+    var width = Math.max(r.width, 280);
+    pop.style.width = width + "px";
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 12)) + "px";
+    var below = window.innerHeight - r.bottom - 12;
+    var above = r.top - 12;
+    if (below >= 220 || below >= above) {
+      pop.style.top = (r.bottom + 4) + "px";
+      pop.style.bottom = "auto";
+      list.style.maxHeight = Math.max(120, Math.min(280, below - 40)) + "px";
+    } else {
+      pop.style.top = "auto";
+      pop.style.bottom = (window.innerHeight - r.top + 4) + "px";
+      list.style.maxHeight = Math.max(120, Math.min(280, above - 40)) + "px";
+    }
+  }
+
+  /* Подсказка для ячейки, которую правят на месте. В отличие от combo здесь нет
+     своего поля ввода: значения предлагаются к ячейке contenteditable, а выбор
+     мышью не должен уводить из неё фокус — иначе правка сохранится раньше,
+     чем мы подставим значение. Список один на всю таблицу: ячейку правят по
+     одной, а тысяча скрытых попапов ни к чему. */
+  var sPop = null, sList = null;
+
+  function suggest(anchor, options, onPick) {
+    if (!sPop) {
+      sList = el("div", { class: "flist" });
+      sPop = el("div", { class: "fpop fpop-fixed cell-suggest" }, [sList]);
+      sPop.onclick = function (event) { event.stopPropagation(); };
+      document.body.appendChild(sPop);
+    }
+    var pop = sPop, list = sList;
+    pop.anchor = anchor;
+    pop.reposition = function () { placeFixed(pop, list, anchor); };
+
+    function draw(query) {
+      var needle = (query || "").trim().toLowerCase();
+      clear(list);
+      var shown = 0;
+      options.forEach(function (value) {
+        if (needle && String(value).toLowerCase().indexOf(needle) < 0) return;
+        if (shown >= 300) return;
+        shown++;
+        list.appendChild(el("div", { class: "fopt copt", text: value,
+          on: { mousedown: function (event) {
+            event.preventDefault();          // фокус остаётся в ячейке
+            pop.hidden = true;
+            onPick(value);
+          } } }));
+      });
+      if (!shown) {
+        list.appendChild(el("div", { class: "dim fempty",
+          text: options.length ? "ничего не найдено — можно ввести своё"
+            : "подсказок для этого ЦФО нет" }));
+      } else if (options.length > shown) {
+        list.appendChild(el("div", { class: "dim fempty",
+          text: "показано " + shown + " из " + options.length + " — уточните поиск" }));
+      }
+    }
+
+    pop.hidden = false;
+    pop.reposition();
+    draw("");
+    return {
+      filter: function (query) {
+        if (pop.hidden || pop.anchor !== anchor) return;
+        pop.reposition();
+        draw(query);
+      },
+      close: function () { if (pop.anchor === anchor) pop.hidden = true; }
+    };
+  }
+
   function combo(input, onPick, fixed) {
     var options = [];
     var shownQuery = "";          // чем сужен открытый список
@@ -273,24 +350,9 @@
       }
     }
 
-    /* Список раскрывается вниз, а если внизу не хватает места — вверх. */
     function place() {
       if (!fixed) return;
-      var r = input.getBoundingClientRect();
-      var width = Math.max(r.width, 280);
-      pop.style.width = width + "px";
-      pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 12)) + "px";
-      var below = window.innerHeight - r.bottom - 12;
-      var above = r.top - 12;
-      if (below >= 220 || below >= above) {
-        pop.style.top = (r.bottom + 4) + "px";
-        pop.style.bottom = "auto";
-        list.style.maxHeight = Math.max(120, Math.min(280, below - 40)) + "px";
-      } else {
-        pop.style.top = "auto";
-        pop.style.bottom = (window.innerHeight - r.top + 4) + "px";
-        list.style.maxHeight = Math.max(120, Math.min(280, above - 40)) + "px";
-      }
+      placeFixed(pop, list, input);
     }
 
     if (fixed) {
@@ -376,6 +438,7 @@
 
   window.U = {
     closePopups: closeAllFilters,
+    suggest: suggest,
     MONTHS_FULL: MONTHS_FULL, MONTHS_SHORT: MONTHS_SHORT,
     el: el, fmt: fmt, fmtShort: fmtShort, parseSum: parseSum,
     td: td, tdn: tdn, th: th, badge: badge, meter: meter, battery: battery,

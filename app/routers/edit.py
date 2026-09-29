@@ -79,6 +79,7 @@ def update_row(row_id: int, payload: RowPatch, u: auth.User = Depends(user)) -> 
         raise HTTPException(404, "Строка не найдена")
     if row.get("layer") == operplan.LAYER:
         try:
+            operplan.require_plan_year(int(row["year"]))
             operplan.require_edit(u, int(row["year"]), int(row["cfo_id"]))
         except ValueError as exc:
             raise HTTPException(403, str(exc)) from exc
@@ -103,6 +104,7 @@ def delete_row(row_id: int, reason: str = "", u: auth.User = Depends(user)) -> d
         raise HTTPException(404, "Строка не найдена")
     if row.get("layer") == operplan.LAYER:
         try:
+            operplan.require_plan_year(int(row["year"]))
             operplan.require_edit(u, int(row["year"]), int(row["cfo_id"]))
         except ValueError as exc:
             raise HTTPException(403, str(exc)) from exc

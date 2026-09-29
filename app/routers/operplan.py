@@ -126,6 +126,7 @@ def create_row(payload: OperplanRowIn, year: int | None = None,
                u: auth.User = Depends(user)) -> dict:
     target = int(year or operplan.plan_year())
     try:
+        operplan.require_plan_year(target)
         operplan.require_edit(u, target, payload.cfo_id)
     except ValueError as exc:
         raise HTTPException(403, str(exc)) from exc
