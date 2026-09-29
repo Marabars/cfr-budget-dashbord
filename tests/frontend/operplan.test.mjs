@@ -348,6 +348,29 @@ describe("вкладка «Бюджет»: новая строка", () => {
     assert.deepEqual(shown, ["4109_Обучение", "4110_Соцрасходы"]);
   });
 
+  it("держит список вне таблицы, иначе его накрывают закреплённые колонки", () => {
+    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    t.focus(article);
+    const pop = t.$(".fpop-fixed:not([hidden])");
+    assert.ok(pop, "список раскрыт");
+    /* Колонки «№» и «Статья» закреплены слева: position: sticky с z-index создаёт
+       контекст наложения, и список внутри такой ячейки накрывают закреплённые
+       ячейки строк ниже — видна полоска, клик по ней попадает в чужую ячейку. */
+    assert.equal(pop.parentNode, t.window.document.body, "список должен лежать в body");
+    assert.ok(!t.$("***REMOVED***t-op").contains(pop), "и не внутри таблицы");
+  });
+
+  it("выбрасывает списки от ячеек, которых больше нет", () => {
+    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    t.focus(article);
+    assert.ok(t.$$(".fpop-fixed").length > 0, "список создан");
+    t.click(t.$("***REMOVED***op-edit-mode"));           // правка закрылась — строку перерисовали
+    t.click(t.$("***REMOVED***op-edit-mode"));           // и открылась: ещё одна перерисовка
+    const orphans = t.$$(".fpop-fixed").filter(
+      (pop) => pop.anchor && !t.window.document.contains(pop.anchor));
+    assert.deepEqual(orphans, [], "списки мёртвых ячеек в body копиться не должны");
+  });
+
   it("не захлопывает список при прокрутке таблицы", () => {
     const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
@@ -357,6 +380,11 @@ describe("вкладка «Бюджет»: новая строка", () => {
        открытия — именно это и выглядело как «подсказки не показываются». */
     t.scrollTable();
     assert.ok(t.$(".fpop-fixed:not([hidden])"), "список остался и переложился");
+
+    // прокрутка самого списка положение не пересчитывает и его не закрывает
+    const list = t.$(".fpop-fixed:not([hidden]) .flist");
+    list.dispatchEvent(new t.window.Event("scroll", { bubbles: false }));
+    assert.ok(t.$(".fpop-fixed:not([hidden])"), "список прокручивается сам по себе");
   });
 
   it("закрывает список, когда поле ушло из окна", () => {
@@ -495,13 +523,33 @@ describe("вкладка «Бюджет»: сумма за год", () => {
     assert.equal(months.filter((v) => v).length, 1, "остальные месяцы пустые");
   });
 
-  it("не раскладывает, когда выбрано «не раскладывать»", async () => {
+  it("при «не раскладывать» сумму не спрашивает", async () => {
+    const before = t.calls.length;
     spread.value = "none";
-    sum.value = "90 000";
-    t.fire(sum, "change");
-    await settle(t.window);
+    t.fire(spread, "change");
+    await settle(t.window, 20);
+    assert.equal(sum.readOnly, true, "поле только показывает итог");
+    assert.match(sum.placeholder, /по месяцам/, "подсказка объясняет, откуда возьмётся");
+    assert.equal(t.calls.length, before, "выбор раскладки сам ничего не пишет");
+  });
+
+  it("складывает ИТОГО из месяцев, которые вписали руками", async () => {
+    spread.value = "none";
+    t.fire(spread, "change");
+    // правим два месяца прямо в таблице, как это делают мышью и клавиатурой
+    for (const [index, value] of [[0, "5 000"], [3, "7 500"]]) {
+      const cell = t.$(`***REMOVED***t-op td[data-id="99"][data-f="m${index}"]`);
+      cell.textContent = value;
+      cell.dispatchEvent(new t.window.FocusEvent("focusout", { bubbles: true }));
+      await settle(t.window);
+    }
     const months = t.lastPatch("months").payload.months;
-    assert.ok(months.every((v) => v === 0), "суммы вписывают по месяцам руками");
+    assert.equal(months[0], 5000);
+    assert.equal(months[3], 7500);
+    // в строке уже были суммы от предыдущих проверок — ИТОГО обязано сойтись
+    // с суммой всех двенадцати месяцев, какой бы она ни была
+    const total = months.reduce((acc, v) => acc + v, 0);
+    assert.equal(sum.value, t.window.U.fmt(total), "ИТОГО подтянулось само");
   });
 
   it("отбивает отрицательную сумму", async () => {

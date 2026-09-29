@@ -321,7 +321,18 @@
     input.parentNode.insertBefore(wrap, input);
     wrap.appendChild(input);
     wrap.appendChild(caret);
-    wrap.appendChild(pop);
+    if (fixed) {
+      /* Колонки «№» и «Статья» закреплены слева: position: sticky с z-index
+         создаёт контекст наложения, и список, лежащий внутри такой ячейки,
+         оказывался в нём заперт — его накрывали закреплённые ячейки строк ниже.
+         Видна была полоска, клик по ней попадал в чужую ячейку и закрывал
+         список, прокрутить его было нельзя. Поэтому держим такие списки в body,
+         вне таблицы: координаты у них всё равно оконные. */
+      pop.onclick = function (event) { event.stopPropagation(); };
+      document.body.appendChild(pop);
+    } else {
+      wrap.appendChild(pop);
+    }
 
     function draw(query) {
       var needle = (query || "").toLowerCase();
@@ -398,6 +409,11 @@
   function closeAllFilters() {
     Array.prototype.forEach.call(document.querySelectorAll(".fpop"), function (pop) {
       pop.hidden = true;
+      /* Список из body не исчезает вместе со своей ячейкой, когда таблицу
+         перерисовывают, — выбрасываем осиротевшие сами. */
+      if (pop.anchor && !document.contains(pop.anchor) && pop.parentNode === document.body) {
+        document.body.removeChild(pop);
+      }
     });
   }
 
@@ -408,10 +424,12 @@
      Поэтому перекладываем список за полем, а закрываем только когда поле
      совсем ушло из окна. Ловим в фазе перехвата: скроллится контейнер
      таблицы, а не документ, и всплытия scroll не будет. */
-  document.addEventListener("scroll", function () {
+  document.addEventListener("scroll", function (event) {
     Array.prototype.forEach.call(document.querySelectorAll(".fpop-fixed"),
       function (pop) {
         if (pop.hidden) return;
+        // прокручивают сам список — пересчитывать его положение незачем
+        if (event.target && pop.contains(event.target)) return;
         if (!pop.reposition) { pop.hidden = true; return; }   // меню без привязки
         var r = pop.anchor.getBoundingClientRect();
         if (r.bottom < -4 || r.top > window.innerHeight + 4) {

@@ -429,13 +429,27 @@
     var td = U.el("td", { class: "num n-plan cell-sum", "data-total": row.id });
     var input = U.el("input", { class: "f-in sum-in",
       value: row.plan_year ? U.fmt(row.plan_year) : "" });
-    input.placeholder = "сумма за год";
     var spread = U.el("select", { class: "f-in spread-in" });
     U.fillSelect(spread, spreadOptions(), "value", "text");
     spread.value = state.spread || "even";
 
+    /* При «не раскладывать» сумму за год вводить незачем: строку заводят пустой
+       и вписывают суммы по месяцам, а ИТОГО складывается из них само. Поле
+       остаётся на месте, но только показывает результат. */
+    function syncMode() {
+      var manual = spread.value === "none";
+      input.readOnly = manual;
+      input.classList.toggle("dim", manual);
+      input.placeholder = manual ? "сложится по месяцам" : "сумма за год";
+      input.title = manual
+        ? "Впишите суммы по месяцам — ИТОГО посчитается само"
+        : "Сумма за год: разложится по выбранному правилу";
+      input.value = row.plan_year ? U.fmt(row.plan_year) : "";
+    }
+
     function apply() {
       state.spread = spread.value;
+      if (spread.value === "none") return;          // месяцы заполняют руками
       var amount = U.parseSum(input.value);
       if (amount < 0) { U.toast("Сумма не может быть отрицательной", "error"); return; }
       if (!amount && !row.plan_year) return;
@@ -453,10 +467,15 @@
       });
     }
     input.addEventListener("change", apply);
-    spread.addEventListener("change", function () { if (U.parseSum(input.value)) apply(); });
+    spread.addEventListener("change", function () {
+      state.spread = spread.value;
+      syncMode();
+      if (spread.value !== "none" && U.parseSum(input.value)) apply();
+    });
 
     td.appendChild(input);
     td.appendChild(spread);
+    syncMode();
     return td;
   }
 
@@ -637,6 +656,9 @@
 
   function render() {
     if (!state.data) return;
+    /* Перерисовка выбрасывает ячейки вместе с их списками: открытый список
+       иначе остался бы висеть над таблицей, привязанный к мёртвому полю. */
+    U.closePopups();
     renderKpi();
     renderYearMark();
     renderHead();
@@ -772,10 +794,16 @@
 
   function afterSave(row) {
     var totalCell = document.querySelector('[data-total="' + row.id + '"]');
-    /* У новой строки в этой колонке поле ввода с раскладкой — текст туда писать
-       нельзя, иначе ввод суммы стёр бы сам себя. Его обновляет sumCell. */
-    if (totalCell && !totalCell.classList.contains("cell-sum")) {
-      totalCell.textContent = U.fmt(row.plan_year);
+    if (totalCell) {
+      /* У новой строки в этой колонке поле ввода: правка месяцев должна
+         подтянуть в него пересчитанное ИТОГО, но не затирать то, что человек
+         как раз набирает. */
+      var field = totalCell.querySelector(".sum-in");
+      if (!field) {
+        totalCell.textContent = U.fmt(row.plan_year);
+      } else if (document.activeElement !== field) {
+        field.value = row.plan_year ? U.fmt(row.plan_year) : "";
+      }
     }
     repaintTotal(state.rowYear[row.id]);
     refreshFilterOptions();

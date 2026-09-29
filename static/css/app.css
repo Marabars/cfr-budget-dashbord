@@ -535,6 +535,8 @@ thead th { border-right-color: var(--axis); }
   display: block; width: 100%; box-sizing: border-box;
 }
 ***REMOVED***t-op td.cell-sum .sum-in { padding: 5px 8px; font-size: 14px; text-align: right; }
+/* «Не раскладывать»: поле только показывает итог, введённый по месяцам. */
+***REMOVED***t-op td.cell-sum .sum-in[readonly] { background: transparent; border-style: dashed; }
 ***REMOVED***t-op td.cell-sum .spread-in {
   margin-top: 4px; padding: 3px 6px; font-size: 13px; color: var(--ink2);
 }
