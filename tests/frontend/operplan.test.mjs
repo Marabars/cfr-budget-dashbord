@@ -157,6 +157,17 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }]) {
       node.dispatchEvent(new window.FocusEvent("focus"));
       node.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
     },
+    /* Полный клик мышью по ячейке: mousedown, фокус, mouseup, click. Именно
+       click, всплывая до document, гасил только что открытый список, поэтому
+       проверять фокусом в одиночку недостаточно. */
+    clickCell: (node) => {
+      node.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+      node.focus();
+      node.dispatchEvent(new window.FocusEvent("focus"));
+      node.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+      node.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true }));
+      node.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    },
     // обработчик висит на document в фазе перехвата, поэтому всплытие не нужно
     scrollTable: () => window.document.querySelector(".scroll.tall")
       .dispatchEvent(new window.Event("scroll")),
@@ -462,7 +473,36 @@ describe("вкладка «Бюджет»: подсказки при правк�
       REFS.by_cfo[1].counterparties);
   });
 
+  it("не гаснет от клика, которым его открыли", () => {
+    for (const field of ["article", "counterparty", "contract"]) {
+      const target = t.$(`***REMOVED***t-op tbody tr[data-id="10"] td[data-f="${field}"]`);
+      t.clickCell(target);
+      const pop = t.$(".cell-suggest:not([hidden])");
+      assert.ok(pop, `список у «${field}» должен остаться открытым после клика`);
+      assert.ok(pop.querySelectorAll(".copt").length > 0, "и со значениями");
+    }
+  });
+
+  it("переносится на другую ячейку, а не множится", () => {
+    t.clickCell(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="article"]'));
+    t.clickCell(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="contract"]'));
+    assert.equal(t.$$(".cell-suggest:not([hidden])").length, 1, "подсказка одна");
+    const shown = t.$$(".cell-suggest .copt").map((n) => n.textContent);
+    assert.deepEqual(shown, REFS.by_cfo[1].contracts["Астра ООО"],
+      "и показывает договоры этого контрагента");
+  });
+
+  it("закрывается принудительно при перерисовке таблицы", () => {
+    t.clickCell(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]'));
+    assert.ok(t.$(".cell-suggest:not([hidden])"), "список открыт");
+    t.window.U.closePopups();
+    assert.equal(t.$(".cell-suggest:not([hidden])"), null,
+      "принудительное закрытие должно работать и при курсоре в ячейке");
+  });
+
   it("сужает список по набранному тексту", () => {
+    cell = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
+    t.clickCell(cell);
     cell.textContent = "Софт";
     cell.dispatchEvent(new t.window.Event("input", { bubbles: true }));
     const shown = t.$$(".cell-suggest .copt").map((n) => n.textContent);
@@ -470,7 +510,8 @@ describe("вкладка «Бюджет»: подсказки при правк�
   });
 
   it("по выбору подставляет значение и сохраняет ячейку", async () => {
-    t.focus(cell);
+    cell = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
+    t.clickCell(cell);
     const option = t.$$(".cell-suggest .copt").find((n) => n.textContent === "Астра ООО");
     option.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
     await settle(t.window);

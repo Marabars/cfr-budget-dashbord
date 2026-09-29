@@ -406,8 +406,13 @@
     };
   }
 
-  function closeAllFilters() {
+  /* force — закрыть всё безусловно (перерисовка таблицы, Escape). Обычный вызов
+     щадит список, привязанный к полю, в котором стоит курсор: клик, поставивший
+     туда курсор, всплывает до document и гасил этот список в тот же миг — он
+     успевал только мелькнуть. */
+  function closeAllFilters(force) {
     Array.prototype.forEach.call(document.querySelectorAll(".fpop"), function (pop) {
+      if (!force && pop.anchor && pop.anchor === document.activeElement) return;
       pop.hidden = true;
       /* Список из body не исчезает вместе со своей ячейкой, когда таблицу
          перерисовывают, — выбрасываем осиротевшие сами. */
@@ -417,7 +422,8 @@
     });
   }
 
-  document.addEventListener("click", closeAllFilters);
+  // обработчик получает событие первым аргументом — force передавать нельзя
+  document.addEventListener("click", function () { closeAllFilters(); });
   /* Прокрутка уводит поле из-под списка, посчитанного по координатам окна.
      Закрывать его нельзя: клик по полю внизу таблицы сам заставляет браузер
      подкрутить контейнер, и список захлопывался бы сразу после открытия.
@@ -440,7 +446,7 @@
       });
   }, true);
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") closeAllFilters();
+    if (event.key === "Escape") closeAllFilters(true);
   });
 
   function toast(message, kind) {
@@ -455,7 +461,7 @@
   }
 
   window.U = {
-    closePopups: closeAllFilters,
+    closePopups: function () { closeAllFilters(true); },
     suggest: suggest,
     MONTHS_FULL: MONTHS_FULL, MONTHS_SHORT: MONTHS_SHORT,
     el: el, fmt: fmt, fmtShort: fmtShort, parseSum: parseSum,
