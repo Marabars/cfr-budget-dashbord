@@ -652,3 +652,13 @@ td.saving { opacity: .55; }
 ***REMOVED***p-acc .row-btns { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
 .btn.danger { color: var(--critical); }
 .btn.danger:hover { border-color: var(--critical); }
+
+/* ---------- классификатор МРГ/МРК ---------- */
+/* Колонка узкая и с постоянной шириной: значений всего два, и от их длины
+   таблица прыгать не должна. */
+***REMOVED***t-op td.cls, ***REMOVED***t-op th:nth-child(3) { white-space: nowrap; width: 104px; }
+.cls-pick {
+  width: 100%; background: var(--raised); border: 1px solid var(--border);
+  color: var(--ink); border-radius: var(--r-sm); padding: 2px 4px; font-size: 15px;
+}
+.cls-pick:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }

@@ -112,7 +112,20 @@ def delete_budgets(year: int, layer: str, cfo_ids: Sequence[int] | None = None) 
 
 ***REMOVED*** ---------- строки бюджета ----------
 
-ROW_FIELDS = ("article", "counterparty", "contract", "detail", "comment",
+CLASSIFIERS = ("МРГ", "МРК")
+CLASSIFIER_DEFAULT = "МРГ"
+
+
+def classifier_or_default(value) -> str:
+    """Классификатор строки. Значений ровно два, всё прочее — МРГ.
+
+    Чужое значение не роняет загрузку: файл из чужих рук может принести что
+    угодно, а строка бюджета важнее опечатки в одной колонке.
+    """
+    text = str(value or "").strip().upper().replace("MP", "МР")   ***REMOVED*** латинские M и P
+    return text if text in CLASSIFIERS else CLASSIFIER_DEFAULT
+
+ROW_FIELDS = ("article", "classifier", "counterparty", "contract", "detail", "comment",
               "approver_comment", "plan_year", "carryover")
 
 
@@ -199,13 +212,15 @@ def create_row(budget_id: int, data: dict, months: Sequence[float] | None = None
                author: str = "", source: str = "manual", row_no: int | None = None) -> int:
     with db.tx() as conn:
         cur = conn.execute(
-            "INSERT INTO budget_row(budget_id, row_no, article, counterparty, contract, detail, "
-            "comment, approver_comment, plan_year, carryover, source, created_by) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO budget_row(budget_id, row_no, article, classifier, counterparty, "
+            "contract, detail, comment, approver_comment, plan_year, carryover, source, "
+            "created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 budget_id,
                 row_no,
                 data.get("article", ""),
+                classifier_or_default(data.get("classifier")),
                 data.get("counterparty", ""),
                 data.get("contract", ""),
                 data.get("detail", ""),

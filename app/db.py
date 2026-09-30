@@ -56,6 +56,12 @@ def _columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
+def _has_table(conn: sqlite3.Connection, table: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+    ).fetchone() is not None
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     """Догоняет схему на уже существующей базе.
 
@@ -63,14 +69,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     у неё меняется UNIQUE — в него добавился слой, иначе одноимённый бюджет ЦФО
     не может существовать одновременно в исполнении и в планировании.
     """
-    if not conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'budget'"
-    ).fetchone():
+    if not _has_table(conn, "budget"):
         return                              ***REMOVED*** чистая база: всё создаст schema.sql
 
-    if not conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'app_user'"
-    ).fetchone():
+    if not _has_table(conn, "app_user"):
         conn.execute(
             "CREATE TABLE app_user (login TEXT PRIMARY KEY, name TEXT NOT NULL, "
             "role TEXT NOT NULL DEFAULT 'cfo', cfo_ids TEXT NOT NULL DEFAULT '')"
@@ -85,6 +87,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE app_user ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''")
     if "is_active" not in _columns(conn, "app_user"):
         conn.execute("ALTER TABLE app_user ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+
+    ***REMOVED*** классификатор МРГ/МРК: на работающей базе выбирать за старые строки
+    ***REMOVED*** некому, поэтому всем проставляется МРГ — значением по умолчанию
+    if _has_table(conn, "budget_row") and "classifier" not in _columns(conn, "budget_row"):
+        conn.execute(
+            "ALTER TABLE budget_row ADD COLUMN classifier TEXT NOT NULL DEFAULT 'МРГ'"
+        )
 
     if "layer" not in _columns(conn, "budget"):
         conn.executescript("""

@@ -775,9 +775,9 @@ def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блока�
     assert wb.sheetnames == ["Бюджеты ЦФО", "Как заполнять", "Справочник"]
 
     ws = wb["Бюджеты ЦФО"]
-    header = [ws.cell(row=3, column=c).value for c in range(1, 8)]
-    assert header == ["Статья оборотов", "ЦФО", "Контрагент", "Договор",
-                      "Детализация", "Комментарий", "ИТОГО"]
+    header = [ws.cell(row=3, column=c).value for c in range(1, 9)]
+    assert header == ["Статья оборотов", "ЦФО", "Классификатор", "Контрагент",
+                      "Договор", "Детализация", "Комментарий", "ИТОГО"]
     ***REMOVED*** блоки ЦФО есть, строки под ними пустые
     blocks = [ws.cell(row=r, column=2).value for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value == "ИТОГО"]
@@ -1147,3 +1147,146 @@ def test_факт_нулевые_строки_не_заводит(client, loaded
     result = operplan.import_fact(buffer.getvalue(), "факт.xlsx", 2026, "Тест")
     assert result["created"] == 0
     assert len(repo.list_rows(2026, layer=operplan.LAYER)) == before
+
+
+***REMOVED*** ---------- классификатор МРГ/МРК ----------
+
+def test_новая_строка_по_умолчанию_мрг(client, loaded):
+    """Выбирать за пользователя нечего — строка заводится как МРГ."""
+    cfo_id = repo.ensure_cfo(HR)
+    response = client.post("/api/operplan/rows?year=2027", json={
+        "cfo_id": cfo_id, "article": "4109_Обучение", "plan_year": 1000,
+    })
+    assert response.status_code == 201, response.text
+    assert repo.get_row(response.json()["id"])["classifier"] == "МРГ"
+
+
+def test_классификатор_правится_и_знает_только_два_значения(client, planned):
+    row = plan_row()
+    assert client.patch(f"/api/rows/{row['id']}", json={"classifier": "МРК"}).status_code == 200
+    assert repo.get_row(row["id"])["classifier"] == "МРК"
+
+    bad = client.patch(f"/api/rows/{row['id']}", json={"classifier": "МРФ"})
+    assert bad.status_code == 422
+    assert repo.get_row(row["id"])["classifier"] == "МРК", "отказ не должен ничего менять"
+
+
+def test_классификатор_виден_на_вкладке(client, planned):
+    row = plan_row()
+    client.patch(f"/api/rows/{row['id']}", json={"classifier": "МРК"})
+    rows = {r["id"]: r for b in client.get("/api/operplan?year=2027").json()["blocks"]
+            for r in b["rows"]}
+    assert rows[row["id"]]["classifier"] == "МРК"
+    assert all(r["classifier"] in ("МРГ", "МРК") for r in rows.values())
+
+
+def test_повтор_года_переносит_классификатор(client, loaded):
+    base = repo.list_rows(2026, layer=operplan.LAYER)[0]
+    repo.update_row(base["id"], {"classifier": "МРК"})
+    operplan.copy_year("Тест", 2026, 2027)
+
+    copied = [r for r in repo.list_rows(2027, layer=operplan.LAYER)
+              if r["article"] == base["article"] and r["counterparty"] == base["counterparty"]]
+    assert copied and copied[0]["classifier"] == "МРК"
+
+
+def test_выгрузка_несёт_классификатор_и_круг_его_не_теряет(client, planned):
+    row = plan_row()
+    client.patch(f"/api/rows/{row['id']}", json={"classifier": "МРК"})
+
+    content = client.get("/api/export/budget.xlsx?year=2027").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    assert ws.cell(row=3, column=3).value == "Классификатор"
+    ***REMOVED*** ключ по статье и контрагенту: одна статья в плане встречается не раз
+    values = {(ws.cell(row=r, column=1).value, ws.cell(row=r, column=4).value):
+              ws.cell(row=r, column=3).value
+              for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=1).value not in (None, "ИТОГО")}
+    assert values[(row["article"], row["counterparty"] or None)] == "МРК"
+    assert set(values.values()) <= {"МРГ", "МРК"}
+
+    operplan.import_budgets(content, "выгрузка.xlsx", 2027, "Тест")
+    again = [r for r in repo.list_rows(2027, layer=operplan.LAYER)
+             if r["article"] == row["article"] and r["counterparty"] == row["counterparty"]]
+    assert again and again[0]["classifier"] == "МРК", "круг не должен терять классификатор"
+
+
+def test_загрузка_чинит_чужое_значение_и_переживает_отсутствие_колонки(client, loaded):
+    """Файл из чужих рук важнее описки в одной колонке — строка не теряется."""
+    wb = openpyxl.load_workbook(io.BytesIO(make_budgets_sheet()))
+    ws = wb["Бюджеты ЦФО"]
+    ***REMOVED*** у фикстуры колонки нет вовсе — сначала грузим как есть
+    operplan.import_budgets(make_budgets_sheet(), "без колонки.xlsx", 2027, "Тест")
+    assert {r["classifier"] for r in repo.list_rows(2027, layer=operplan.LAYER)} == {"МРГ"}
+
+    ***REMOVED*** теперь вставляем колонку и пишем в неё мусор и строчные буквы
+    ws.insert_cols(3)
+    ws.cell(row=3, column=3, value="Классификатор")
+    filled = [r for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=1).value not in (None, "ИТОГО")]
+    ws.cell(row=filled[0], column=3, value="мрк")
+    ws.cell(row=filled[1], column=3, value="Чужое ЮЛ")
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    before = len(repo.list_rows(2027, layer=operplan.LAYER))
+    operplan.import_budgets(buffer.getvalue(), "с колонкой.xlsx", 2027, "Тест")
+    rows = repo.list_rows(2027, layer=operplan.LAYER)
+    assert len(rows) == before, "строка с непонятным значением не должна пропасть"
+    assert sorted({r["classifier"] for r in rows}) == ["МРГ", "МРК"]
+
+
+def test_шаблон_даёт_выбрать_из_двух(client, loaded):
+    content = client.get("/api/export/budget-template.xlsx?year=2027").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    rules = list(ws.data_validations.dataValidation)
+    assert len(rules) == 1
+    assert rules[0].formula1 == '"МРГ,МРК"'
+    assert str(rules[0].sqref).startswith("C4"), "проверка стоит на колонке классификатора"
+
+
+def test_миграция_проставляет_мрг_существующим_строкам(tmp_path, monkeypatch):
+    """Рабочая база колонки не знает: ALTER доливает её со значением по умолчанию."""
+    import sqlite3
+
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE cfo (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+                          parent_id INTEGER, active INTEGER NOT NULL DEFAULT 1);
+        CREATE TABLE budget (id INTEGER PRIMARY KEY, cfo_id INTEGER NOT NULL REFERENCES cfo(id),
+                             year INTEGER NOT NULL, name TEXT NOT NULL, layer TEXT NOT NULL,
+                             UNIQUE (cfo_id, year, name, layer));
+        CREATE TABLE budget_row (id INTEGER PRIMARY KEY,
+                                 budget_id INTEGER NOT NULL REFERENCES budget(id),
+                                 row_no INTEGER, article TEXT NOT NULL,
+                                 counterparty TEXT NOT NULL DEFAULT '',
+                                 contract TEXT NOT NULL DEFAULT '',
+                                 detail TEXT NOT NULL DEFAULT '',
+                                 comment TEXT NOT NULL DEFAULT '',
+                                 approver_comment TEXT NOT NULL DEFAULT '',
+                                 plan_year REAL NOT NULL DEFAULT 0,
+                                 carryover INTEGER NOT NULL DEFAULT 1,
+                                 source TEXT NOT NULL DEFAULT 'manual',
+                                 created_by TEXT NOT NULL DEFAULT '',
+                                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                 deleted_at TEXT);
+        INSERT INTO cfo(id, name) VALUES (1, 'Старое ЦФО');
+        INSERT INTO budget(id, cfo_id, year, name, layer)
+            VALUES (7, 1, 2026, 'Основной бюджет', 'operplan');
+        INSERT INTO budget_row(id, budget_id, article, plan_year) VALUES (42, 7, '4420_ПО', 999);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setenv("BUDGET_DB", str(path))
+    db.set_db_path(path)
+    db.init_db()
+
+    row = repo.get_row(42)
+    assert row["classifier"] == "МРГ"
+    assert row["plan_year"] == 999
+    db.init_db()                            ***REMOVED*** повторный запуск безвреден
+    assert repo.get_row(42)["classifier"] == "МРГ"

@@ -35,7 +35,7 @@ const FILLED = {
   contract: "Договор №1", detail: "Серверы", comment: "", approver_comment: "",
   detail_source: "detail", detail_text: "Серверы", plan_year: 120000,
   months: [120000, ...Array(MONTHS - 1).fill(0)], source: "import",
-  base_plan_year: null,
+  base_plan_year: null, classifier: "МРК",
 };
 
 /* У каждой дирекции свой набор: сервер руководителю чужие статьи и не отдаёт,
@@ -670,5 +670,96 @@ describe("вкладка «Бюджет»: сумма за год", () => {
     t.fire(sum, "change");
     await settle(t.window);
     assert.equal(t.calls.length, before, "на сервер ничего не ушло");
+  });
+});
+
+
+/* ---------- классификатор МРГ/МРК ---------- */
+
+describe("вкладка «Бюджет»: классификатор", () => {
+  const cellOf = (t, row) => row.children[2];
+
+  it("стоит третьей колонкой — как в выгрузке Excel", async () => {
+    const t = await mount();
+    const head = t.$$("***REMOVED***op-head th").map((th) => th.textContent);
+    assert.deepEqual(head.slice(0, 4),
+      ["№", "Статья оборотов", "Классификатор", "Контрагент"]);
+  });
+
+  it("вне правки показывает значение текстом, без списка", async () => {
+    const t = await mount();
+    const row = t.$('***REMOVED***t-op tbody tr[data-id="10"]');
+    const cell = cellOf(t, row);
+    assert.equal(cell.textContent, "МРК");
+    assert.equal(cell.querySelector("select"), null, "читать — значит не править");
+  });
+
+  it("в правке становится списком ровно из двух значений", async () => {
+    const t = await mount();
+    t.click(t.$("***REMOVED***op-edit-mode"));
+    const row = t.$('***REMOVED***t-op tbody tr[data-id="10"]');
+    const select = cellOf(t, row).querySelector("select");
+    assert.ok(select, "в правке — список");
+    assert.deepEqual(Array.from(select.options).map((o) => o.value), ["МРГ", "МРК"],
+      "значений ровно два");
+    assert.equal(select.value, "МРК", "показывает то, что в строке");
+  });
+
+  it("строка, пришедшая без классификатора, читается как МРГ", async () => {
+    // у строки прошлого года поля нет вовсе — так выглядят строки до миграции
+    const t = await mount();
+    const base = t.$$("***REMOVED***t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
+    t.click(base);
+    await settle(t.window, 40);
+    const row = t.$('***REMOVED***t-op tbody tr[data-id="20"]');
+    assert.ok(row, "строка базы нарисована");
+    assert.equal(cellOf(t, row).textContent, "МРГ");
+  });
+
+  it("смена значения уходит на сервер", async () => {
+    const t = await mount();
+    t.click(t.$("***REMOVED***op-edit-mode"));
+    const select = cellOf(t, t.$('***REMOVED***t-op tbody tr[data-id="10"]')).querySelector("select");
+    select.value = "МРГ";
+    t.fire(select, "change");
+    await settle(t.window);
+
+    const patch = t.calls.filter((c) => c.kind === "patch").pop();
+    assert.deepEqual(JSON.parse(JSON.stringify(patch.payload)), { classifier: "МРГ" });
+  });
+
+  it("у прошлого года правке не подлежит", async () => {
+    const t = await mount();
+    t.click(t.$("***REMOVED***op-edit-mode"));
+    const base = t.$$("***REMOVED***t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
+    t.click(base);
+    await settle(t.window, 40);
+    const past = t.$('***REMOVED***t-op tbody tr[data-id="20"]');
+    assert.ok(past, "строка базы нарисована");
+    assert.equal(cellOf(t, past).querySelector("select"), null,
+      "базовый год — справка, править его нельзя");
+  });
+
+  it("фильтруется наравне с остальными колонками", async () => {
+    const other = { ...FILLED, id: 11, article: "4430_Разработка",
+      counterparty: "Софт ООО", classifier: "МРГ" };
+    const t = await mount(undefined, [other]);
+    assert.equal(t.$$("***REMOVED***t-op tbody tr[data-id]").length, 2, "до фильтра видны обе строки");
+    const titles = t.$$("***REMOVED***op-filters .fwrap .fbtn").map((b) => b.textContent);
+    assert.ok(titles.some((title) => title.indexOf("Классификатор") >= 0),
+      "у колонки должен быть свой фильтр");
+
+    const chip = t.$$("***REMOVED***op-filters .fwrap")[2];      // ЦФО, Статья, Классификатор
+    t.click(chip.querySelector(".fbtn"));
+    const values = Array.from(chip.querySelectorAll(".fopt")).map((l) => l.textContent.trim());
+    assert.ok(values.indexOf("МРК") >= 0, "в списке есть значение из строк");
+
+    const box = Array.from(chip.querySelectorAll(".fopt"))
+      .find((label) => label.textContent.trim() === "МРК").querySelector("input");
+    box.checked = true;
+    t.fire(box, "change");
+    await settle(t.window, 30);
+    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => tr.getAttribute("data-id"));
+    assert.deepEqual(shown, ["10"], "остаётся только строка с МРК");
   });
 });

@@ -6,6 +6,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 from app import calc, service
 
@@ -37,6 +38,18 @@ def _to_bytes(wb: Workbook) -> bytes:
     return buffer.getvalue()
 
 
+***REMOVED*** Раскладка листа «Бюджеты ЦФО» в одном месте: выгрузка и шаблон обязаны
+***REMOVED*** совпадать колонка в колонку, иначе заполненный шаблон не зальётся.
+***REMOVED*** Классификатор стоит сразу за ЦФО — он про ту же строку, что и дирекция.
+BUDGET_HEADER = ["Статья оборотов", "ЦФО", "Классификатор", "Контрагент", "Договор",
+                 "Детализация", "Комментарий", "ИТОГО"] + calc.MONTH_NAMES
+COL = {title: i + 1 for i, title in enumerate(BUDGET_HEADER)}
+MONTH_COL = COL["ИТОГО"] + 1           ***REMOVED*** первая колонка месяца
+BUDGET_WIDTHS = {COL["Статья оборотов"]: 38, COL["ЦФО"]: 30, COL["Классификатор"]: 15,
+                 COL["Контрагент"]: 28, COL["Договор"]: 26, COL["Детализация"]: 34,
+                 COL["Комментарий"]: 30, COL["ИТОГО"]: 16}
+
+
 def budget_sheet(year: int, cfo_ids=None) -> bytes:
     """Лист «Бюджеты ЦФО» слоя планирования — тот же вид, что у исходного файла.
 
@@ -51,8 +64,7 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
     ws = wb.active
     ws.title = cfo_budgets_sheet_name()
 
-    header = ["Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
-              "Комментарий", "ИТОГО"] + calc.MONTH_NAMES
+    header = BUDGET_HEADER
     ws.cell(row=1, column=1, value=f"Бюджеты ЦФО, {view['year']} год")
     ws.cell(row=1, column=1).font = Font(bold=True, size=12)
     for col, title in enumerate(header, start=1):
@@ -69,29 +81,30 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
     for block in view["blocks"]:
         ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
         ws.cell(row=idx, column=2, value=block["cfo_name"]).font = Font(bold=True)
-        ws.cell(row=idx, column=4, value=block["budget_name"])
-        money(idx, 7, block["plan_year"], bold=True)
+        ws.cell(row=idx, column=COL["Договор"], value=block["budget_name"])
+        money(idx, COL["ИТОГО"], block["plan_year"], bold=True)
         for m, amount in enumerate(block["months"]):
-            money(idx, 8 + m, amount, bold=True)
+            money(idx, MONTH_COL + m, amount, bold=True)
         for col in range(1, len(header) + 1):
             ws.cell(row=idx, column=col).fill = TOTAL_FILL
         idx += 1
 
         for row in block["rows"]:
-            ws.cell(row=idx, column=1, value=row["article"])
-            ws.cell(row=idx, column=2, value=block["cfo_name"])
-            ws.cell(row=idx, column=3, value=row["counterparty"])
-            ws.cell(row=idx, column=4, value=row["contract"])
-            ws.cell(row=idx, column=5, value=row["detail"])
-            ws.cell(row=idx, column=6, value=row["comment"])
-            money(idx, 7, row["plan_year"])
+            ws.cell(row=idx, column=COL["Статья оборотов"], value=row["article"])
+            ws.cell(row=idx, column=COL["ЦФО"], value=block["cfo_name"])
+            ws.cell(row=idx, column=COL["Классификатор"], value=row["classifier"])
+            ws.cell(row=idx, column=COL["Контрагент"], value=row["counterparty"])
+            ws.cell(row=idx, column=COL["Договор"], value=row["contract"])
+            ws.cell(row=idx, column=COL["Детализация"], value=row["detail"])
+            ws.cell(row=idx, column=COL["Комментарий"], value=row["comment"])
+            money(idx, COL["ИТОГО"], row["plan_year"])
             for m, amount in enumerate(row["months"]):
-                money(idx, 8 + m, amount)
+                money(idx, MONTH_COL + m, amount)
             idx += 1
 
-    _autosize(ws, {1: 38, 2: 30, 3: 28, 4: 26, 5: 34, 6: 30, 7: 16})
+    _autosize(ws, BUDGET_WIDTHS)
     for m in range(calc.MONTHS):
-        ws.column_dimensions[get_column_letter(8 + m)].width = 14
+        ws.column_dimensions[get_column_letter(MONTH_COL + m)].width = 14
     return _to_bytes(wb)
 
 
@@ -127,8 +140,7 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     ws = wb.active
     ws.title = cfo_budgets_sheet_name()
 
-    header = ["Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
-              "Комментарий", "ИТОГО"] + calc.MONTH_NAMES
+    header = BUDGET_HEADER
     ws.cell(row=1, column=1, value=f"Бюджеты ЦФО, {year} год — шаблон для заполнения")
     ws.cell(row=1, column=1).font = Font(bold=True, size=12)
     hint = ws.cell(row=2, column=1, value=(
@@ -146,24 +158,43 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
         for budget_name in names:
             ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
             ws.cell(row=idx, column=2, value=cfo["name"]).font = Font(bold=True)
-            ws.cell(row=idx, column=4, value=budget_name)
+            ws.cell(row=idx, column=COL["Договор"], value=budget_name)
             for col in range(1, len(header) + 1):
                 ws.cell(row=idx, column=col).fill = TOTAL_FILL
             idx += 1
             for _ in range(TEMPLATE_ROWS):
-                cell = ws.cell(row=idx, column=7)
+                cell = ws.cell(row=idx, column=COL["ИТОГО"])
                 cell.number_format = MONEY
                 for m in range(calc.MONTHS):
-                    ws.cell(row=idx, column=8 + m).number_format = MONEY
+                    ws.cell(row=idx, column=MONTH_COL + m).number_format = MONEY
                 idx += 1
 
-    _autosize(ws, {1: 38, 2: 30, 3: 28, 4: 26, 5: 34, 6: 30, 7: 16})
+    _classifier_choice(ws, 4, idx - 1)
+    _autosize(ws, BUDGET_WIDTHS)
     for m in range(calc.MONTHS):
-        ws.column_dimensions[get_column_letter(8 + m)].width = 14
+        ws.column_dimensions[get_column_letter(MONTH_COL + m)].width = 14
 
     _template_hints(wb, year)
     _template_refs(wb, year, cfo_ids)
     return _to_bytes(wb)
+
+
+def _classifier_choice(ws, first_row: int, last_row: int) -> None:
+    """Выпадающий список МРГ/МРК в колонке классификатора.
+
+    Значения ровно два, поэтому проще дать выбрать, чем ловить опечатку потом.
+    Список — подсказка, а не запрет: загрузка всё равно приводит чужое значение
+    к МРГ, иначе строка бюджета терялась бы из-за описки в одной колонке.
+    """
+    if last_row < first_row:
+        return
+    letter = get_column_letter(COL["Классификатор"])
+    rule = DataValidation(type="list", formula1='"МРГ,МРК"', allow_blank=True,
+                          showDropDown=False)
+    rule.error = "Допустимы только МРГ и МРК"
+    rule.prompt = "Выберите МРГ или МРК"
+    ws.add_data_validation(rule)
+    rule.add(f"{letter}{first_row}:{letter}{last_row}")
 
 
 HOW_TO = [
@@ -173,6 +204,8 @@ HOW_TO = [
     "держателем бюджета считается заголовок блока, а не подпись в самой строке.",
     "Обязательна первая колонка — название расходной статьи. Пишите его так же, "
     "как на листе «Справочник»: название с опечаткой заведёт в плане отдельную строку.",
+    "Колонка «Классификатор» — МРГ или МРК, третьего значения нет; выбирайте из "
+    "списка в ячейке. Пустая клетка и незнакомое значение читаются как МРГ.",
     "Суммы — в колонку ИТОГО и по месяцам. Если заполнены только месяцы, "
     "ИТОГО будет посчитано как их сумма.",
     "Формулы загрузка не видит — вписывайте числа. Excel-файл со формулами "

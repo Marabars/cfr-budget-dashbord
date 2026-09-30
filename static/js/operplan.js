@@ -19,14 +19,21 @@
     year: null           // год в фокусе: к нему привязаны замок и справочники
   };
 
+  /* Классификатор юрлица: значений ровно два, поэтому правится списком,
+     а не набором текста. Порядок колонок — как в выгрузке Excel. */
+  var CLASSIFIERS = ["МРГ", "МРК"];
+  var CLASSIFIER_DEFAULT = "МРГ";
+
   var FIELDS = [
     { key: "article", title: "Статья оборотов" },
+    { key: "classifier", title: "Классификатор" },
     { key: "counterparty", title: "Контрагент" },
     { key: "contract", title: "Договор" },
     { key: "detail_text", title: "Детализация" }
   ];
   var MONTH_FIELD = /^m\d+$/;
-  var COLS = 6 + 12 + 1;   // № + 4 текстовых + ИТОГО + 12 месяцев + прошлый год
+  // № + текстовые колонки + ИТОГО + 12 месяцев + прошлый год
+  var COLS = 1 + FIELDS.length + 1 + 12 + 1;
 
   /* ---------- фильтры ---------- */
 
@@ -246,7 +253,7 @@
       for (var i = 0; i < 12; i++) months[i] += row.months[i] || 0;
     });
     var filtered = rows.length !== allRows;
-    total.appendChild(U.el("td", { colspan: 5, class: "total-label",
+    total.appendChild(U.el("td", { colspan: FIELDS.length + 1, class: "total-label",
       text: "ИТОГО " + year + (filtered ? " по фильтру · " + rows.length + " строк"
         : " · " + rows.length + " строк") }));
     total.appendChild(U.el("td", { class: "num total-sum", text: U.fmt(sum) }));
@@ -306,8 +313,12 @@
     ])]));
 
     FIELDS.forEach(function (f) {
-      tr.appendChild(draft ? pickCell(row, f.key)
-        : editableCell(row, f.key, row[f.key] || "", "wrap", editable));
+      if (f.key === "classifier") {
+        tr.appendChild(classifierCell(row, editable));
+      } else {
+        tr.appendChild(draft ? pickCell(row, f.key)
+          : editableCell(row, f.key, row[f.key] || "", "wrap", editable));
+      }
     });
 
     tr.appendChild(draft ? sumCell(row) : U.el("td", { class: "num n-plan",
@@ -408,6 +419,27 @@
       td.classList.remove("saving");
       U.toast(e.message, "error");
     });
+  }
+
+  /* Классификатор — не текст, а выбор из двух. Отдельной ячейкой, а не через
+     Inline: contenteditable пустил бы туда что угодно, а сервер знает ровно
+     два значения и на третье отвечает 422. */
+  function classifierCell(row, editable) {
+    var value = row.classifier || CLASSIFIER_DEFAULT;
+    if (!editable) {
+      return U.el("td", { class: "cls", text: value });
+    }
+    var td = U.el("td", { class: "cls" });
+    var select = U.el("select", { class: "cls-pick" });
+    CLASSIFIERS.forEach(function (name) {
+      select.appendChild(U.el("option", { value: name, text: name }));
+    });
+    select.value = value;
+    select.addEventListener("change", function () {
+      commitCell(row, "classifier", select.value, td);
+    });
+    td.appendChild(select);
+    return td;
   }
 
   function pickCell(row, field) {
@@ -801,9 +833,10 @@
 
   function applied(row, saved, field, payload) {
     if (payload.months) row.months = payload.months;
-    ["article", "counterparty", "contract", "detail", "comment"].forEach(function (key) {
-      if (key in saved) row[key] = saved[key];
-    });
+    ["article", "classifier", "counterparty", "contract", "detail", "comment"]
+      .forEach(function (key) {
+        if (key in saved) row[key] = saved[key];
+      });
     if (field === "detail_text") {
       row.detail_text = row.detail_source === "detail" ? saved.detail : saved.comment;
     }

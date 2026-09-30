@@ -7,6 +7,10 @@ from pydantic import BaseModel, Field, field_validator
 
 MONTHS = 12
 
+***REMOVED*** Классификатор юрлица у строки бюджета: значений ровно два.
+Classifier = Literal["МРГ", "МРК"]
+CLASSIFIER_DEFAULT = "МРГ"
+
 
 class RowIn(BaseModel):
     """Новая или изменённая строка бюджета."""
@@ -14,6 +18,7 @@ class RowIn(BaseModel):
     cfo_id: int | None = None
     budget_name: str = "Основной бюджет"
     article: str = Field(min_length=1)
+    classifier: Classifier = CLASSIFIER_DEFAULT
     counterparty: str = ""
     contract: str = ""
     detail: str = ""
@@ -121,6 +126,7 @@ class RowPatch(BaseModel):
     пересчитывается по ним: в таблице ИТОГО — это всегда сумма двенадцати месяцев.
     """
     article: str | None = None
+    classifier: Classifier | None = None
     counterparty: str | None = None
     contract: str | None = None
     detail: str | None = None
@@ -168,6 +174,7 @@ class OperplanRowIn(BaseModel):
     cfo_id: int
     budget_name: str = "Основной бюджет"
     article: str = ""
+    classifier: Classifier = CLASSIFIER_DEFAULT
     counterparty: str = ""
     contract: str = ""
     detail: str = ""

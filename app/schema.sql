@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS budget_row (
   budget_id         INTEGER NOT NULL REFERENCES budget(id) ON DELETE CASCADE,
   row_no            INTEGER,            -- № строки внутри бюджета (как в Excel)
   article           TEXT NOT NULL,      -- «4420_Расходы на приобретение ПО»
+  -- классификатор юрлица: строка относится либо к МРГ, либо к МРК, третьего нет.
+  -- Старым строкам миграция проставляет МРГ — выбирать за них было некому.
+  classifier        TEXT NOT NULL DEFAULT 'МРГ',   -- МРГ | МРК
   counterparty      TEXT NOT NULL DEFAULT '',
   contract          TEXT NOT NULL DEFAULT '',
   detail            TEXT NOT NULL DEFAULT '',

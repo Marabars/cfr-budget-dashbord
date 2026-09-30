@@ -13,6 +13,10 @@
     «Двенадцатая дирекция» в накладных расходах), и контрольная сумма блока их включает.
     Отличающаяся подпись сохраняется в «Комм наш», чтобы не потерять её при переносе.
 
+Наша выгрузка добавляет к этой раскладке колонку «Классификатор» (МРГ или МРК)
+сразу за «ЦФО». В исходном файле её нет — тогда строка читается как МРГ,
+поэтому старые файлы заливаются как раньше.
+
 Лист «ЦФО Статьи» того же файла разбирается отдельно: это справочник
 «какие статьи закреплены за дирекцией» для выпадающего списка при добавлении.
 """
@@ -21,6 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from app import repo
 from app.calc import MONTHS
 from app.importers import xlsx
 
@@ -32,6 +37,7 @@ DEFAULT_BUDGET = "Основной бюджет"
 ALIASES = {
     "article": ("статья оборотов", "статья"),
     "cfo": ("цфо",),
+    "classifier": ("классификатор", "мрг/мрк", "юрлицо"),
     "counterparty": ("контрагент",),
     "contract": ("договор",),
     "detail": ("детализация",),
@@ -95,6 +101,9 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             "row_cfo": cfo,
             "budget": (current or {}).get("budget", DEFAULT_BUDGET),
             "article": article,
+            ***REMOVED*** колонки может не быть вовсе: старые выгрузки и исходный файл
+            ***REMOVED*** ликвидности её не знают — тогда строка считается МРГ
+            "classifier": repo.classifier_or_default(cell(row, "classifier")),
             "counterparty": xlsx.text(cell(row, "counterparty")),
             "contract": xlsx.text(cell(row, "contract")),
             "detail": xlsx.text(cell(row, "detail")),

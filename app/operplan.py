@@ -150,6 +150,7 @@ def _row_view(row: dict, months: list[float], base: dict | None) -> dict:
         "cfo_id": int(row["cfo_id"]),
         "cfo_name": row.get("cfo_name", ""),
         "article": row["article"],
+        "classifier": row.get("classifier") or repo.CLASSIFIER_DEFAULT,
         "counterparty": row["counterparty"],
         "contract": row["contract"],
         "detail": row["detail"],
@@ -318,6 +319,7 @@ def _copy_row(row: dict, months: list[float], to_year: int, factor: float, autho
         budget_id,
         {
             "article": row["article"],
+            "classifier": row["classifier"],
             "counterparty": row["counterparty"],
             "contract": row["contract"],
             "detail": row["detail"],
