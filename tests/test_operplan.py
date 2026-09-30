@@ -1290,3 +1290,36 @@ def test_миграция_проставляет_мрг_существующим
     assert row["plan_year"] == 999
     db.init_db()                            ***REMOVED*** повторный запуск безвреден
     assert repo.get_row(42)["classifier"] == "МРГ"
+
+
+def test_отчёт_загрузки_совпадает_с_тем_что_легло(client, loaded):
+    """Сумма в ответе считалась по колонке ИТОГО файла, а строки писались
+    с суммой по месяцам, когда ИТОГО пуст. Цифры расходились."""
+    wb = openpyxl.load_workbook(io.BytesIO(make_budgets_sheet()))
+    ws = wb["Бюджеты ЦФО"]
+    filled = [r for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=1).value not in (None, "ИТОГО")]
+    ***REMOVED*** У первой строки стираем ИТОГО и оставляем один месяц. Чистится присваиванием
+    ***REMOVED*** в .value: openpyxl в ws.cell(..., value=None) понимает None как «не задавать»
+    ***REMOVED*** и оставляет прежнее значение — на этом тест уже один раз оказался пустым.
+    ws.cell(row=filled[0], column=7).value = None
+    for c in range(8, 20):
+        ws.cell(row=filled[0], column=c).value = None
+    ws.cell(row=filled[0], column=8, value=12_000)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    result = operplan.import_budgets(buffer.getvalue(), "файл.xlsx", 2027, "Тест")
+    in_db = sum(r["plan_year"] for r in repo.list_rows(2027, layer=operplan.LAYER))
+    assert result["total"] == pytest.approx(in_db)
+    assert result["total"] > 0
+
+
+def test_отчёт_загрузки_не_считает_чужие_цфо(client, loaded):
+    """Руководителю чужие строки пропускаются — в сумму они попадать не должны."""
+    hr_id = repo.ensure_cfo(HR)
+    result = operplan.import_budgets(make_budgets_sheet(), "файл.xlsx", 2027, "Тест",
+                                     cfo_ids=[hr_id])
+    in_db = sum(r["plan_year"] for r in repo.list_rows(2027, layer=operplan.LAYER))
+    assert result["foreign"] > 0, "в файле есть чужие дирекции"
+    assert result["total"] == pytest.approx(in_db)

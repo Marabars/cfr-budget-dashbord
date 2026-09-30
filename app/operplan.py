@@ -523,17 +523,20 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
     created = 0
     other_label = 0
     foreign = 0
+    total = 0.0
     for cfo_id, row in rows:
         if allowed is not None and cfo_id not in allowed:
             foreign += 1
             continue
         if IT_MARKER in row["cfo"].lower():
             repo.set_detail_source(cfo_id, "detail")
+        plan = _plan_or_months(row)
         budget_id = repo.ensure_budget(cfo_id, year, row["budget"], layer=LAYER)
-        repo.create_row(budget_id, {**row, "plan_year": _plan_or_months(row)},
+        repo.create_row(budget_id, {**row, "plan_year": plan},
                         months=row["months"], author=author,
                         source="import", row_no=repo.next_row_no(budget_id))
         created += 1
+        total += plan
         if row.get("approver_comment"):
             other_label += 1
 
@@ -547,7 +550,9 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
         "year": year, "rows": created, "blocks": len(parsed["blocks"]),
         "removed": removed, "replaced_cfo": len(scope),
         "other_cfo_label": other_label, "foreign": foreign,
-        "total": sum(r["plan_year"] for r in parsed["rows"]),
+        ***REMOVED*** ровно то, что легло в базу: у строки с пустым ИТОГО сумма собирается
+        ***REMOVED*** из месяцев, а чужие ЦФО в отчёт не попадают — их и не записали
+        "total": round(total, 2),
         "mismatches": mismatches,
     }
 
