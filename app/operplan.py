@@ -574,7 +574,10 @@ def import_fact(content: bytes, filename: str, year: int, author: str,
     for row in _year_rows(year, None if allowed is None else sorted(allowed)):
         index.setdefault((int(row["cfo_id"]),) + full_key(row), []).append(int(row["id"]))
 
-    items = [(repo.ensure_cfo(item["cfo"]), item) for item in parsed["rows"]]
+    ***REMOVED*** Нулевые строки для факта смысла не имеют, а строку в плане завели бы
+    ***REMOVED*** пустую: расход, которого не было, — это не расход.
+    items = [(repo.ensure_cfo(item["cfo"]), item) for item in parsed["rows"]
+             if item["plan_year"] or any(item["months"])]
     ***REMOVED*** Прежний факт гасим тем же кругом ЦФО, что и в файле: иначе загрузка по
     ***REMOVED*** одной дирекции обнуляла бы факт остальных, а повторная загрузка своей —
     ***REMOVED*** оставляла бы старые суммы на строках, выпавших из файла.

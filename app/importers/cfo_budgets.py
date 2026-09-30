@@ -84,8 +84,10 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             continue
 
         plan_year = xlsx.num(cell(row, "plan_year"))
-        if not plan_year and not any(months):
-            continue                        ***REMOVED*** пустая техническая строка
+        ***REMOVED*** Нулевую строку со статьёй не отбрасываем: в бюджете это законная
+        ***REMOVED*** строка — расход заведён, сумму ещё не проставили. Строки вовсе без
+        ***REMOVED*** статьи отсеяны выше, так что «пустая техническая» сюда не доходит.
+        ***REMOVED*** Факту нули не нужны — их отсекает import_fact у себя.
 
         holder = (current or {}).get("cfo", "") or cfo
         out_rows.append({

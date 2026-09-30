@@ -1058,3 +1058,92 @@ def test_пустая_строка_при_перенумерации_идёт_п
 
     client.post("/api/operplan/renumber", json={"year": 2027})
     assert int(repo.get_row(row_id)["row_no"]) == 1
+
+
+***REMOVED*** ---------- круг: строка с нулевой суммой ----------
+
+def test_нулевая_строка_со_статьёй_переживает_круг(client, loaded):
+    """Расход заведён, сумму ещё не проставили — выгрузка и заливка её не теряют.
+
+    Правило «нет суммы — строка техническая» писалось под исходный файл
+    ликвидности, где такие строки действительно пустые. На круговой заливке
+    собственной выгрузки оно съедало законную строку плана.
+    """
+    cfo_id = repo.ensure_cfo(HR)
+    budget_id = repo.ensure_budget(cfo_id, 2027, "Основной бюджет", layer=operplan.LAYER)
+    repo.create_row(budget_id, {
+        "article": "4505_Выплата доли девелопера", "counterparty": "Сигма ООО",
+        "contract": "", "detail": "", "comment": "", "approver_comment": "",
+        "plan_year": 0.0,
+    }, months=[0.0] * 12, author="Тест", source="manual", row_no=1)
+
+    before = client.get("/api/operplan?year=2027").json()["totals"]["rows_count"]
+    content = client.get("/api/export/budget.xlsx?year=2027").content
+    result = operplan.import_budgets(content, "выгрузка.xlsx", 2027, "Тест")
+
+    assert result["rows"] == before, "нулевая строка не должна пропасть при заливке"
+    rows = repo.list_rows(2027, layer=operplan.LAYER)
+    zero = [r for r in rows if r["article"] == "4505_Выплата доли девелопера"]
+    assert len(zero) == 1
+    assert zero[0]["counterparty"] == "Сигма ООО"
+    assert zero[0]["plan_year"] == 0
+
+
+def test_строка_без_статьи_круг_не_переживает(client, loaded):
+    """Заготовка от кнопки «+ расход» — заливать нечего, и она отсеивается.
+
+    Уточнение, которое стоит помнить: круг замены — дирекции, чьи строки есть
+    в файле. Заготовка исчезает потому, что её блок перезаписывается соседней
+    заполненной строкой. Блок, где заготовка одна, в замену не попадает вовсе
+    (см. test_одинокая_заготовка_остаётся_на_месте).
+    """
+    cfo_id = repo.ensure_cfo(HR)
+    budget_id = repo.ensure_budget(cfo_id, 2027, "Основной бюджет", layer=operplan.LAYER)
+    for row_no, article in ((1, ""), (2, "4109_Обучение")):
+        repo.create_row(budget_id, {
+            "article": article, "counterparty": "", "contract": "", "detail": "",
+            "comment": "", "approver_comment": "", "plan_year": 0.0 if not article else 5000.0,
+        }, months=[0.0] * 12, author="Тест", source="manual", row_no=row_no)
+
+    content = client.get("/api/export/budget.xlsx?year=2027").content
+    result = operplan.import_budgets(content, "выгрузка.xlsx", 2027, "Тест")
+    assert result["rows"] == 1
+    articles = [r["article"] for r in repo.list_rows(2027, layer=operplan.LAYER)]
+    assert articles == ["4109_Обучение"], "заготовка без статьи залиться не должна"
+
+
+def test_одинокая_заготовка_остаётся_на_месте(client, loaded):
+    """В блоке только заготовка — заливать в него нечего, и он не трогается.
+
+    Это не потеря и не дубль: замена идёт по дирекциям, чьи строки есть в файле,
+    а у этой их нет. Иначе выгрузка одной дирекции стирала бы чужие бюджеты.
+    """
+    cfo_id = repo.ensure_cfo(HR)
+    budget_id = repo.ensure_budget(cfo_id, 2027, "Основной бюджет", layer=operplan.LAYER)
+    repo.create_row(budget_id, {
+        "article": "", "counterparty": "", "contract": "", "detail": "",
+        "comment": "", "approver_comment": "", "plan_year": 0.0,
+    }, months=[0.0] * 12, author="Тест", source="manual", row_no=1)
+
+    content = client.get("/api/export/budget.xlsx?year=2027").content
+    result = operplan.import_budgets(content, "выгрузка.xlsx", 2027, "Тест")
+    assert result["rows"] == 0
+    assert len(repo.list_rows(2027, layer=operplan.LAYER)) == 1
+
+
+def test_факт_нулевые_строки_не_заводит(client, loaded):
+    """В факте ноль — это не расход: пустую строку в плане он заводить не должен."""
+    wb = openpyxl.load_workbook(io.BytesIO(make_fact_sheet()))
+    ws = wb["Бюджеты ЦФО"]
+    last = ws.max_row + 1
+    ws.cell(row=last, column=1, value="4999_Строка без расхода")
+    ws.cell(row=last, column=2, value=HR)
+    ws.cell(row=last, column=3, value="Никто ООО")
+    ws.cell(row=last, column=7, value=0)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    before = len(repo.list_rows(2026, layer=operplan.LAYER))
+    result = operplan.import_fact(buffer.getvalue(), "факт.xlsx", 2026, "Тест")
+    assert result["created"] == 0
+    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == before
