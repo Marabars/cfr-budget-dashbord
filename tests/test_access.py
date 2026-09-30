@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import db, repo
+from app import accounts, auth, db, repo
 from app.main import app
 
 FIN_PASSWORD = "test-fin-pass"
@@ -290,3 +290,85 @@ def test_миграция_добавляет_пароли_не_трогая_уч
 
     db.init_db()                            ***REMOVED*** повторный запуск безвреден
     assert db.query_one("SELECT 1 FROM app_user WHERE login = 'ivanov'") is not None
+
+
+***REMOVED*** ---------- логины и пароли по названию ЦФО ----------
+
+def test_логин_собирается_из_инициалов_значимых_слов():
+    assert accounts.login_for("Вторая дирекция") == "dup"
+    assert accounts.login_for("Восьмая дирекция") == "dmp"
+    assert accounts.login_for("Первый отдел") == "ao"
+    assert accounts.login_for("Седьмая дирекция") == "deb"
+
+
+def test_короткое_название_берётся_словом_целиком():
+    """«Эпсилон» — одно слово: инициал «g» логином быть не может."""
+    assert accounts.login_for("Эпсилон") == "gasfor"
+    assert accounts.login_for("Ёлка") == "elka"
+
+
+def test_совпавшие_логины_разводятся_цифрой():
+    taken = {"dup"}
+    assert accounts.login_for("Вторая дирекция", taken) == "dup2"
+    assert accounts.login_for("Вторая дирекция", taken | {"dup2"}) == "dup3"
+
+
+def test_пароль_воспроизводим_и_не_короче_минимума():
+    name = "Десятая дирекция"
+    first = accounts.password_for("da", name)
+    assert first == accounts.password_for("da", name)
+    assert first.startswith("da-")
+    assert len(first) >= auth.MIN_PASSWORD
+    assert accounts.password_for("da", name, salt="соль") != first
+
+
+def test_набор_учёток_не_повторяет_логины():
+    rows = [
+        {"id": 1, "name": "Первая дирекция"},
+        {"id": 2, "name": "Первая дирекция технически"},
+        {"id": 3, "name": "Двенадцатая дирекция"},
+        {"id": 4, "name": "Девятая дирекция"},
+    ]
+    plan = accounts.accounts_for(rows, taken={"admin", "dit"})
+    logins = [item["login"] for item in plan]
+    assert len(set(logins)) == len(logins)
+    assert "admin" not in logins
+    assert logins[0] == "dit2"          ***REMOVED*** «dit» занят — развели цифрой
+    assert [item["cfo_id"] for item in plan] == [1, 2, 3, 4]
+
+
+def test_выданной_парой_можно_войти(client, guest):
+    """Сквозная проверка: пароль из алгоритма проходит правила и пускает внутрь."""
+    setup_login(client)
+    cfo_id = repo.ensure_cfo("Вторая дирекция")
+    rows = db.query("SELECT id, name FROM cfo WHERE id = ?", (cfo_id,))
+    item = accounts.accounts_for(rows)[0]
+    assert item["login"] == "dup"
+
+    assert client.post("/api/users", json={
+        "login": item["login"], "name": item["cfo_name"], "role": "cfo",
+        "cfo_ids": [item["cfo_id"]], "password": item["password"],
+    }).status_code == 201
+    assert guest.post("/api/auth/login", json={
+        "login": item["login"], "password": item["password"],
+    }).status_code == 200
+    assert guest.get("/api/me").json()["cfo_ids"] == [cfo_id]
+
+
+def test_повторный_расчёт_узнаёт_свои_учётки():
+    """Логин, уже привязанный к этому ЦФО, за ним и остаётся — без «dup2»."""
+    rows = [{"id": 11, "name": "Вторая дирекция"},
+            {"id": 12, "name": "Двенадцатая дирекция"}]
+    first = accounts.accounts_for(rows, taken={"admin"})
+    owned = {item["login"]: item["cfo_id"] for item in first}
+
+    again = accounts.accounts_for(rows, taken={"admin"} | set(owned), owned=owned)
+    assert [item["login"] for item in again] == [item["login"] for item in first]
+    assert [item["password"] for item in again] == [item["password"] for item in first]
+
+
+def test_чужой_логин_всё_равно_разводится():
+    """Тот же логин, но за другим ЦФО — занят, и его подбирать заново нельзя."""
+    rows = [{"id": 11, "name": "Вторая дирекция"}]
+    plan = accounts.accounts_for(rows, taken={"dup"}, owned={"dup": 99})
+    assert plan[0]["login"] == "dup2"
