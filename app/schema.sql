@@ -176,8 +176,20 @@ CREATE TABLE IF NOT EXISTS app_user (
   login TEXT PRIMARY KEY,
   name  TEXT NOT NULL,
   role  TEXT NOT NULL DEFAULT 'cfo',     -- fin | cfo
-  cfo_ids TEXT NOT NULL DEFAULT ''       -- список id через запятую для роли cfo
+  cfo_ids TEXT NOT NULL DEFAULT '',      -- список id через запятую для роли cfo
+  password_hash TEXT NOT NULL DEFAULT '',-- пусто = учётка ещё без пароля, войти нельзя
+  is_active INTEGER NOT NULL DEFAULT 1
 );
+
+-- Сессии входа. Пока ни у кого нет пароля, таблица пустует, а приложение
+-- работает в режиме доверенной сети (см. app/auth.py).
+CREATE TABLE IF NOT EXISTS session (
+  token      TEXT PRIMARY KEY,
+  login      TEXT NOT NULL REFERENCES app_user(login) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_session_login ON session(login);
 
 CREATE TABLE IF NOT EXISTS setting (
   key   TEXT PRIMARY KEY,

@@ -31,6 +31,7 @@
   function loadTabData(name) {
     if (name === "reg") Registry.load();
     if (name === "op") Operplan.load();
+    if (name === "acc") Access.load();
   }
 
   function selectTab(name) {
@@ -41,6 +42,7 @@
   /* Вкладки под роль: скрываем лишние и уводим с закрытой вкладки. */
   function applyRole(me) {
     state.me = me;
+    Auth.showUser(me);
     var keep = null;
     tabNodes().forEach(function (tab) {
       var name = tab.getAttribute("data-p");
@@ -123,6 +125,7 @@
       state.currentCfo || (cfoList[0] && cfoList[0].id));
     U.fillSelect(document.getElementById("c-cfo"), cfoList, "id", "name");
     U.fillSelect(document.getElementById("j-cfo"), cfoList, "id", "name");
+    Access.setCfoList(cfoList);
     fillRoles();
 
     var pick = document.getElementById("cfo-pick");
@@ -180,6 +183,8 @@
     var refresh = document.getElementById("reg-refresh");
     if (refresh) refresh.onclick = function () { Registry.load(); };
     Registry.init();
+    Auth.init();
+    Access.init();
 
     Dash.init();
     Sum.init();
@@ -214,6 +219,10 @@
       loadRowsFor(state.currentCfo);
     };
 
-    reload();
+    /* Сначала выясняем, пускают ли нас внутрь: на закрытой базе без сессии
+       данные грузить бессмысленно — придёт 401 и поднимется экран входа. */
+    Auth.boot().then(function (state) {
+      if (state.authenticated) reload();
+    });
   });
 })();

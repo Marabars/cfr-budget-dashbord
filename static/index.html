@@ -8,6 +8,40 @@
 </head>
 <body>
 
+<!-- Экран входа: он же первая настройка и смена пароля. Скрыт, пока Auth не решит иначе. -->
+<div class="gate" id="gate" hidden>
+  <form class="gate-card" id="gate-form" autocomplete="on">
+    <div class="gate-brand">
+      <svg class="logo-mark" viewBox="0 0 38 38" aria-hidden="true">
+        <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="***REMOVED***8A62F0"/><stop offset="1" stop-color="***REMOVED***5B2FD0"/>
+        </linearGradient></defs>
+        <rect width="38" height="38" rx="8" fill="url(***REMOVED***lg2)"/>
+        <text x="19" y="25" text-anchor="middle" fill="***REMOVED***fff" font-family="Calibri, sans-serif"
+              font-size="15" font-weight="700" letter-spacing="0.5">MR</text>
+      </svg>
+      <span class="wordmark">MR <span>Group</span></span>
+    </div>
+    <h2 id="gate-title">Вход</h2>
+    <p class="gate-hint" id="gate-hint"></p>
+    <label class="gate-field" id="f-gate-login"><span>Логин</span>
+      <input class="f-in" id="gate-login" autocomplete="username" autocapitalize="off"></label>
+    <label class="gate-field" id="f-gate-name" hidden><span>Как подписывать в журнале</span>
+      <input class="f-in" id="gate-name" value="Финансовый отдел"></label>
+    <label class="gate-field" id="f-gate-current" hidden><span>Текущий пароль</span>
+      <input class="f-in" id="gate-current" type="password" autocomplete="current-password"></label>
+    <label class="gate-field"><span id="gate-pass-label">Пароль</span>
+      <input class="f-in" id="gate-pass" type="password" autocomplete="current-password"></label>
+    <label class="gate-field" id="f-gate-pass2" hidden><span>Ещё раз</span>
+      <input class="f-in" id="gate-pass2" type="password" autocomplete="new-password"></label>
+    <div class="gate-err" id="gate-err" hidden></div>
+    <div class="gate-actions">
+      <button class="btn primary" id="gate-submit" type="submit">Войти</button>
+      <button class="btn" id="gate-cancel" type="button" hidden>Отмена</button>
+    </div>
+  </form>
+</div>
+
 <div class="top">
   <div class="top-row">
     <div class="brand">
@@ -27,7 +61,14 @@
     <div class="ctl"><span>Год</span><select id="year"></select></div>
     <div class="ctl"><span>Отчётная дата</span><input id="asof" type="date"></div>
     <div class="ctl"><span>Факт закрыт по</span><select id="closed"></select></div>
-    <div class="ctl"><span>Роль</span><select id="role"></select></div>
+    <div class="ctl" id="role-ctl"><span>Роль</span><select id="role"></select></div>
+    <div class="who" id="who" hidden>
+      <span class="who-name" id="who-name"></span>
+      <button class="btn sm" id="who-pass" type="button">Пароль</button>
+      <button class="btn sm" id="who-out" type="button">Выйти</button>
+    </div>
+    <button class="btn sm" id="who-setup" type="button" hidden
+            title="Закрыть приложение паролем">Настроить вход</button>
     <button class="icon-btn" id="theme" title="Светлая / тёмная тема">◐</button>
   </div>
   <div class="tabs" role="tablist">
@@ -41,6 +82,7 @@
     <button class="tab" role="tab" data-p="adj" aria-selected="false">Корректировки</button>
     <button class="tab" role="tab" data-p="io" aria-selected="false">Импорт / экспорт</button>
     <button class="tab" role="tab" data-p="reg" aria-selected="false">Справочник ЦФО</button>
+    <button class="tab" role="tab" data-p="acc" aria-selected="false">Доступ</button>
   </div>
 </div>
 
@@ -548,6 +590,52 @@
   </div>
 </section>
 
+<!-- ================= ДОСТУП ================= -->
+<section class="panel" id="p-acc">
+  <div class="card">
+    <header>
+      <h2>Учётные записи</h2>
+      <span class="sub" id="acc-sub"></span>
+      <div class="top-spacer"></div>
+      <button class="btn sm" id="acc-refresh">Обновить</button>
+    </header>
+    <div class="card-body">
+      <div class="alert" id="acc-open" hidden>
+        Вход по паролю ещё не настроен — приложение открыто всем, кто знает адрес.
+        Задайте пароль финотдела кнопкой «Настроить вход» в шапке.
+      </div>
+      <div class="form-grid">
+        <div><label class="f">Логин</label>
+          <input class="f-in" id="u-login" autocapitalize="off" placeholder="ivanov"></div>
+        <div><label class="f">Имя</label>
+          <input class="f-in" id="u-name" placeholder="Иванов И. И."></div>
+        <div><label class="f">Роль</label>
+          <select class="f-in" id="u-role">
+            <option value="cfo">Руководитель ЦФО</option>
+            <option value="fin">Финансовый отдел</option>
+          </select></div>
+        <div><label class="f">Пароль</label>
+          <input class="f-in" id="u-pass" type="password" autocomplete="new-password"></div>
+      </div>
+      <div id="u-cfo-box">
+        <label class="f">Доступные ЦФО <span class="dim" id="u-cfo-count"></span></label>
+        <div class="pick-list" id="u-cfo"></div>
+      </div>
+      <div class="row-btns">
+        <button class="btn primary" id="u-save">Создать</button>
+        <button class="btn" id="u-cancel" hidden>Отмена</button>
+        <span class="err" id="u-err"></span>
+      </div>
+    </div>
+    <div class="card-body flush"><div class="scroll"><table id="t-users">
+      <thead><tr>
+        <th>Логин</th><th>Имя</th><th>Роль</th><th class="wrap">ЦФО</th>
+        <th>Состояние</th><th></th>
+      </tr></thead><tbody></tbody>
+    </table></div></div>
+  </div>
+</section>
+
 </main>
 
 <script src="/js/util.js"></script>
@@ -563,6 +651,8 @@
 <script src="/js/adjustments.js"></script>
 <script src="/js/io.js"></script>
 <script src="/js/registry.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/access.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

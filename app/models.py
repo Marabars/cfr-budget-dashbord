@@ -212,3 +212,51 @@ class CopyYearIn(BaseModel):
 class LockIn(BaseModel):
     year: int | None = None
     locked: bool
+
+
+class LoginIn(BaseModel):
+    """Вход в приложение."""
+    login: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class SetupIn(BaseModel):
+    """Первый пароль финансового отдела — им включается вход."""
+    name: str = "Финансовый отдел"
+    password: str = Field(min_length=1)
+
+
+class PasswordChangeIn(BaseModel):
+    """Смена собственного пароля."""
+    current: str = ""
+    password: str = Field(min_length=1)
+
+
+class UserIn(BaseModel):
+    """Новая учётная запись."""
+    login: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    role: Literal["fin", "cfo"] = "cfo"
+    cfo_ids: list[int] = Field(default_factory=list)
+    password: str = Field(min_length=1)
+
+    @field_validator("login")
+    @classmethod
+    def login_shape(cls, value: str) -> str:
+        value = value.strip().lower()
+        if not value.replace("_", "").replace("-", "").replace(".", "").isalnum():
+            raise ValueError("Логин: латиница, цифры, точка, дефис и подчёркивание")
+        return value
+
+
+class UserPatch(BaseModel):
+    """Изменение учётной записи: имя, роль, доступные ЦФО, активность."""
+    name: str | None = None
+    role: Literal["fin", "cfo"] | None = None
+    cfo_ids: list[int] | None = None
+    is_active: bool | None = None
+
+
+class UserPasswordIn(BaseModel):
+    """Сброс пароля пользователю силами финансового отдела."""
+    password: str = Field(min_length=1)

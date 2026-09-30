@@ -68,8 +68,23 @@ def _migrate(conn: sqlite3.Connection) -> None:
     ).fetchone():
         return                              ***REMOVED*** чистая база: всё создаст schema.sql
 
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'app_user'"
+    ).fetchone():
+        conn.execute(
+            "CREATE TABLE app_user (login TEXT PRIMARY KEY, name TEXT NOT NULL, "
+            "role TEXT NOT NULL DEFAULT 'cfo', cfo_ids TEXT NOT NULL DEFAULT '')"
+        )
+
     if "detail_source" not in _columns(conn, "cfo"):
         conn.execute("ALTER TABLE cfo ADD COLUMN detail_source TEXT NOT NULL DEFAULT 'comment'")
+
+    ***REMOVED*** вход по паролю: на уже работающей базе колонок ещё нет, добавляем пустыми —
+    ***REMOVED*** пока ни у кого нет пароля, приложение остаётся в режиме доверенной сети
+    if "password_hash" not in _columns(conn, "app_user"):
+        conn.execute("ALTER TABLE app_user ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''")
+    if "is_active" not in _columns(conn, "app_user"):
+        conn.execute("ALTER TABLE app_user ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
 
     if "layer" not in _columns(conn, "budget"):
         conn.executescript("""

@@ -611,3 +611,44 @@ td.saving { opacity: .55; }
 .btn.icon { padding: 4px 10px; font-size: 17px; line-height: 1.2; }
 .btn.icon.locked { background: var(--accent-soft); }
 .batt-note { font-size: 13px; color: var(--ink2); margin-top: 3px; }
+
+/* ---------- вход в приложение ---------- */
+/* Экран входа перекрывает всё: пока сессии нет, за ним ничего не грузится. */
+.gate {
+  position: fixed; inset: 0; z-index: 60; background: var(--plane);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.gate-card {
+  width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); box-shadow: 0 18px 44px var(--shadow); padding: 26px 26px 22px;
+}
+.gate-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.gate-card h2 { font-size: 21px; }
+.gate-hint { margin: 7px 0 18px; font-size: 15px; color: var(--muted); }
+.gate-field { display: block; margin-bottom: 13px; }
+.gate-field > span {
+  display: block; font-size: 13px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 5px;
+}
+.gate-err {
+  border: 1px solid var(--critical); border-radius: var(--r-sm); background: var(--crit-bg);
+  color: var(--critical); font-size: 15px; font-weight: 600; padding: 8px 11px; margin-bottom: 13px;
+}
+.gate-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+.gate-actions .btn { flex: 1; justify-content: center; text-align: center; }
+
+/* кто вошёл — в шапке рядом с темой */
+.who { display: flex; align-items: center; gap: 7px; }
+.who-name { font-size: 14px; color: var(--ink2); font-weight: 600; }
+
+/* ---------- вкладка «Доступ» ---------- */
+.pick-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 14px;
+  max-height: 190px; overflow: auto; margin: 6px 0 4px;
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 9px 11px;
+  background: var(--raised);
+}
+.pick-opt { display: flex; align-items: center; gap: 7px; font-size: 15px; cursor: pointer; }
+***REMOVED***p-acc .row-btns { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
+.btn.danger { color: var(--critical); }
+.btn.danger:hover { border-color: var(--critical); }

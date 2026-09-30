@@ -17,12 +17,13 @@ def user(request: Request) -> auth.User:
 def me(u: auth.User = Depends(user)) -> dict:
     return {
         "login": u.login, "name": u.name, "role": u.role,
-        "cfo_ids": u.cfo_ids, "is_fin": u.is_fin,
+        "cfo_ids": u.cfo_ids, "is_fin": u.is_fin, "viewing_as": u.viewing_as,
     }
 
 
 @router.get("/settings")
-def get_settings() -> dict:
+def get_settings(u: auth.User = Depends(user)) -> dict:
+    """Период видят все вошедшие: он объясняет цифры на карточке ЦФО."""
     return service.settings()
 
 

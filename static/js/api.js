@@ -21,6 +21,9 @@
       }
     }
     return fetch(path, options).then(function (response) {
+      /* Сессия кончилась или её закрыли из-под нас — показываем экран входа,
+         а вызвавшему всё равно отдаём ошибку: он покажет её в своём месте. */
+      if (response.status === 401 && window.Auth) window.Auth.expired();
       if (response.status === 204) return null;
       return response.json().then(function (data) {
         if (!response.ok) {
@@ -60,6 +63,28 @@
           URL.revokeObjectURL(link.href);
         });
       });
+    },
+
+    authState: function () { return request("GET", "/api/auth/state"); },
+    authSetup: function (payload) { return request("POST", "/api/auth/setup", payload); },
+    authLogin: function (login, password) {
+      return request("POST", "/api/auth/login", { login: login, password: password });
+    },
+    authLogout: function () { return request("POST", "/api/auth/logout"); },
+    authPassword: function (current, password) {
+      return request("POST", "/api/auth/password", { current: current, password: password });
+    },
+    users: function () { return request("GET", "/api/users"); },
+    createUser: function (payload) { return request("POST", "/api/users", payload); },
+    updateUser: function (login, payload) {
+      return request("PUT", "/api/users/" + encodeURIComponent(login), payload);
+    },
+    resetPassword: function (login, password) {
+      return request("POST", "/api/users/" + encodeURIComponent(login) + "/password",
+        { password: password });
+    },
+    deleteUser: function (login) {
+      return request("DELETE", "/api/users/" + encodeURIComponent(login));
     },
 
     me: function () { return request("GET", "/api/me"); },
