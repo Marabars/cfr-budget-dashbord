@@ -3,7 +3,8 @@
 
 Логин и пароль руководителя выводятся из названия дирекции (`app/accounts.py`),
 поэтому список воспроизводим: повторный запуск даёт те же пары и не плодит
-учётки. Пароль финотдела задаётся отдельно — по умолчанию задаётся флагом.
+учётки. Пароль финотдела в коде не записан — задайте его `--fin-password` или
+переменной `FIN_PASSWORD`.
 
     set BUDGET_DB=data\\budget.db
     python scripts/seed_users.py                 ***REMOVED*** показать, что будет сделано
@@ -25,8 +26,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import accounts, auth, db  ***REMOVED*** noqa: E402
 
 FIN_LOGIN_DEFAULT = "admin"
-FIN_PASSWORD_DEFAULT = ""
 FIN_NAME = "Финансовый отдел"
+***REMOVED*** Пароля финотдела в коде нет намеренно: репозиторий публичный, а записанный
+***REMOVED*** здесь пароль был бы опубликован вместе с ним. Берётся из FIN_PASSWORD или
+***REMOVED*** --fin-password, без них скрипт останавливается.
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,7 +40,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reset", action="store_true",
                         help="переписать пароль и привязку у уже существующих учёток")
     parser.add_argument("--fin-login", default=FIN_LOGIN_DEFAULT)
-    parser.add_argument("--fin-password", default=FIN_PASSWORD_DEFAULT)
+    parser.add_argument("--fin-password", default=os.environ.get("FIN_PASSWORD", ""),
+                        help="пароль финотдела; в коде его нет — задайте флагом "
+                             "или переменной FIN_PASSWORD")
     parser.add_argument("--salt", default=os.environ.get("SEED_SALT", ""),
                         help="(не используется) "
                              "у кого есть исходники")
@@ -91,6 +96,9 @@ def main() -> int:
         lines.append(f"{what:9} {login:14} {password:20} {who}")
 
     ***REMOVED*** ---------- финотдел ----------
+    if args.apply and not args.fin_password:
+        raise SystemExit("Нужен пароль финотдела: --fin-password <пароль> "
+                         "или переменная FIN_PASSWORD.")
     if args.fin_login in taken and taken[args.fin_login]["password_hash"] and not args.reset:
         record("уже есть", args.fin_login, "(прежний)", FIN_NAME)
     else:
