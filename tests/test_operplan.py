@@ -1239,10 +1239,54 @@ def test_загрузка_чинит_чужое_значение_и_пережи
 def test_шаблон_даёт_выбрать_из_двух(client, loaded):
     content = client.get("/api/export/budget-template.xlsx?year=2027").content
     ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
-    rules = list(ws.data_validations.dataValidation)
-    assert len(rules) == 1
+    rules = [r for r in ws.data_validations.dataValidation
+             if str(r.sqref).startswith("C")]
+    assert len(rules) == 1, "на колонке классификатора один список"
     assert rules[0].formula1 == '"МРГ,МРК"'
-    assert str(rules[0].sqref).startswith("C4"), "проверка стоит на колонке классификатора"
+    assert str(rules[0].sqref).startswith("C4")
+
+
+def _range_values(wb, name: str) -> list[str]:
+    """Что реально лежит в именованном диапазоне, на который смотрит список."""
+    ref = str(wb.defined_names[name].value)
+    sheet, _, cells = ref.rpartition("!")
+    ws = wb[sheet.strip("'")]
+    return [c.value for row in ws[cells.replace("$", "")] for c in row]
+
+
+def test_шаблон_подсказывает_статьи_и_контрагентов_из_справочника(client, loaded):
+    """У каждого блока ЦФО свой список — из того, что уже встречалось у дирекции."""
+    content = client.get("/api/export/budget-template.xlsx?year=2027").content
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb["Бюджеты ЦФО"]
+    ***REMOVED*** строка, с которой начинается блок ДУП
+    start = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "ИТОГО"
+                 and ws.cell(row=r, column=2).value == HR) + 1
+
+    def rule_at(column: str):
+        return next(r for r in ws.data_validations.dataValidation
+                    if f"{column}{start}" in r.sqref)
+
+    articles = rule_at("A")
+    assert articles.type == "list"
+    assert not articles.showErrorMessage, "список подсказывает, новую статью не запрещает"
+    assert "4109_Обучение" in _range_values(wb, articles.formula1)
+    assert "4411_Оборудование" not in _range_values(wb, articles.formula1),         "в блоке ДУП не должно быть статей ИТ"
+    assert _range_values(wb, rule_at("D").formula1), "у контрагентов список тоже есть"
+
+
+def test_шаблон_руководителю_не_подсказывает_чужие_статьи(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    content = client.get("/api/export/budget-template.xlsx?year=2027",
+                         headers={"X-User": f"cfo:{hr_id}"}).content
+    wb = openpyxl.load_workbook(io.BytesIO(content))
+    ws = wb["Бюджеты ЦФО"]
+    everything = {v for name in wb.defined_names for v in _range_values(wb, name)}
+    assert "4109_Обучение" in everything
+    assert "4411_Оборудование" not in everything, "статьи ИТ руководителю ДУП не видны"
+    assert [r for r in ws.data_validations.dataValidation
+            if str(r.sqref).startswith("A")], "список статей у блока есть"
 
 
 def test_миграция_проставляет_мрг_существующим_строкам(tmp_path, monkeypatch):

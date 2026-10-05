@@ -6,6 +6,7 @@ import io
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from app import calc, service
@@ -115,6 +116,9 @@ def cfo_budgets_sheet_name() -> str:
 
 TEMPLATE_ROWS = 12          ***REMOVED*** пустых строк на блок — хватает на один ЦФО без вставок
 HINT_FILL = PatternFill("solid", fgColor="FFF6E8")
+REFS_SHEET = "Справочник"
+REFS_COL = {"Статьи оборотов": 2, "Контрагенты": 3}
+ALL_CFO = 0                 ***REMOVED*** ключ общего блока справочника: у ЦФО id идут с единицы
 
 
 def budget_template(year: int, cfo_ids=None) -> bytes:
@@ -153,6 +157,7 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     _style_header(ws, 3, len(header))
 
     idx = 4
+    blocks: list[tuple[int, int, int]] = []     ***REMOVED*** ЦФО и диапазон его пустых строк
     for cfo in cfo_list:
         names = budgets_by_cfo.get(int(cfo["id"])) or ["Основной бюджет"]
         for budget_name in names:
@@ -162,12 +167,14 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
             for col in range(1, len(header) + 1):
                 ws.cell(row=idx, column=col).fill = TOTAL_FILL
             idx += 1
+            first = idx
             for _ in range(TEMPLATE_ROWS):
                 cell = ws.cell(row=idx, column=COL["ИТОГО"])
                 cell.number_format = MONEY
                 for m in range(calc.MONTHS):
                     ws.cell(row=idx, column=MONTH_COL + m).number_format = MONEY
                 idx += 1
+            blocks.append((int(cfo["id"]), first, idx - 1))
 
     _classifier_choice(ws, 4, idx - 1)
     _autosize(ws, BUDGET_WIDTHS)
@@ -175,7 +182,8 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
         ws.column_dimensions[get_column_letter(MONTH_COL + m)].width = 14
 
     _template_hints(wb, year)
-    _template_refs(wb, year, cfo_ids)
+    ranges = _template_refs(wb, year, cfo_ids)
+    _reference_choice(wb, ws, blocks, ranges)
     return _to_bytes(wb)
 
 
@@ -202,8 +210,9 @@ HOW_TO = [
     "и не меняйте порядок колонок.",
     "Расходы вписывайте строками под серым заголовком своей дирекции: "
     "держателем бюджета считается заголовок блока, а не подпись в самой строке.",
-    "Обязательна первая колонка — название расходной статьи. Пишите его так же, "
-    "как на листе «Справочник»: название с опечаткой заведёт в плане отдельную строку.",
+    "Обязательна первая колонка — название расходной статьи. Выбирайте из списка "
+    "в ячейке: он собран по листу «Справочник», а название с опечаткой заведёт в "
+    "плане отдельную строку. Новую статью вписать можно — список не запрещает.",
     "Колонка «Классификатор» — МРГ или МРК, третьего значения нет; выбирайте из "
     "списка в ячейке. Пустая клетка и незнакомое значение читаются как МРГ.",
     "Суммы — в колонку ИТОГО и по месяцам. Если заполнены только месяцы, "
@@ -235,8 +244,11 @@ def _template_hints(wb: Workbook, year: int) -> None:
     _autosize(ws, {1: 118})
 
 
-def _template_refs(wb: Workbook, year: int, cfo_ids=None) -> None:
+def _template_refs(wb: Workbook, year: int, cfo_ids=None) -> dict[int, dict[str, str]]:
     """Лист-справочник: какие статьи и контрагенты уже встречались у ЦФО.
+
+    Отдаёт имена диапазонов для выпадающих списков: `{cfo_id: {колонка: имя}}`,
+    плюс общий блок под ключом `ALL_CFO`.
 
     Нужен, чтобы в шаблоне писали существующие названия, а не новые варианты
     написания того же: статья с опечаткой заведёт в плане отдельную строку.
@@ -245,24 +257,83 @@ def _template_refs(wb: Workbook, year: int, cfo_ids=None) -> None:
 
     refs = operplan_service.references(year, None if cfo_ids is None else list(cfo_ids))
     names = {int(c["id"]): c["name"] for c in repo.list_cfo()}
-    ws = wb.create_sheet("Справочник")
+    ws = wb.create_sheet(REFS_SHEET)
     for col, title in enumerate(["ЦФО", "Статьи оборотов", "Контрагенты"], start=1):
         ws.cell(row=1, column=col, value=title)
     _style_header(ws, 1, 3)
 
-    idx = 2
-    for cfo_id, bucket in sorted(refs["by_cfo"].items(),
-                                 key=lambda kv: names.get(int(kv[0]), "")):
-        articles = bucket["articles"] or [""]
-        counterparties = bucket["counterparties"] or [""]
-        ws.cell(row=idx, column=1, value=names.get(int(cfo_id), "")).font = Font(bold=True)
-        for offset in range(max(len(articles), len(counterparties))):
+    out: dict[int, dict[str, str]] = {}
+
+    def group(label: str, key: str, articles: list[str], counterparties: list[str],
+              idx: int) -> int:
+        """Один блок справочника; возвращает строку, с которой начинается следующий."""
+        height = max(len(articles), len(counterparties))
+        if not height:
+            return idx
+        ws.cell(row=idx, column=1, value=label).font = Font(bold=True)
+        for offset in range(height):
             if offset < len(articles):
                 ws.cell(row=idx + offset, column=2, value=articles[offset])
             if offset < len(counterparties):
                 ws.cell(row=idx + offset, column=3, value=counterparties[offset])
-        idx += max(len(articles), len(counterparties)) + 1
+        bucket: dict[str, str] = {}
+        for column, values, prefix in (("Статьи оборотов", articles, "_art"),
+                                       ("Контрагенты", counterparties, "_cp")):
+            if not values:
+                continue
+            bucket[column] = _define_range(wb, f"{prefix}{key}", ws.title, column,
+                                           idx, idx + len(values) - 1)
+        if bucket:
+            out[key] = bucket
+        return idx + height + 1
+
+    idx = group("— все дирекции —", ALL_CFO, refs["all"]["articles"],
+                refs["all"]["counterparties"], 2)
+    for cfo_id, bucket in sorted(refs["by_cfo"].items(),
+                                 key=lambda kv: names.get(int(kv[0]), "")):
+        idx = group(names.get(int(cfo_id), ""), int(cfo_id),
+                    bucket["articles"], bucket["counterparties"], idx)
     _autosize(ws, {1: 30, 2: 44, 3: 34})
+    return out
+
+
+def _define_range(wb: Workbook, name: str, sheet: str, column: str,
+                  first_row: int, last_row: int) -> str:
+    """Именованный диапазон на листе справочника.
+
+    Проверка данных ссылается на имя, а не на `'Справочник'!$B$2:$B$9` напрямую:
+    ссылку на другой лист внутри проверки понимают не все версии Excel, имя —
+    любая.
+    """
+    letter = get_column_letter(REFS_COL[column])
+    ref = f"'{sheet}'!${letter}${first_row}:${letter}${last_row}"
+    wb.defined_names[name] = DefinedName(name, attr_text=ref)
+    return name
+
+
+def _reference_choice(wb: Workbook, ws, blocks: list[tuple[int, int, int]],
+                      ranges: dict[int, dict[str, str]]) -> None:
+    """Выпадающие списки статей и контрагентов — свои у каждого блока ЦФО.
+
+    Список берётся с листа «Справочник»: у дирекции свой набор, а если у неё
+    там пусто (бюджета ещё не было) — общий, иначе заполнять пришлось бы вовсе
+    без подсказки.
+
+    Запрета нет (`showErrorMessage=False`): новая статья в плане законна, список
+    лишь помогает не выдумать второе написание уже заведённой.
+    """
+    for column, target in (("Статья оборотов", "Статьи оборотов"),
+                           ("Контрагент", "Контрагенты")):
+        letter = get_column_letter(COL[column])
+        for cfo_id, first, last in blocks:
+            name = ((ranges.get(int(cfo_id)) or {}).get(target)
+                    or (ranges.get(ALL_CFO) or {}).get(target))
+            if not name or last < first:
+                continue
+            rule = DataValidation(type="list", formula1=name, allow_blank=True,
+                                  showDropDown=False, showErrorMessage=False)
+            ws.add_data_validation(rule)
+            rule.add(f"{letter}{first}:{letter}{last}")
 
 
 def operplan(year: int | None = None, cfo_ids=None) -> bytes:

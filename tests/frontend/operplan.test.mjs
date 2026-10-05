@@ -129,6 +129,10 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
       calls.push({ kind: "renumber", year });
       return Promise.resolve({ year, renumbered: 3 });
     },
+    download: (name, cfoId, params) => {
+      calls.push({ kind: "download", name, params });
+      return Promise.resolve();
+    },
   };
 
   const dom = new JSDOM(asset("index.html"), {
@@ -761,5 +765,24 @@ describe("вкладка «Бюджет»: классификатор", () => {
     await settle(t.window, 30);
     const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => tr.getAttribute("data-id"));
     assert.deepEqual(shown, ["10"], "остаётся только строка с МРК");
+  });
+});
+
+describe("вкладка «Бюджет»: выгрузка", () => {
+  /* Обе кнопки обязаны идти через API.download: роль передаётся заголовком
+     X-User, а переход по ссылке его не несёт — руководителю приезжал бы
+     шаблон со всеми дирекциями. */
+  it("шаблон и план уходят запросом, а не переходом по ссылке", async () => {
+    const t = await mount();
+    const before = t.window.location.href;
+
+    t.click(t.$("***REMOVED***op-template"));
+    t.click(t.$("***REMOVED***op-export"));
+    await settle(t.window);
+
+    const downloads = t.calls.filter((c) => c.kind === "download");
+    assert.deepEqual(downloads.map((c) => c.name), ["budget-template", "budget"]);
+    assert.deepEqual(downloads.map((c) => c.params.year), [2027, 2027]);
+    assert.equal(t.window.location.href, before, "страница никуда не уходит");
   });
 });

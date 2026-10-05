@@ -1069,14 +1069,19 @@
 
   /* ---------- Excel ---------- */
 
+  /* Оба файла — через API.download, а не переходом по ссылке: роль передаётся
+     заголовком X-User, которого в обычной навигации нет, и руководителю
+     приезжал бы файл со всеми дирекциями. */
   function runExport() {
-    window.location.href = "/api/export/budget.xlsx?year=" + state.data.plan_year_no;
+    API.download("budget", null, { year: state.data.plan_year_no })
+      .catch(function (e) { U.toast(e.message, "error"); });
   }
 
   /* Шаблон — тот же лист «Бюджеты ЦФО», но пустой: блоки своих ЦФО и подсказка.
      Заполненный файл принимается кнопкой «Загрузить из Excel». */
   function runTemplate() {
-    window.location.href = "/api/export/budget-template.xlsx?year=" + state.data.plan_year_no;
+    API.download("budget-template", null, { year: state.data.plan_year_no })
+      .catch(function (e) { U.toast(e.message, "error"); });
   }
 
   function runImport() {

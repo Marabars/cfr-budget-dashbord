@@ -42,12 +42,22 @@
   window.API = {
     setRole: function (value) { role = value || ""; },
     getRole: function () { return role; },
-    exportUrl: function (name, cfoId) {
-      if (name === "cfo") return "/api/export/cfo/" + cfoId + ".xlsx";
-      return "/api/export/" + name + ".xlsx";
+    exportUrl: function (name, cfoId, params) {
+      var url = name === "cfo"
+        ? "/api/export/cfo/" + cfoId + ".xlsx"
+        : "/api/export/" + name + ".xlsx";
+      var query = Object.keys(params || {}).filter(function (key) {
+        return params[key] !== undefined && params[key] !== null && params[key] !== "";
+      }).map(function (key) {
+        return encodeURIComponent(key) + "=" + encodeURIComponent(params[key]);
+      }).join("&");
+      return query ? url + "?" + query : url;
     },
-    download: function (name, cfoId) {
-      var url = window.API.exportUrl(name, cfoId);
+    /* Выгружать только отсюда: роль уходит заголовком X-User, а переход по
+       ссылке (window.location.href) его не несёт — сервер считал бы всех
+       финотделом и отдавал руководителю чужие дирекции. */
+    download: function (name, cfoId, params) {
+      var url = window.API.exportUrl(name, cfoId, params);
       return fetch(url, { headers: headers({}) }).then(function (response) {
         if (!response.ok) throw new Error("Не удалось выгрузить файл");
         var disposition = response.headers.get("content-disposition") || "";
