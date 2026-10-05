@@ -1276,6 +1276,47 @@ def test_шаблон_подсказывает_статьи_и_контраге�
     assert _range_values(wb, rule_at("D").formula1), "у контрагентов список тоже есть"
 
 
+***REMOVED*** Палитра листа «Бюджеты ЦФО» из файла ликвидности: выгрузку кладут рядом с
+***REMOVED*** исходником и сверяют глазами, поэтому цвета проверяются по колонкам поимённо.
+ПАЛИТРА_ИСХОДНИКА = {
+    "Статья оборотов": "DCDCDC", "ЦФО": "D6DCE5", "Классификатор": "D6DCE5",
+    "Контрагент": "D6DCE5", "Договор": "D6DCE5", "Детализация": "D6DCE5",
+    "Комментарий": "FFE4B5", "ИТОГО": None, "Январь": "F0FFF0",
+}
+
+
+def _fill(cell) -> str | None:
+    rgb = cell.fill.fgColor.rgb
+    return rgb[2:] if isinstance(rgb, str) and rgb != "00000000" else None
+
+
+def _budget_palette(ws, row: int) -> dict[str, str | None]:
+    titles = {ws.cell(row=3, column=c).value: c for c in range(1, 21)}
+    return {title: _fill(ws.cell(row=row, column=titles[title]))
+            for title in ПАЛИТРА_ИСХОДНИКА}
+
+
+def test_выгрузка_повторяет_палитру_исходника(client, loaded):
+    content = client.get("/api/export/budget.xlsx?year=2026").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    row = next(r for r in range(5, ws.max_row + 1)
+               if ws.cell(row=r, column=1).value not in (None, "ИТОГО"))
+    assert _budget_palette(ws, row) == ПАЛИТРА_ИСХОДНИКА
+    assert _fill(ws.cell(row=3, column=1)) == "F2F2F2", "шапка"
+    assert _fill(ws.cell(row=4, column=1)) == "D6DCE5", "строка ИТОГО блока"
+
+
+def test_шаблон_красится_так_же_и_даёт_фильтр(client, loaded):
+    """Пустые строки шаблона красятся тоже — видно, куда вписывать."""
+    content = client.get("/api/export/budget-template.xlsx?year=2027").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    first = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "ИТОГО") + 1
+    assert _budget_palette(ws, first) == ПАЛИТРА_ИСХОДНИКА
+    assert ws.auto_filter.ref.startswith("A3:"), "фильтр стоит на шапке"
+    assert ws.freeze_panes == "A4", "шапка закреплена"
+
+
 def test_шаблон_руководителю_не_подсказывает_чужие_статьи(client, loaded):
     hr_id = repo.ensure_cfo(HR)
     content = client.get("/api/export/budget-template.xlsx?year=2027",

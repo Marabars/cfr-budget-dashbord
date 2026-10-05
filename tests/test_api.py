@@ -1,6 +1,8 @@
 """Тесты API: сквозные сценарии на изолированной базе."""
 from __future__ import annotations
 
+import io
+
 import openpyxl
 import pytest
 from fastapi.testclient import TestClient
@@ -366,3 +368,37 @@ def test_экспорт_оперплана_отдаёт_xlsx(client, budget):
 def test_экспорт_сводки_и_карточки_цфо(client, budget):
     assert client.get("/api/export/summary.xlsx").status_code == 200
     assert client.get(f"/api/export/cfo/{budget['cfo_id']}.xlsx").status_code == 200
+
+
+def _fill(cell) -> str | None:
+    rgb = cell.fill.fgColor.rgb
+    return rgb[2:] if isinstance(rgb, str) and rgb != "00000000" else None
+
+
+def test_оперплан_красится_под_вставку_в_книгу(client, budget):
+    """Этот лист вставляют обратно в «Ликвидность» — цвета взяты из неё же.
+
+    Сверяется по колонкам: порядок раскладки и цвет должны совпасть с исходником,
+    иначе вставленный кусок будет видно.
+    """
+    content = client.get("/api/export/operplan.xlsx").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Оперплан ЦФО"]
+    row = next(r for r in range(6, ws.max_row + 1)
+               if ws.cell(row=r, column=2).value not in (None, "ИТОГО"))
+    assert [_fill(ws.cell(row=row, column=c)) for c in range(1, 18)] == [
+        "DCDCDC", "DCDCDC", "D6DCE5", "D6DCE5", "D6DCE5", "D6DCE5", "FFE4B5",
+        "FBE5D6", None, "F2F2F2", "E5FFEB", "E5FFEB", "E5FFEB", None, None,
+        "F0FFF0", "F0FFF0"]
+    assert _fill(ws.cell(row=5, column=1)) == "F2F2F2", "шапка"
+    assert _fill(ws.cell(row=5, column=15)) == "FFE7E7", "шапка «Остаток бюджета»"
+    assert ws.auto_filter.ref.startswith("A5:"), "фильтр стоит на шапке"
+
+
+def test_сводка_не_берёт_строку_итого_в_фильтр(client, budget):
+    """Сортировкой по фильтру строку ИТОГО утащило бы в середину таблицы."""
+    content = client.get("/api/export/summary.xlsx").content
+    ws = openpyxl.load_workbook(io.BytesIO(content)).active
+    last = int(ws.auto_filter.ref.split(":")[1].lstrip("ABCDEFGHIJK"))
+    totals = next(r for r in range(4, ws.max_row + 1)
+                  if ws.cell(row=r, column=1).value == "ИТОГО")
+    assert last == totals - 1

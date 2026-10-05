@@ -12,9 +12,23 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from app import calc, service
 
 MONEY = "***REMOVED*** ***REMOVED******REMOVED***0.00"
-HEAD_FILL = PatternFill("solid", fgColor="EDEBF7")
-TOTAL_FILL = PatternFill("solid", fgColor="F6F4FC")
-THIN = Side(style="thin", color="C6C0DE")
+
+***REMOVED*** Палитра взята из файла ликвидности, а не придумана: выгрузку кладут рядом с
+***REMOVED*** исходником и сверяют глазами, а лист «Оперплан ЦФО» прямо вставляют обратно
+***REMOVED*** в книгу. Цвета прочитаны из самого файла — тема Office и tint уже разрешены
+***REMOVED*** в hex, поэтому здесь плоские значения.
+HEAD_FILL = PatternFill("solid", fgColor="F2F2F2")       ***REMOVED*** шапка
+TOTAL_FILL = PatternFill("solid", fgColor="D6DCE5")      ***REMOVED*** строка ИТОГО блока
+ARTICLE_FILL = PatternFill("solid", fgColor="DCDCDC")    ***REMOVED*** № и «Статья оборотов»
+TEXT_FILL = PatternFill("solid", fgColor="D6DCE5")       ***REMOVED*** ЦФО, контрагент, договор
+NOTE_FILL = PatternFill("solid", fgColor="FFE4B5")       ***REMOVED*** «Комментарий»
+OWN_NOTE_FILL = PatternFill("solid", fgColor="FBE5D6")   ***REMOVED*** «Комм наш»
+MONTH_FILL = PatternFill("solid", fgColor="F0FFF0")      ***REMOVED*** месяцы
+CALC_FILL = PatternFill("solid", fgColor="E5FFEB")       ***REMOVED*** расчётные колонки оперплана
+MONEY_HEAD_FILL = PatternFill("solid", fgColor="DDF2FF")  ***REMOVED*** шапки денежных колонок
+PLAN_HEAD_FILL = PatternFill("solid", fgColor="DDDDFF")   ***REMOVED*** шапка «БЮДЖЕТ»
+REMAIN_HEAD_FILL = PatternFill("solid", fgColor="FFE7E7")  ***REMOVED*** шапка «Остаток бюджета»
+THIN = Side(style="thin", color="BFBFBF")
 BORDER = Border(bottom=THIN)
 
 
@@ -33,6 +47,23 @@ def _autosize(ws, widths: dict[int, int]) -> None:
         ws.column_dimensions[get_column_letter(col)].width = width
 
 
+def _paint(ws, row: int, fills: dict[int, PatternFill]) -> None:
+    """Заливка строки по карте «колонка → цвет». Колонки без цвета остаются белыми."""
+    for col, fill in fills.items():
+        ws.cell(row=row, column=col).fill = fill
+
+
+def _autofilter(ws, header_row: int, last_col: int, last_row: int) -> None:
+    """Кнопки фильтра на шапке — как в исходнике.
+
+    Критериев не задаём, строки не прячутся: загрузка читает лист целиком и
+    фильтр ей не мешает.
+    """
+    first = get_column_letter(1)
+    last = get_column_letter(last_col)
+    ws.auto_filter.ref = f"{first}{header_row}:{last}{max(last_row, header_row)}"
+
+
 def _to_bytes(wb: Workbook) -> bytes:
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -49,6 +80,14 @@ MONTH_COL = COL["ИТОГО"] + 1           ***REMOVED*** первая коло�
 BUDGET_WIDTHS = {COL["Статья оборотов"]: 38, COL["ЦФО"]: 30, COL["Классификатор"]: 15,
                  COL["Контрагент"]: 28, COL["Договор"]: 26, COL["Детализация"]: 34,
                  COL["Комментарий"]: 30, COL["ИТОГО"]: 16}
+***REMOVED*** Цвета колонок — оттуда же, откуда раскладка. «ИТОГО» в исходнике без заливки,
+***REMOVED*** классификатор — наша колонка, встаёт в один ряд с ЦФО и контрагентом.
+BUDGET_FILLS = {COL["Статья оборотов"]: ARTICLE_FILL, COL["ЦФО"]: TEXT_FILL,
+                COL["Классификатор"]: TEXT_FILL, COL["Контрагент"]: TEXT_FILL,
+                COL["Договор"]: TEXT_FILL, COL["Детализация"]: TEXT_FILL,
+                COL["Комментарий"]: NOTE_FILL}
+BUDGET_FILLS.update({MONTH_COL + m: MONTH_FILL for m in range(calc.MONTHS)})
+LAST_BUDGET_COL = len(BUDGET_HEADER)
 
 
 def budget_sheet(year: int, cfo_ids=None) -> bytes:
@@ -91,6 +130,7 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
         idx += 1
 
         for row in block["rows"]:
+            _paint(ws, idx, BUDGET_FILLS)
             ws.cell(row=idx, column=COL["Статья оборотов"], value=row["article"])
             ws.cell(row=idx, column=COL["ЦФО"], value=block["cfo_name"])
             ws.cell(row=idx, column=COL["Классификатор"], value=row["classifier"])
@@ -103,6 +143,7 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
                 money(idx, MONTH_COL + m, amount)
             idx += 1
 
+    _autofilter(ws, 3, LAST_BUDGET_COL, idx - 1)
     _autosize(ws, BUDGET_WIDTHS)
     for m in range(calc.MONTHS):
         ws.column_dimensions[get_column_letter(MONTH_COL + m)].width = 14
@@ -169,6 +210,7 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
             idx += 1
             first = idx
             for _ in range(TEMPLATE_ROWS):
+                _paint(ws, idx, BUDGET_FILLS)
                 cell = ws.cell(row=idx, column=COL["ИТОГО"])
                 cell.number_format = MONEY
                 for m in range(calc.MONTHS):
@@ -177,6 +219,7 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
             blocks.append((int(cfo["id"]), first, idx - 1))
 
     _classifier_choice(ws, 4, idx - 1)
+    _autofilter(ws, 3, LAST_BUDGET_COL, idx - 1)
     _autosize(ws, BUDGET_WIDTHS)
     for m in range(calc.MONTHS):
         ws.column_dimensions[get_column_letter(MONTH_COL + m)].width = 14
@@ -336,6 +379,16 @@ def _reference_choice(wb: Workbook, ws, blocks: list[tuple[int, int, int]],
             rule.add(f"{letter}{first}:{letter}{last}")
 
 
+***REMOVED*** Раскладка «Оперплан ЦФО» своя: № впереди, за месяцами идут расчётные колонки.
+***REMOVED*** Цвета — из того же листа исходника, туда выгрузку и вставляют.
+OPERPLAN_FILLS = {1: ARTICLE_FILL, 2: ARTICLE_FILL, 3: TEXT_FILL, 4: TEXT_FILL,
+                  5: TEXT_FILL, 6: TEXT_FILL, 7: NOTE_FILL, 8: OWN_NOTE_FILL,
+                  10: HEAD_FILL, 11: CALC_FILL, 12: CALC_FILL, 13: CALC_FILL}
+OPERPLAN_HEAD_FILLS = {8: OWN_NOTE_FILL, 9: MONEY_HEAD_FILL, 10: PLAN_HEAD_FILL,
+                       11: CALC_FILL, 12: CALC_FILL, 13: CALC_FILL,
+                       14: MONEY_HEAD_FILL, 15: REMAIN_HEAD_FILL}
+
+
 def operplan(year: int | None = None, cfo_ids=None) -> bytes:
     """Лист «Оперплан ЦФО» в раскладке исходного файла — для вставки в «Ликвидность».
 
@@ -358,9 +411,12 @@ def operplan(year: int | None = None, cfo_ids=None) -> bytes:
     header = ["№", "Статья оборотов", "ЦФО", "Контрагент", "Договор", "Детализация",
               "Комментарий", "Комм наш", "Бюджет - опер план", "БЮДЖЕТ", "Оперплан фикс",
               "", "Итого опер план", "Факт", "Остаток бюджета"] + calc.MONTH_NAMES
+    first_month_fills = {first_month_col + m: MONTH_FILL for m in range(calc.MONTHS)}
+    body_fills = {**OPERPLAN_FILLS, **first_month_fills}
     for col, title in enumerate(header, start=1):
         ws.cell(row=5, column=col, value=title)
     _style_header(ws, 5, len(header))
+    _paint(ws, 5, OPERPLAN_HEAD_FILLS)       ***REMOVED*** денежные колонки в шапке своего цвета
 
     row_idx = 6
     for block in view["blocks"]:
@@ -384,6 +440,7 @@ def operplan(year: int | None = None, cfo_ids=None) -> bytes:
         row_idx += 1
 
         for r in budget["rows"]:
+            _paint(ws, row_idx, body_fills)
             values = [
                 r["row_no"], r["article"], block["cfo_name"], r["counterparty"], r["contract"],
                 r["detail"], r["comment"], r["approver_comment"],
@@ -400,6 +457,7 @@ def operplan(year: int | None = None, cfo_ids=None) -> bytes:
                 cell.number_format = MONEY
             row_idx += 1
 
+    _autofilter(ws, 5, len(header), row_idx - 1)
     _autosize(ws, {1: 6, 2: 38, 3: 34, 4: 26, 5: 26, 6: 26, 7: 26, 8: 20,
                    9: 18, 10: 18, 11: 16, 12: 3, 13: 18, 14: 16, 15: 18})
     for m in range(calc.MONTHS):
@@ -448,6 +506,8 @@ def summary(year: int | None = None, cfo_ids=None) -> bytes:
         cell.number_format = MONEY
         cell.font = Font(bold=True)
 
+    ***REMOVED*** строка ИТОГО в фильтр не входит: сортировкой её утащило бы в середину
+    _autofilter(ws, 3, len(header), totals_row - 1)
     _autosize(ws, {1: 46, 2: 28, 3: 18, 4: 18, 5: 16, 6: 18, 7: 18, 8: 18, 9: 12, 10: 22, 11: 16})
     return _to_bytes(wb)
 
@@ -462,6 +522,9 @@ def cfo_card(cfo_id: int, year: int | None = None) -> bytes:
     header = ["№", "Статья оборотов", "Контрагент", "Договор", "Детализация",
               "Бюджет", "Итого опер план", "Факт", "Остаток бюджета",
               "Свободный лимит"] + calc.MONTH_NAMES
+    card_fills = {1: ARTICLE_FILL, 2: ARTICLE_FILL, 3: TEXT_FILL, 4: TEXT_FILL,
+                  5: TEXT_FILL}
+    card_fills.update({11 + m: MONTH_FILL for m in range(calc.MONTHS)})
     for col, title in enumerate(header, start=1):
         ws.cell(row=1, column=col, value=title)
     _style_header(ws, 1, len(header))
@@ -473,6 +536,7 @@ def cfo_card(cfo_id: int, year: int | None = None) -> bytes:
             ws.cell(row=row_idx, column=col).fill = TOTAL_FILL
         row_idx += 1
         for r in budget["rows"]:
+            _paint(ws, row_idx, card_fills)
             values = [r["row_no"], r["article"], r["counterparty"], r["contract"], r["detail"],
                       r["plan_year"], r["operplan"], r["fact"], r["cash_remain"], r["free_limit"]]
             for col, value in enumerate(values, start=1):
@@ -485,6 +549,7 @@ def cfo_card(cfo_id: int, year: int | None = None) -> bytes:
                 cell.number_format = MONEY
             row_idx += 1
 
+    _autofilter(ws, 1, len(header), row_idx - 1)
     _autosize(ws, {1: 6, 2: 38, 3: 26, 4: 26, 5: 30, 6: 16, 7: 18, 8: 16, 9: 18, 10: 18})
     return _to_bytes(wb)
 
@@ -509,5 +574,6 @@ def out_of_budget(year: int | None = None) -> bytes:
             cell = ws.cell(row=i, column=col, value=value)
             if col == 6:
                 cell.number_format = MONEY
+    _autofilter(ws, 1, len(header), len(items) + 1)
     _autosize(ws, {1: 12, 2: 40, 3: 30, 4: 26, 5: 40, 6: 16, 7: 24})
     return _to_bytes(wb)
