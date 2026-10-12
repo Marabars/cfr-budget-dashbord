@@ -93,7 +93,8 @@ async def import_sheet(file: UploadFile = File(...), year: int = Form(...),
     """Загрузка бюджета или факта года листом того же вида, что и выгрузка.
 
     Круг ЦФО задаёт сервер: руководитель перезальёт только свою дирекцию,
-    чужие строки файла будут пропущены.
+    чужие строки файла будут пропущены. Факт грузит только финансовый отдел —
+    дирекция свой факт выгружает (`/api/export/budget-fact.xlsx`), но не правит.
     """
     content = await file.read()
     if not content:
@@ -104,6 +105,10 @@ async def import_sheet(file: UploadFile = File(...), year: int = Form(...),
         raise HTTPException(422, "Ожидается файл .xlsx")
     if kind not in ("plan", "fact"):
         raise HTTPException(422, "Загружать можно бюджет или факт")
+    ***REMOVED*** Кнопку руководителю не рисуют, но запрет держит сервер: роль приезжает
+    ***REMOVED*** заголовком, и форму можно отправить мимо интерфейса.
+    if kind == "fact" and not u.is_fin:
+        raise HTTPException(403, "Факт загружает финансовый отдел")
 
     target = int(year)
     try:

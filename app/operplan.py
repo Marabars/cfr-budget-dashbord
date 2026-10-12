@@ -173,6 +173,25 @@ def _year_rows(year: int, cfo_ids: Iterable[int] | None = None) -> list[dict]:
     return rows
 
 
+def fact_months_by_row(year: int, cfo_ids: Iterable[int] | None = None,
+                       row_ids: Iterable[int] | None = None) -> dict[int, list[float]]:
+    """Факт года на строки слоя планирования: `{row_id: [12 сумм]}`.
+
+    Факт, загруженный Excel'ем прямо в слой планирования, точнее привязки
+    платежей 1С к строкам: берём его, а на пустом слое падаем на привязку.
+    Источник один и у плитки план-факт, и у выгрузки факта — иначе выгрузка
+    отдавала бы нули там, где плитка показывает сумму.
+
+    `row_ids` — готовый круг строк года, когда вызывающий их уже прочитал.
+    """
+    ids = ({int(i) for i in row_ids} if row_ids is not None
+           else {int(r["id"]) for r in _year_rows(year, cfo_ids)})
+    layer = {k: v for k, v in repo.row_fact_months(year, LAYER).items() if k in ids}
+    if any(sum(v) for v in layer.values()):
+        return layer
+    return {k: v for k, v in repo.fact_months(year).items() if k in ids}
+
+
 def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
     """Три показателя вкладки: бюджет нового года, бюджет базового и его план-факт."""
     py, by = plan_year(), base_year()
@@ -183,13 +202,7 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
     base_total = sum(float(r["plan_year"]) for r in base_rows)
 
     base_ids = {int(r["id"]) for r in base_rows}
-    ***REMOVED*** факт, загруженный Excel'ем прямо в слой планирования, точнее привязки
-    ***REMOVED*** платежей 1С к строкам: берём его, а на пустом слое падаем на привязку
-    layer_fact = repo.row_fact_months(by, LAYER)
-    base_fact = sum(sum(v) for k, v in layer_fact.items() if k in base_ids)
-    if not base_fact:
-        fact_all = repo.fact_months(by)
-        base_fact = sum(sum(v) for k, v in fact_all.items() if k in base_ids)
+    base_fact = sum(sum(v) for v in fact_months_by_row(by, row_ids=base_ids).values())
 
     return {
         "plan_year": py,

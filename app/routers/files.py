@@ -187,6 +187,19 @@ def export_budget(year: int | None = None, u: auth.User = Depends(user)) -> Resp
     return _xlsx(data, f"Бюджеты ЦФО {target}.xlsx")
 
 
+@router.get("/export/budget-fact.xlsx")
+def export_budget_fact(year: int | None = None, u: auth.User = Depends(user)) -> Response:
+    """Факт года листом «Бюджеты ЦФО» — выгрузка доступна и руководителю ЦФО.
+
+    Смотреть свой факт вправе каждый, а загружать его — только финансовый
+    отдел (`/api/operplan/import`, kind=fact). По умолчанию выгружается базовый
+    год: план будущего года фактом ещё не наполняется.
+    """
+    target = int(year or operplan.base_year())
+    data = excel.fact_sheet(target, u.visible_cfo_ids())
+    return _xlsx(data, f"Факт ЦФО {target}.xlsx")
+
+
 @router.get("/export/budget-template.xlsx")
 def export_budget_template(year: int | None = None, u: auth.User = Depends(user)) -> Response:
     """Пустой лист «Бюджеты ЦФО» под заполнение руками.

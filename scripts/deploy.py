@@ -37,7 +37,10 @@ SERVICE = "cfo-budget"
 PORT = int(os.environ.get("DEPLOY_PORT", "8000"))
 
 INCLUDE = ["app", "static", "scripts", "deploy", "requirements.txt", "README.md"]
-EXCLUDE_DIRS = {"__pycache__", ".git", ".pytest_cache", "data", "venv", ".venv"}
+***REMOVED*** instruction — генератор инструкции для дирекций: демо-база и 2,4 МБ снимков,
+***REMOVED*** приложению они не нужны и на сервере только занимают место
+EXCLUDE_DIRS = {"__pycache__", ".git", ".pytest_cache", "data", "venv", ".venv",
+                "instruction"}
 EXCLUDE_SUFFIX = {".pyc", ".db", ".xlsx", ".xls", ".csv", ".log"}
 
 

@@ -772,7 +772,7 @@ def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блока�
     response = client.get("/api/export/budget-template.xlsx?year=2027")
     assert response.status_code == 200
     wb = openpyxl.load_workbook(io.BytesIO(response.content))
-    assert wb.sheetnames == ["Бюджеты ЦФО", "Как заполнять", "Справочник"]
+    assert wb.sheetnames == ["Бюджеты ЦФО", "Справочник"], "листа-инструкции быть не должно"
 
     ws = wb["Бюджеты ЦФО"]
     header = [ws.cell(row=3, column=c).value for c in range(1, 9)]
@@ -784,6 +784,106 @@ def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блока�
     assert IT in blocks and HR in blocks
     assert not any(ws.cell(row=r, column=7).value for r in range(4, ws.max_row + 1))
 
+
+def test_в_шаблоне_нет_подсказок_кроме_примечания_к_итого(client, loaded):
+    """Инструкцию убрали: остаётся только примечание на шапке ИТОГО."""
+    response = client.get("/api/export/budget-template.xlsx?year=2027")
+    ws = openpyxl.load_workbook(io.BytesIO(response.content))["Бюджеты ЦФО"]
+
+    assert ws.cell(row=2, column=1).value is None, "строка подсказки должна быть пустой"
+    total = ws.cell(row=3, column=8)
+    assert total.value == "ИТОГО"
+    assert total.comment is not None, "примечание к ИТОГО потерялось"
+    assert "сумма" in total.comment.text
+    ***REMOVED*** примечание ровно одно и висит на шапке, а не расползлось по колонке
+    with_note = [c.coordinate for row in ws.iter_rows() for c in row if c.comment]
+    assert with_note == [total.coordinate]
+
+
+def test_руководителю_в_справочнике_нет_блока_все_дирекции(client, loaded):
+    """Повторял список самой дирекции слово в слово — чистый шум."""
+    hr_id = repo.ensure_cfo(HR)
+    response = client.get("/api/export/budget-template.xlsx?year=2027",
+                          headers={"X-User": f"cfo:{hr_id}"})
+    ws = openpyxl.load_workbook(io.BytesIO(response.content))["Справочник"]
+    labels = [ws.cell(row=r, column=1).value for r in range(2, ws.max_row + 1)]
+    assert [v for v in labels if v] == [HR]
+
+
+def test_общий_блок_остаётся_дирекции_без_своего_списка(client, loaded):
+    """У новой ЦФО своих статей нет — ей список берётся из общего блока."""
+    new_cfo = "Двенадцатая дирекция"
+    repo.ensure_cfo(new_cfo)
+    response = client.get("/api/export/budget-template.xlsx?year=2027")
+    wb = openpyxl.load_workbook(io.BytesIO(response.content))
+    ws = wb["Справочник"]
+    labels = [ws.cell(row=r, column=1).value for r in range(2, ws.max_row + 1)]
+    assert "— все дирекции —" in labels
+    ***REMOVED*** и список у её блока непустой — ссылается на общий диапазон
+    budgets = wb["Бюджеты ЦФО"]
+    first = next(r for r in range(4, budgets.max_row + 1)
+                 if budgets.cell(row=r, column=1).value == "ИТОГО"
+                 and budgets.cell(row=r, column=2).value == new_cfo) + 1
+    rules = [dv for dv in budgets.data_validations.dataValidation
+             if f"A{first}" in dv.sqref]
+    assert rules and rules[0].formula1 == "_art0"
+
+
+def test_договор_в_шаблоне_пуст_у_единственного_бюджета(client, loaded):
+    """«Основной бюджет» в колонке «Договор» читался как настоящий договор."""
+    hr_id = repo.ensure_cfo(HR)
+    response = client.get("/api/export/budget-template.xlsx?year=2027",
+                          headers={"X-User": f"cfo:{hr_id}"})
+    ws = openpyxl.load_workbook(io.BytesIO(response.content))["Бюджеты ЦФО"]
+    totals = [r for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=1).value == "ИТОГО"]
+    assert len(totals) == 1
+    assert ws.cell(row=totals[0], column=5).value is None, "«Договор» должен быть пуст"
+
+
+def test_в_шаблоне_остаётся_имя_неосновного_бюджета(client, loaded):
+    """У ИТ бюджета два; без имени блоки слились бы в один при загрузке."""
+    operplan.copy_year("Тест", 2026, 2027)
+    response = client.get("/api/export/budget-template.xlsx?year=2027")
+    ws = openpyxl.load_workbook(io.BytesIO(response.content))["Бюджеты ЦФО"]
+    names = {ws.cell(row=r, column=2).value: ws.cell(row=r, column=5).value
+             for r in range(4, ws.max_row + 1)
+             if ws.cell(row=r, column=1).value == "ИТОГО"}
+    assert names[HR] is None
+    ***REMOVED*** у ИТ две строки ИТОГО — словарь оставит последнюю, обе именованные
+    it_names = [ws.cell(row=r, column=5).value for r in range(4, ws.max_row + 1)
+                if ws.cell(row=r, column=1).value == "ИТОГО"
+                and ws.cell(row=r, column=2).value == IT]
+    assert sorted(it_names) == ["Бюджет обязательных затрат", "Бюджет развития"]
+
+
+def test_пустой_договор_в_шаблоне_читается_как_основной_бюджет(client, loaded):
+    """Круг целиком: выгрузили шаблон, вписали строку, залили — бюджет не потерялся."""
+    hr_id = repo.ensure_cfo(HR)
+    template = client.get("/api/export/budget-template.xlsx?year=2027",
+                          headers={"X-User": f"cfo:{hr_id}"}).content
+    wb = openpyxl.load_workbook(io.BytesIO(template))
+    ws = wb["Бюджеты ЦФО"]
+    start = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "ИТОГО") + 1
+    ws.cell(row=start, column=1, value="4109_Обучение")
+    ws.cell(row=start, column=8, value=70_000)
+    buffer = io.BytesIO()
+    wb.save(buffer)
+
+    response = client.post(
+        "/api/operplan/import",
+        data={"year": "2027", "kind": "plan"},
+        files={"file": ("шаблон.xlsx", buffer.getvalue(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        headers={"X-User": f"cfo:{hr_id}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["rows"] == 1
+
+    block = next(b for b in operplan.view(2027, [hr_id])["blocks"])
+    assert block["budget_name"] == "Основной бюджет"
+    assert block["rows"][0]["contract"] in (None, "")
 
 def test_шаблон_руководителю_только_его_цфо(client, loaded):
     hr_id = repo.ensure_cfo(HR)
@@ -1408,3 +1508,87 @@ def test_отчёт_загрузки_не_считает_чужие_цфо(clien
     in_db = sum(r["plan_year"] for r in repo.list_rows(2027, layer=operplan.LAYER))
     assert result["foreign"] > 0, "в файле есть чужие дирекции"
     assert result["total"] == pytest.approx(in_db)
+
+
+***REMOVED*** ---------- факт: выгружают все, загружает финансовый отдел ----------
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def test_выгрузка_факта_отдаёт_факт_а_не_план(client, loaded):
+    """В ИТОГО и месяцах листа стоит расход, а не бюджет той же строки."""
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+
+    content = client.get("/api/export/budget-fact.xlsx?year=2026").content
+    fact_rows = cfo_budgets.parse(content)["rows"]
+    plan_rows = cfo_budgets.parse(
+        client.get("/api/export/budget.xlsx?year=2026").content)["rows"]
+
+    assert sum(r["plan_year"] for r in fact_rows) == pytest.approx(97_000)
+    assert sum(r["plan_year"] for r in plan_rows) == pytest.approx(525_000)
+    assert len(fact_rows) == len(plan_rows), "строки те же, суммы другие"
+
+
+def test_выгрузка_факта_без_года_берёт_базовый(client, loaded):
+    """Кнопка зовёт ручку без года: фактом наполняется базовый год, не плановый."""
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    rows = cfo_budgets.parse(client.get("/api/export/budget-fact.xlsx").content)["rows"]
+    assert sum(r["plan_year"] for r in rows) == pytest.approx(97_000)
+    ***REMOVED*** встречная проверка: взялся бы плановый год — лист пришёл бы пустым
+    assert cfo_budgets.parse(
+        client.get("/api/export/budget-fact.xlsx?year=2027").content)["rows"] == []
+
+
+def test_выгруженный_факт_заливается_обратно(client, loaded):
+    """Круг замкнут: что выгрузили фактом, то и залилось, не заводя новых строк."""
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    before = client.get("/api/operplan").json()["kpi"]["base_fact"]
+
+    content = client.get("/api/export/budget-fact.xlsx?year=2026").content
+    again = operplan.import_fact(content, "факт-обратно.xlsx", 2026, "Тест")
+
+    assert again["created"] == 0, "строки факта уже есть в плане"
+    after = client.get("/api/operplan").json()["kpi"]["base_fact"]
+    assert after == pytest.approx(before)
+
+
+def test_руководитель_выгружает_факт_только_своего_цфо(client, loaded):
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    hr_id = repo.ensure_cfo(HR)
+    content = client.get("/api/export/budget-fact.xlsx?year=2026",
+                         headers={"X-User": f"cfo:{hr_id}"}).content
+    parsed = cfo_budgets.parse(content)
+    assert {row["cfo"] for row in parsed["rows"]} == {HR}
+    assert sum(r["plan_year"] for r in parsed["rows"]) == pytest.approx(7_000)
+    ***REMOVED*** встречная проверка: не ограничь выгрузка круг ЦФО — приехал бы и ИТ
+    for_fin = cfo_budgets.parse(
+        client.get("/api/export/budget-fact.xlsx?year=2026").content)
+    assert {row["cfo"] for row in for_fin["rows"]} == {HR, IT}
+
+
+def test_факт_загружает_только_финотдел(client, loaded):
+    """Руководителю ЦФО загрузка факта запрещена, бюджет он грузит как раньше."""
+    hr_id = repo.ensure_cfo(HR)
+    denied = client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "fact"},
+        files={"file": ("факт.xlsx", make_fact_sheet(), XLSX_MIME)},
+        headers={"X-User": f"cfo:{hr_id}"},
+    )
+    assert denied.status_code == 403
+    assert client.get("/api/operplan").json()["kpi"]["fact_loaded"] is False
+
+    assert client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "plan"},
+        files={"file": ("бюджет.xlsx", make_budgets_sheet(), XLSX_MIME)},
+        headers={"X-User": f"cfo:{hr_id}"},
+    ).status_code == 200
+
+    allowed = client.post(
+        "/api/operplan/import",
+        data={"year": "2026", "kind": "fact"},
+        files={"file": ("факт.xlsx", make_fact_sheet(), XLSX_MIME)},
+    )
+    assert allowed.status_code == 200
+    assert client.get("/api/operplan").json()["kpi"]["fact_loaded"] is True

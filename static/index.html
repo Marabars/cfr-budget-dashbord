@@ -250,6 +250,7 @@
       <div class="top-spacer"></div>
       <button class="btn sm" id="op-template">⭳ Выгрузить шаблон</button>
       <button class="btn sm" id="op-export">⭳ Выгрузить в Excel</button>
+      <button class="btn sm" id="op-export-fact">⭳ Выгрузить факт</button>
       <button class="btn sm" id="op-import">⭱ Загрузить из Excel</button>
       <button class="btn sm icon" id="op-lock"></button>
       <span class="sub" id="op-lock-note"></span>
@@ -305,13 +306,14 @@
             «Выгрузить в Excel»: шапка <b>Статья оборотов · ЦФО · Контрагент · Договор ·
             Детализация · Комментарий · ИТОГО · Январь…Декабрь</b>.
             <b>Бюджет</b> заменяет строки плана только по тем ЦФО, чьи строки есть
-            в файле — остальные дирекции загрузка не затрагивает. <b>Факт</b> ложится
-            на строки прошлого года и план не трогает.
+            в файле — остальные дирекции загрузка не затрагивает.
+            <span id="op-imp-fact-note"><b>Факт</b> ложится
+            на строки прошлого года и план не трогает.</span>
           </div>
           <div class="row-btns">
-            <label class="f-check"><input type="radio" name="op-imp-kind" value="plan" checked>
+            <label class="f-check" id="op-imp-plan"><input type="radio" name="op-imp-kind" value="plan" checked>
               бюджет (план года)</label>
-            <label class="f-check"><input type="radio" name="op-imp-kind" value="fact">
+            <label class="f-check" id="op-imp-fact"><input type="radio" name="op-imp-kind" value="fact">
               факт года</label>
             <input type="file" id="op-import-file" accept=".xlsx,.xlsm" class="f-in"
                    style="max-width:320px">

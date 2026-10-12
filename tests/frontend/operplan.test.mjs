@@ -74,10 +74,13 @@ const REFS = {
 
 /** Поднимает вкладку в jsdom. Возвращает окно, журнал вызовов API и помощники.
     cfoList задаёт доступные дирекции: от их числа зависит, спросит ли кнопка,
-    куда добавлять строку. */
-async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra = []) {
+    куда добавлять строку. opts.isFin = false поднимает вкладку глазами
+    руководителя ЦФО — ему закрыта часть кнопок. */
+async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra = [],
+                     opts = {}) {
   let added = null;                       // строка, заведённая кнопкой «+ расход»
   const calls = [];
+  const isFin = opts.isFin !== false;
 
   const view = (year) => {
     const rows = year === 2027
@@ -85,7 +88,7 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
     const total = rows.reduce((acc, r) => acc + r.plan_year, 0);
     return {
       year, plan_year_no: 2027, base_year_no: 2026, years: [2026, 2027],
-      locked: false, can_edit: true, is_fin: true,
+      locked: false, can_edit: true, is_fin: isFin,
       kpi: {
         plan_year: 2027, base_year: 2026, plan_total: total, base_total: 0,
         base_ratio: 0, plan_ratio: 0, base_fact: 0, base_pct: 0,
@@ -783,6 +786,45 @@ describe("вкладка «Бюджет»: выгрузка", () => {
     const downloads = t.calls.filter((c) => c.kind === "download");
     assert.deepEqual(downloads.map((c) => c.name), ["budget-template", "budget"]);
     assert.deepEqual(downloads.map((c) => c.params.year), [2027, 2027]);
+    assert.equal(t.window.location.href, before, "страница никуда не уходит");
+  });
+});
+
+describe("вкладка «Бюджет»: факт", () => {
+  /* Факт заливает финансовый отдел, дирекция его только выгружает.
+     Проверяем hidden, а не вычисленный display: с экрана галочку убирает
+     правило [hidden] { display: none !important } в app.css, но jsdom
+     !important в каскаде не учитывает и отдаёт display скрытой .f-check
+     (как и давно скрытой .alert) равным flex. */
+  it("финотделу оставляет выбор между бюджетом и фактом", async () => {
+    const t = await mount();
+    assert.equal(t.$("***REMOVED***op-imp-fact").hidden, false);
+    assert.equal(t.$("***REMOVED***op-imp-fact-note").hidden, false);
+  });
+
+  it("руководителю ЦФО выбора «факт года» не даёт", async () => {
+    const t = await mount([{ id: 1, name: IT }], [], { isFin: false });
+    assert.equal(t.$("***REMOVED***op-imp-fact").hidden, true);
+    assert.equal(t.$("***REMOVED***op-imp-fact-note").hidden, true);
+    assert.equal(t.$("***REMOVED***op-imp-plan").hidden, false, "бюджет он грузит как раньше");
+    assert.equal(t.$('input[name="op-imp-kind"][value="plan"]').checked, true,
+      "остаться выбранным должен бюджет, иначе загрузка уйдёт фактом и получит 403");
+  });
+
+  it("выгружает факт за базовый год — и руководителю тоже", async () => {
+    const t = await mount([{ id: 1, name: IT }], [], { isFin: false });
+    const before = t.window.location.href;
+    const button = t.$("***REMOVED***op-export-fact");
+    assert.equal(button.hidden, false, "выгрузка факта доступна дирекции");
+    assert.equal(button.textContent, "⭳ Выгрузить факт 2026");
+
+    t.click(button);
+    await settle(t.window);
+
+    const downloads = t.calls.filter((c) => c.kind === "download");
+    assert.deepEqual(downloads.map((c) => c.name), ["budget-fact"]);
+    assert.equal(downloads[0].params.year, 2026,
+      "плановый год фактом не наполняется — выгружается базовый");
     assert.equal(t.window.location.href, before, "страница никуда не уходит");
   });
 });

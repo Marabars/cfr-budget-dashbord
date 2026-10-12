@@ -970,6 +970,23 @@
        иначе она отвечала бы 403. Выгрузка и шаблон не зависят от замка. */
     document.getElementById("op-import").hidden = !editable;
     if (!editable) document.getElementById("op-import-form").hidden = true;
+
+    /* Факт заливает только финансовый отдел: у руководителя ЦФО выбора «факт
+       года» в форме нет вовсе, остаётся один бюджет. Сервер отвечает на такую
+       загрузку 403 — здесь мы лишь не предлагаем того, чего нельзя. */
+    var fin = !!state.data.is_fin;
+    ["op-imp-fact", "op-imp-fact-note"].forEach(function (id) {
+      document.getElementById(id).hidden = !fin;
+    });
+    if (!fin) {
+      document.querySelector('input[name="op-imp-kind"][value="plan"]').checked = true;
+    }
+
+    /* Выгрузка факта — за базовый год, он же стоит в подписи кнопки. */
+    var factBtn = document.getElementById("op-export-fact");
+    factBtn.textContent = "⭳ Выгрузить факт " + state.data.base_year_no;
+    factBtn.title = "Факт " + state.data.base_year_no
+      + " года листом «Бюджеты ЦФО» — тем же, каким выгружается бюджет";
     renderEditMode();
   }
 
@@ -1069,11 +1086,19 @@
 
   /* ---------- Excel ---------- */
 
-  /* Оба файла — через API.download, а не переходом по ссылке: роль передаётся
-     заголовком X-User, которого в обычной навигации нет, и руководителю
-     приезжал бы файл со всеми дирекциями. */
+  /* Все три файла — через API.download, а не переходом по ссылке: роль
+     передаётся заголовком X-User, которого в обычной навигации нет, и
+     руководителю приезжал бы файл со всеми дирекциями. */
   function runExport() {
     API.download("budget", null, { year: state.data.plan_year_no })
+      .catch(function (e) { U.toast(e.message, "error"); });
+  }
+
+  /* Факт выгружается за базовый год и той же раскладкой, что и бюджет: год
+     планирования фактом не наполняется. Выгружать факт вправе каждый,
+     загружать — только финотдел; круг ЦФО и там, и там режет сервер. */
+  function runFactExport() {
+    API.download("budget-fact", null, { year: state.data.base_year_no })
       .catch(function (e) { U.toast(e.message, "error"); });
   }
 
@@ -1199,6 +1224,7 @@
       document.getElementById("op-copy-run").onclick = function () { runCopy("plan"); };
       document.getElementById("op-fact-run").onclick = function () { runCopy("fact"); };
       document.getElementById("op-export").onclick = runExport;
+      document.getElementById("op-export-fact").onclick = runFactExport;
       document.getElementById("op-template").onclick = runTemplate;
       document.getElementById("op-import").onclick = function () {
         var form = document.getElementById("op-import-form");

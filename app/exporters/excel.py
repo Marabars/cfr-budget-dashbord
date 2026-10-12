@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
@@ -97,18 +98,37 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
     блок ЦФО открывается строкой «ИТОГО» с контрольной суммой, под ней строки.
     Поэтому выгруженный файл можно поправить в Excel и залить обратно.
     """
+    return _budget_layout_sheet(year, cfo_ids, fact=False)
+
+
+def fact_sheet(year: int, cfo_ids=None) -> bytes:
+    """Факт года той же раскладкой: в ИТОГО и месяцах стоит факт, а не план.
+
+    Лист называется так же и читается той же загрузкой, что и бюджет, —
+    круг «выгрузили факт → поправили → залили» замкнут. Строки плана, по
+    которым факта нет, остаются с нулями: загрузка факта их пропускает.
+    """
+    return _budget_layout_sheet(year, cfo_ids, fact=True)
+
+
+def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
+    """Общая раскладка листа «Бюджеты ЦФО»: план года или факт года."""
     from app import operplan as operplan_service
 
     view = operplan_service.view(year, cfo_ids)
+    facts = (operplan_service.fact_months_by_row(int(view["year"]), cfo_ids)
+             if fact else None)
     wb = Workbook()
     ws = wb.active
     ws.title = cfo_budgets_sheet_name()
 
     header = BUDGET_HEADER
-    ws.cell(row=1, column=1, value=f"Бюджеты ЦФО, {view['year']} год")
+    title = (f"Факт {view['year']} года по строкам бюджета" if fact
+             else f"Бюджеты ЦФО, {view['year']} год")
+    ws.cell(row=1, column=1, value=title)
     ws.cell(row=1, column=1).font = Font(bold=True, size=12)
-    for col, title in enumerate(header, start=1):
-        ws.cell(row=3, column=col, value=title)
+    for col, title_cell in enumerate(header, start=1):
+        ws.cell(row=3, column=col, value=title_cell)
     _style_header(ws, 3, len(header))
 
     def money(r: int, c: int, value: float, bold: bool = False) -> None:
@@ -117,19 +137,32 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
         if bold:
             cell.font = Font(bold=True)
 
+    def amounts(row: dict) -> tuple[float, list[float]]:
+        """Суммы строки: план из вида или факт по месяцам, ИТОГО — их сумма."""
+        if facts is None:
+            return row["plan_year"], row["months"]
+        months = facts.get(int(row["id"])) or [0.0] * calc.MONTHS
+        return sum(months), months
+
     idx = 4
     for block in view["blocks"]:
+        rows = [(row, *amounts(row)) for row in block["rows"]]
+        block_total = (sum(total for _, total, _ in rows) if facts is not None
+                       else block["plan_year"])
+        block_months = ([sum(m[i] for _, _, m in rows) for i in range(calc.MONTHS)]
+                        if facts is not None else block["months"])
+
         ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
         ws.cell(row=idx, column=2, value=block["cfo_name"]).font = Font(bold=True)
         ws.cell(row=idx, column=COL["Договор"], value=block["budget_name"])
-        money(idx, COL["ИТОГО"], block["plan_year"], bold=True)
-        for m, amount in enumerate(block["months"]):
+        money(idx, COL["ИТОГО"], block_total, bold=True)
+        for m, amount in enumerate(block_months):
             money(idx, MONTH_COL + m, amount, bold=True)
         for col in range(1, len(header) + 1):
             ws.cell(row=idx, column=col).fill = TOTAL_FILL
         idx += 1
 
-        for row in block["rows"]:
+        for row, total, months in rows:
             _paint(ws, idx, BUDGET_FILLS)
             ws.cell(row=idx, column=COL["Статья оборотов"], value=row["article"])
             ws.cell(row=idx, column=COL["ЦФО"], value=block["cfo_name"])
@@ -138,8 +171,8 @@ def budget_sheet(year: int, cfo_ids=None) -> bytes:
             ws.cell(row=idx, column=COL["Договор"], value=row["contract"])
             ws.cell(row=idx, column=COL["Детализация"], value=row["detail"])
             ws.cell(row=idx, column=COL["Комментарий"], value=row["comment"])
-            money(idx, COL["ИТОГО"], row["plan_year"])
-            for m, amount in enumerate(row["months"]):
+            money(idx, COL["ИТОГО"], total)
+            for m, amount in enumerate(months):
                 money(idx, MONTH_COL + m, amount)
             idx += 1
 
@@ -156,7 +189,6 @@ def cfo_budgets_sheet_name() -> str:
 
 
 TEMPLATE_ROWS = 12          ***REMOVED*** пустых строк на блок — хватает на один ЦФО без вставок
-HINT_FILL = PatternFill("solid", fgColor="FFF6E8")
 REFS_SHEET = "Справочник"
 REFS_COL = {"Статьи оборотов": 2, "Контрагенты": 3}
 ALL_CFO = 0                 ***REMOVED*** ключ общего блока справочника: у ЦФО id идут с единицы
@@ -173,6 +205,7 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     Пустые строки при загрузке пропускаются: лишние заготовки можно не удалять.
     """
     from app import operplan as operplan_service, repo
+    from app.importers.cfo_budgets import DEFAULT_BUDGET
 
     allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
     cfo_list = [c for c in repo.list_cfo()
@@ -188,23 +221,24 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     header = BUDGET_HEADER
     ws.cell(row=1, column=1, value=f"Бюджеты ЦФО, {year} год — шаблон для заполнения")
     ws.cell(row=1, column=1).font = Font(bold=True, size=12)
-    hint = ws.cell(row=2, column=1, value=(
-        "Как заполнять — на листе «Как заполнять». Формулы не пишите: "
-        "загрузка читает значения."))
-    hint.font = Font(size=10, italic=True)
-    hint.fill = HINT_FILL
     for col, title in enumerate(header, start=1):
         ws.cell(row=3, column=col, value=title)
     _style_header(ws, 3, len(header))
+    _total_note(ws, 3)
 
     idx = 4
     blocks: list[tuple[int, int, int]] = []     ***REMOVED*** ЦФО и диапазон его пустых строк
     for cfo in cfo_list:
-        names = budgets_by_cfo.get(int(cfo["id"])) or ["Основной бюджет"]
+        names = budgets_by_cfo.get(int(cfo["id"])) or [DEFAULT_BUDGET]
         for budget_name in names:
             ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
             ws.cell(row=idx, column=2, value=cfo["name"]).font = Font(bold=True)
-            ws.cell(row=idx, column=COL["Договор"], value=budget_name)
+            ***REMOVED*** В колонке «Договор» строки ИТОГО лежит название бюджета блока,
+            ***REMOVED*** а не договор: загрузка читает его оттуда. Пустая клетка значит
+            ***REMOVED*** «Основной бюджет», поэтому у дирекции с единственным бюджетом её
+            ***REMOVED*** не заполняем — в пустом шаблоне это читалось как настоящий договор.
+            if budget_name != DEFAULT_BUDGET:
+                ws.cell(row=idx, column=COL["Договор"], value=budget_name)
             for col in range(1, len(header) + 1):
                 ws.cell(row=idx, column=col).fill = TOTAL_FILL
             idx += 1
@@ -224,8 +258,8 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     for m in range(calc.MONTHS):
         ws.column_dimensions[get_column_letter(MONTH_COL + m)].width = 14
 
-    _template_hints(wb, year)
-    ranges = _template_refs(wb, year, cfo_ids)
+    ranges = _template_refs(wb, year, cfo_ids,
+                            [cfo_id for cfo_id, _, _ in blocks])
     _reference_choice(wb, ws, blocks, ranges)
     return _to_bytes(wb)
 
@@ -248,58 +282,41 @@ def _classifier_choice(ws, first_row: int, last_row: int) -> None:
     rule.add(f"{letter}{first_row}:{letter}{last_row}")
 
 
-HOW_TO = [
-    "Лист «Бюджеты ЦФО» — то, что читает загрузка. Не переименовывайте его "
-    "и не меняйте порядок колонок.",
-    "Расходы вписывайте строками под серым заголовком своей дирекции: "
-    "держателем бюджета считается заголовок блока, а не подпись в самой строке.",
-    "Обязательна первая колонка — название расходной статьи. Выбирайте из списка "
-    "в ячейке: он собран по листу «Справочник», а название с опечаткой заведёт в "
-    "плане отдельную строку. Новую статью вписать можно — список не запрещает.",
-    "Колонка «Классификатор» — МРГ или МРК, третьего значения нет; выбирайте из "
-    "списка в ячейке. Пустая клетка и незнакомое значение читаются как МРГ.",
-    "Суммы — в колонку ИТОГО и по месяцам. Если заполнены только месяцы, "
-    "ИТОГО будет посчитано как их сумма.",
-    "Формулы загрузка не видит — вписывайте числа. Excel-файл со формулами "
-    "сначала сохраните как значения.",
-    "Серые строки «ИТОГО» и пустые заготовки при загрузке пропускаются — "
-    "лишние строки удалять не нужно, а недостающие можно вставить.",
-    "Загрузка заменяет план года по тем дирекциям, чьи строки есть в файле: "
-    "в файле должно быть всё, что нужно в плане по этой дирекции, а не только "
-    "новое. Дирекции, которых в файле нет, загрузка не затрагивает.",
-]
+def _total_note(ws, row: int) -> None:
+    """Примечание на шапке колонки ИТОГО.
 
-
-def _template_hints(wb: Workbook, year: int) -> None:
-    """Инструкция отдельным листом.
-
-    На самом листе «Бюджеты ЦФО» её держать нельзя: разборщик ищет шапку как
-    первую строку, где встречаются слова «статья оборотов» и «ЦФО», и длинная
-    подсказка с этими словами перебивала бы настоящую шапку.
+    Единственная подсказка, оставшаяся в шаблоне: отдельный лист «Как заполнять»
+    убран, а это правило не выводится из самого листа — пустое ИТОГО при
+    заполненных месяцах выглядит как потерянная сумма.
     """
-    ws = wb.create_sheet("Как заполнять")
-    title = ws.cell(row=1, column=1, value=f"Как заполнить бюджет на {year} год")
-    title.font = Font(bold=True, size=12)
-    for i, line in enumerate(HOW_TO):
-        cell = ws.cell(row=3 + i * 2, column=1, value=f"{i + 1}. {line}")
-        cell.alignment = Alignment(wrap_text=True, vertical="top")
-        cell.fill = HINT_FILL
-    _autosize(ws, {1: 118})
+    cell = ws.cell(row=row, column=COL["ИТОГО"])
+    cell.comment = Comment(
+        "Если заполнены только месяцы, ИТОГО будет посчитано как их сумма.",
+        "Бюджет ЦФО", height=70, width=260)
 
 
-def _template_refs(wb: Workbook, year: int, cfo_ids=None) -> dict[int, dict[str, str]]:
+def _template_refs(wb: Workbook, year: int, cfo_ids=None,
+                   block_cfo_ids: list[int] | None = None) -> dict[int, dict[str, str]]:
     """Лист-справочник: какие статьи и контрагенты уже встречались у ЦФО.
 
     Отдаёт имена диапазонов для выпадающих списков: `{cfo_id: {колонка: имя}}`,
-    плюс общий блок под ключом `ALL_CFO`.
+    плюс — когда он кому-то нужен — общий блок под ключом `ALL_CFO`.
 
     Нужен, чтобы в шаблоне писали существующие названия, а не новые варианты
     написания того же: статья с опечаткой заведёт в плане отдельную строку.
+
+    Общий блок — запасной список для дирекции, у которой своего ещё нет. Если
+    своё есть у всех блоков шаблона, он на лист не попадает: при выгрузке одной
+    дирекции он слово в слово повторял её собственный список.
     """
     from app import operplan as operplan_service, repo
 
     refs = operplan_service.references(year, None if cfo_ids is None else list(cfo_ids))
     names = {int(c["id"]): c["name"] for c in repo.list_cfo()}
+    own = {int(k): v for k, v in refs["by_cfo"].items()}
+    needs_all = any(not (own.get(int(cfo_id)) or {}).get(column)
+                    for cfo_id in (block_cfo_ids or [])
+                    for column in ("articles", "counterparties"))
     ws = wb.create_sheet(REFS_SHEET)
     for col, title in enumerate(["ЦФО", "Статьи оборотов", "Контрагенты"], start=1):
         ws.cell(row=1, column=col, value=title)
@@ -330,8 +347,10 @@ def _template_refs(wb: Workbook, year: int, cfo_ids=None) -> dict[int, dict[str,
             out[key] = bucket
         return idx + height + 1
 
-    idx = group("— все дирекции —", ALL_CFO, refs["all"]["articles"],
-                refs["all"]["counterparties"], 2)
+    idx = 2
+    if needs_all:
+        idx = group("— все дирекции —", ALL_CFO, refs["all"]["articles"],
+                    refs["all"]["counterparties"], idx)
     for cfo_id, bucket in sorted(refs["by_cfo"].items(),
                                  key=lambda kv: names.get(int(kv[0]), "")):
         idx = group(names.get(int(cfo_id), ""), int(cfo_id),
