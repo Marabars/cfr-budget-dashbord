@@ -338,12 +338,13 @@
 
   /* ---------- подсказки при правке ячейки ---------- */
 
-  var SUGGEST = ["article", "counterparty", "contract"];
+  var SUGGEST = ["article", "counterparty", "contract", "detail_text"];
   var openSuggest = null;
 
   /* Ячейку правят на месте, contenteditable, — но значения те же, что в новой
-     строке: статьи, контрагенты и договоры своего ЦФО. Список подставляется
-     к ячейке по фокусу и сужается по набранному тексту. */
+     строке: статьи, контрагенты, договоры и детализация своего ЦФО. Список
+     подставляется к ячейке по фокусу и сужается по набранному тексту. Где
+     справочник пуст (детализация не у ИТ), ячейка остаётся свободным текстом. */
   function bindSuggest(table) {
     table.addEventListener("focusin", function (event) {
       var td = event.target;
@@ -398,7 +399,16 @@
         return acc.concat(byCp[key]);
       }, []);
     }
-    return null;                      // детализация — свободный текст, списка нет
+    if (field === "detail_text") {
+      /* Детализация подсказывает только там, где колонка своя (ИТ): у остальных
+         дирекций в ней лежит комментарий к строке, и прошлые фразы в нём не
+         повторяются. Галочка «все» список не расширяет — чужие расшифровки
+         подсказкой не работают. */
+      if (row.detail_source !== "detail") return null;
+      var details = refs.own.details || [];
+      return details.length ? details : null;
+    }
+    return null;
   }
 
   function commitCell(row, field, text, td) {
@@ -449,7 +459,7 @@
     td.appendChild(input);
     var options = cellOptions(row, field);
     if (!options) {
-      // у детализации списка нет — иначе чужой список висел бы поверх таблицы
+      // справочника нет — гасим чужой список, иначе он висел бы поверх таблицы
       input.addEventListener("focus", U.closePopups);
     }
     if (options) {
@@ -1146,7 +1156,8 @@
     var all = state.refs && state.refs.all ? state.refs.all
       : { articles: [], counterparties: [], contracts: [] };
     var own = state.refs && state.refs.by_cfo ? state.refs.by_cfo[String(cfoId)] : null;
-    return { own: own || { articles: [], counterparties: [], contracts: {} }, all: all };
+    return { own: own || { articles: [], counterparties: [], contracts: {}, details: [] },
+             all: all };
   }
 
   /* ---------- загрузка ---------- */

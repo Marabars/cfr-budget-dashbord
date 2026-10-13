@@ -73,17 +73,22 @@ def _to_bytes(wb: Workbook) -> bytes:
 
 ***REMOVED*** Раскладка листа «Бюджеты ЦФО» в одном месте: выгрузка и шаблон обязаны
 ***REMOVED*** совпадать колонка в колонку, иначе заполненный шаблон не зальётся.
-***REMOVED*** Классификатор стоит сразу за ЦФО — он про ту же строку, что и дирекция.
-BUDGET_HEADER = ["Статья оборотов", "ЦФО", "Классификатор", "Контрагент", "Договор",
-                 "Детализация", "Комментарий", "ИТОГО"] + calc.MONTH_NAMES
+***REMOVED*** Классификатор стоит сразу за ЦФО — он про ту же строку, что и дирекция,
+***REMOVED*** «Тип бюджета» рядом с ним: он про то, в каком бюджете дирекции лежит расход.
+BUDGET_HEADER = ["Статья оборотов", "ЦФО", "Тип бюджета", "Классификатор",
+                 "Контрагент", "Договор", "Детализация", "Комментарий",
+                 "ИТОГО"] + calc.MONTH_NAMES
 COL = {title: i + 1 for i, title in enumerate(BUDGET_HEADER)}
 MONTH_COL = COL["ИТОГО"] + 1           ***REMOVED*** первая колонка месяца
-BUDGET_WIDTHS = {COL["Статья оборотов"]: 38, COL["ЦФО"]: 30, COL["Классификатор"]: 15,
+BUDGET_WIDTHS = {COL["Статья оборотов"]: 38, COL["ЦФО"]: 30, COL["Тип бюджета"]: 28,
+                 COL["Классификатор"]: 15,
                  COL["Контрагент"]: 28, COL["Договор"]: 26, COL["Детализация"]: 34,
                  COL["Комментарий"]: 30, COL["ИТОГО"]: 16}
 ***REMOVED*** Цвета колонок — оттуда же, откуда раскладка. «ИТОГО» в исходнике без заливки,
-***REMOVED*** классификатор — наша колонка, встаёт в один ряд с ЦФО и контрагентом.
+***REMOVED*** классификатор и тип бюджета — наши колонки, встают в один ряд с ЦФО
+***REMOVED*** и контрагентом.
 BUDGET_FILLS = {COL["Статья оборотов"]: ARTICLE_FILL, COL["ЦФО"]: TEXT_FILL,
+                COL["Тип бюджета"]: TEXT_FILL,
                 COL["Классификатор"]: TEXT_FILL, COL["Контрагент"]: TEXT_FILL,
                 COL["Договор"]: TEXT_FILL, COL["Детализация"]: TEXT_FILL,
                 COL["Комментарий"]: NOTE_FILL}
@@ -111,11 +116,27 @@ def fact_sheet(year: int, cfo_ids=None) -> bytes:
     return _budget_layout_sheet(year, cfo_ids, fact=True)
 
 
+def multi_budget_cfos(blocks) -> set[int]:
+    """ЦФО, у которых в листе больше одного бюджета.
+
+    Только им колонка «Тип бюджета» что-то говорит. У дирекции с единственным
+    бюджетом она была бы столбцом «Основной бюджет» на каждой строке — шума
+    больше, чем пользы; по той же причине с 07.10.2026 это название не пишется
+    и в «Договор» строки ИТОГО.
+    """
+    seen: dict[int, int] = {}
+    for block in blocks:
+        cfo_id = int(block["cfo_id"])
+        seen[cfo_id] = seen.get(cfo_id, 0) + 1
+    return {cfo_id for cfo_id, count in seen.items() if count > 1}
+
+
 def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
     """Общая раскладка листа «Бюджеты ЦФО»: план года или факт года."""
     from app import operplan as operplan_service
 
     view = operplan_service.view(year, cfo_ids)
+    multi = multi_budget_cfos(view["blocks"])
     facts = (operplan_service.fact_months_by_row(int(view["year"]), cfo_ids)
              if fact else None)
     wb = Workbook()
@@ -151,9 +172,14 @@ def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
                        else block["plan_year"])
         block_months = ([sum(m[i] for _, _, m in rows) for i in range(calc.MONTHS)]
                         if facts is not None else block["months"])
+        ***REMOVED*** «Тип бюджета» повторяет название блока — держателем расхода остаётся
+        ***REMOVED*** блок, колонка его только показывает.
+        budget_type = (block["budget_name"]
+                       if int(block["cfo_id"]) in multi else None)
 
         ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
         ws.cell(row=idx, column=2, value=block["cfo_name"]).font = Font(bold=True)
+        ws.cell(row=idx, column=COL["Тип бюджета"], value=budget_type)
         ws.cell(row=idx, column=COL["Договор"], value=block["budget_name"])
         money(idx, COL["ИТОГО"], block_total, bold=True)
         for m, amount in enumerate(block_months):
@@ -166,6 +192,7 @@ def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
             _paint(ws, idx, BUDGET_FILLS)
             ws.cell(row=idx, column=COL["Статья оборотов"], value=row["article"])
             ws.cell(row=idx, column=COL["ЦФО"], value=block["cfo_name"])
+            ws.cell(row=idx, column=COL["Тип бюджета"], value=budget_type)
             ws.cell(row=idx, column=COL["Классификатор"], value=row["classifier"])
             ws.cell(row=idx, column=COL["Контрагент"], value=row["counterparty"])
             ws.cell(row=idx, column=COL["Договор"], value=row["contract"])
@@ -190,8 +217,37 @@ def cfo_budgets_sheet_name() -> str:
 
 TEMPLATE_ROWS = 12          ***REMOVED*** пустых строк на блок — хватает на один ЦФО без вставок
 REFS_SHEET = "Справочник"
-REFS_COL = {"Статьи оборотов": 2, "Контрагенты": 3}
+REFS_COL = {"Статьи оборотов": 2, "Контрагенты": 3, "Детализация": 4}
 ALL_CFO = 0                 ***REMOVED*** ключ общего блока справочника: у ЦФО id идут с единицы
+
+
+def template_budget_names(year: int, cfo_ids=None) -> dict[int, list[str]]:
+    """Какие блоки печатать в шаблоне: бюджеты года плюс бюджеты базового года.
+
+    Планируемый год в начале пуст, и блоки с раздельными бюджетами в нём ещё
+    не заведены: у ИТ «Бюджет обязательных затрат» и «Бюджет развития» есть
+    в базовом году, а в плановом остался один след тестового «+ расход».
+    Шаблон из-за этого приезжал одним безымянным блоком, и дирекции было негде
+    отметить, к какому бюджету относится расход.
+
+    Названный бюджет вытесняет «Основной»: пустая заготовка — это и есть тот
+    самый след, а не настоящий третий бюджет дирекции.
+    """
+    from app import operplan as operplan_service
+    from app.importers.cfo_budgets import DEFAULT_BUDGET
+
+    names: dict[int, list[str]] = {}
+    for source_year in dict.fromkeys((int(year), operplan_service.base_year())):
+        for block in operplan_service.view(source_year, cfo_ids)["blocks"]:
+            cfo_id = int(block["cfo_id"])
+            seen = names.setdefault(cfo_id, [])
+            if block["budget_name"] not in seen:
+                seen.append(block["budget_name"])
+
+    for cfo_id, items in names.items():
+        named = sorted(n for n in items if n != DEFAULT_BUDGET)
+        names[cfo_id] = named or [DEFAULT_BUDGET]
+    return names
 
 
 def budget_template(year: int, cfo_ids=None) -> bytes:
@@ -204,15 +260,13 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
 
     Пустые строки при загрузке пропускаются: лишние заготовки можно не удалять.
     """
-    from app import operplan as operplan_service, repo
+    from app import repo
     from app.importers.cfo_budgets import DEFAULT_BUDGET
 
     allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
     cfo_list = [c for c in repo.list_cfo()
                 if allowed is None or int(c["id"]) in allowed]
-    budgets_by_cfo: dict[int, list[str]] = {}
-    for block in operplan_service.view(year, cfo_ids)["blocks"]:
-        budgets_by_cfo.setdefault(int(block["cfo_id"]), []).append(block["budget_name"])
+    budgets_by_cfo = template_budget_names(year, cfo_ids)
 
     wb = Workbook()
     ws = wb.active
@@ -230,6 +284,9 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     blocks: list[tuple[int, int, int]] = []     ***REMOVED*** ЦФО и диапазон его пустых строк
     for cfo in cfo_list:
         names = budgets_by_cfo.get(int(cfo["id"])) or [DEFAULT_BUDGET]
+        ***REMOVED*** Колонку «Тип бюджета» заполняем только там, где бюджетов несколько:
+        ***REMOVED*** у остальных она повторяла бы «Основной бюджет» на каждой строке.
+        multi = len(names) > 1
         for budget_name in names:
             ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
             ws.cell(row=idx, column=2, value=cfo["name"]).font = Font(bold=True)
@@ -239,6 +296,8 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
             ***REMOVED*** не заполняем — в пустом шаблоне это читалось как настоящий договор.
             if budget_name != DEFAULT_BUDGET:
                 ws.cell(row=idx, column=COL["Договор"], value=budget_name)
+            if multi:
+                ws.cell(row=idx, column=COL["Тип бюджета"], value=budget_name)
             for col in range(1, len(header) + 1):
                 ws.cell(row=idx, column=col).fill = TOTAL_FILL
             idx += 1
@@ -247,6 +306,10 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
                 _paint(ws, idx, BUDGET_FILLS)
                 cell = ws.cell(row=idx, column=COL["ИТОГО"])
                 cell.number_format = MONEY
+                ***REMOVED*** Тип проставлен заранее: строка и так принадлежит блоку, под
+                ***REMOVED*** которым стоит, и вписывать его руками дирекции незачем.
+                if multi:
+                    ws.cell(row=idx, column=COL["Тип бюджета"], value=budget_name)
                 for m in range(calc.MONTHS):
                     ws.cell(row=idx, column=MONTH_COL + m).number_format = MONEY
                 idx += 1
@@ -297,10 +360,13 @@ def _total_note(ws, row: int) -> None:
 
 def _template_refs(wb: Workbook, year: int, cfo_ids=None,
                    block_cfo_ids: list[int] | None = None) -> dict[int, dict[str, str]]:
-    """Лист-справочник: какие статьи и контрагенты уже встречались у ЦФО.
+    """Лист-справочник: какие статьи, контрагенты и детализация встречались у ЦФО.
 
     Отдаёт имена диапазонов для выпадающих списков: `{cfo_id: {колонка: имя}}`,
     плюс — когда он кому-то нужен — общий блок под ключом `ALL_CFO`.
+
+    Детализация попадает в справочник только у дирекций, где колонка своя (ИТ);
+    в общий блок она не идёт — чужие расшифровки подсказкой не работают.
 
     Нужен, чтобы в шаблоне писали существующие названия, а не новые варианты
     написания того же: статья с опечаткой заведёт в плане отдельную строку.
@@ -318,16 +384,18 @@ def _template_refs(wb: Workbook, year: int, cfo_ids=None,
                     for cfo_id in (block_cfo_ids or [])
                     for column in ("articles", "counterparties"))
     ws = wb.create_sheet(REFS_SHEET)
-    for col, title in enumerate(["ЦФО", "Статьи оборотов", "Контрагенты"], start=1):
+    for col, title in enumerate(["ЦФО", "Статьи оборотов", "Контрагенты", "Детализация"],
+                                start=1):
         ws.cell(row=1, column=col, value=title)
-    _style_header(ws, 1, 3)
+    _style_header(ws, 1, 4)
 
     out: dict[int, dict[str, str]] = {}
 
     def group(label: str, key: str, articles: list[str], counterparties: list[str],
-              idx: int) -> int:
+              idx: int, details: list[str] | None = None) -> int:
         """Один блок справочника; возвращает строку, с которой начинается следующий."""
-        height = max(len(articles), len(counterparties))
+        details = details or []
+        height = max(len(articles), len(counterparties), len(details))
         if not height:
             return idx
         ws.cell(row=idx, column=1, value=label).font = Font(bold=True)
@@ -336,9 +404,12 @@ def _template_refs(wb: Workbook, year: int, cfo_ids=None,
                 ws.cell(row=idx + offset, column=2, value=articles[offset])
             if offset < len(counterparties):
                 ws.cell(row=idx + offset, column=3, value=counterparties[offset])
+            if offset < len(details):
+                ws.cell(row=idx + offset, column=4, value=details[offset])
         bucket: dict[str, str] = {}
         for column, values, prefix in (("Статьи оборотов", articles, "_art"),
-                                       ("Контрагенты", counterparties, "_cp")):
+                                       ("Контрагенты", counterparties, "_cp"),
+                                       ("Детализация", details, "_det")):
             if not values:
                 continue
             bucket[column] = _define_range(wb, f"{prefix}{key}", ws.title, column,
@@ -354,8 +425,9 @@ def _template_refs(wb: Workbook, year: int, cfo_ids=None,
     for cfo_id, bucket in sorted(refs["by_cfo"].items(),
                                  key=lambda kv: names.get(int(kv[0]), "")):
         idx = group(names.get(int(cfo_id), ""), int(cfo_id),
-                    bucket["articles"], bucket["counterparties"], idx)
-    _autosize(ws, {1: 30, 2: 44, 3: 34})
+                    bucket["articles"], bucket["counterparties"], idx,
+                    bucket.get("details"))
+    _autosize(ws, {1: 30, 2: 44, 3: 34, 4: 40})
     return out
 
 
@@ -375,21 +447,24 @@ def _define_range(wb: Workbook, name: str, sheet: str, column: str,
 
 def _reference_choice(wb: Workbook, ws, blocks: list[tuple[int, int, int]],
                       ranges: dict[int, dict[str, str]]) -> None:
-    """Выпадающие списки статей и контрагентов — свои у каждого блока ЦФО.
+    """Выпадающие списки статей, контрагентов и детализации — свои у каждого блока.
 
     Список берётся с листа «Справочник»: у дирекции свой набор, а если у неё
     там пусто (бюджета ещё не было) — общий, иначе заполнять пришлось бы вовсе
-    без подсказки.
+    без подсказки. У детализации запасного списка нет: своей колонка бывает
+    только у ИТ, и общий блок подсунул бы остальным чужие расшифровки.
 
     Запрета нет (`showErrorMessage=False`): новая статья в плане законна, список
     лишь помогает не выдумать второе написание уже заведённой.
     """
-    for column, target in (("Статья оборотов", "Статьи оборотов"),
-                           ("Контрагент", "Контрагенты")):
+    for column, target, fallback in (("Статья оборотов", "Статьи оборотов", True),
+                                     ("Контрагент", "Контрагенты", True),
+                                     ("Детализация", "Детализация", False)):
         letter = get_column_letter(COL[column])
         for cfo_id, first, last in blocks:
-            name = ((ranges.get(int(cfo_id)) or {}).get(target)
-                    or (ranges.get(ALL_CFO) or {}).get(target))
+            name = (ranges.get(int(cfo_id)) or {}).get(target)
+            if not name and fallback:
+                name = (ranges.get(ALL_CFO) or {}).get(target)
             if not name or last < first:
                 continue
             rule = DataValidation(type="list", formula1=name, allow_blank=True,

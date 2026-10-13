@@ -579,14 +579,17 @@ def list_article_refs() -> list[dict]:
 
 
 def used_values(year: int, layer: str = LAYER_MAIN) -> list[dict]:
-    """Статьи, контрагенты и договоры, реально встречающиеся в строках слоя.
+    """Статьи, контрагенты, договоры и детализация, встречающиеся в строках слоя.
 
     Договор отдаётся вместе с контрагентом: в форме список договоров сужается
-    по выбранному контрагенту.
+    по выбранному контрагенту. Детализация приезжает обоими полями вместе с
+    `detail_source` дирекции — что из них видно в колонке, решает `_detail_text`.
     """
     return [dict(r) for r in db.query(
-        "SELECT b.cfo_id, r.article, r.counterparty, r.contract "
+        "SELECT b.cfo_id, r.article, r.counterparty, r.contract, "
+        "r.detail, r.comment, c.detail_source "
         "FROM budget_row r JOIN budget b ON b.id = r.budget_id "
+        "JOIN cfo c ON c.id = b.cfo_id "
         "WHERE b.year = ? AND b.layer = ? AND r.deleted_at IS NULL",
         (year, layer),
     )]

@@ -23,7 +23,9 @@ function blankRow(id, cfoId, cfoName) {
   return {
     id, row_no: 2, budget_id: 1, budget_name: "Основной бюджет",
     cfo_id: cfoId, cfo_name: cfoName, article: "", counterparty: "", contract: "",
-    detail: "", comment: "", approver_comment: "", detail_source: "detail",
+    detail: "", comment: "", approver_comment: "",
+    // своя колонка «Детализация» бывает у ИТ, у остальных там комментарий строки
+    detail_source: cfoId === 1 ? "detail" : "comment",
     detail_text: "", plan_year: 0, months: Array(MONTHS).fill(0),
     source: "manual", base_plan_year: null,
   };
@@ -50,17 +52,27 @@ const BASE = {
   base_plan_year: null,
 };
 
+/* Строка ДУП: та же таблица, но колонка «Детализация» у неё — комментарий,
+   и справочника детализации в REFS у этой дирекции нет. */
+const HR_ROW = {
+  ...FILLED, id: 11, cfo_id: 2, cfo_name: HR, article: "4109_Обучение",
+  counterparty: "Подрядчик ООО", contract: "Договор №3", detail: "",
+  comment: "Английский", detail_source: "comment", detail_text: "Английский",
+};
+
 const REFS = {
   by_cfo: {
     1: {
       articles: ["4411_Оборудование", "4430_Разработка"],
       counterparties: ["Астра ООО", "Софт ООО"],
       contracts: { "Астра ООО": ["Договор №1"] },
+      details: ["ИТ инфраструктура", "Платформа"],
     },
     2: {
       articles: ["4109_Обучение", "4110_Соцрасходы"],
       counterparties: ["Подрядчик ООО"],
       contracts: { "Подрядчик ООО": ["Договор №3"] },
+      details: [],                     // у ДУП в колонке комментарий, списка нет
     },
   },
   all: {
@@ -416,7 +428,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
     assert.equal(row.querySelectorAll("td.cell-pick input").length, 4,
       "статья, контрагент, договор и детализация");
     assert.equal(row.querySelectorAll("td.cell-pick .combo-caret").length, 3,
-      "у детализации списка нет — это свободный текст");
+      "строку заводили в ДУП: там детализация — комментарий, списка нет");
   });
 
   it("предлагает раскладку суммы на 14 вариантов", () => {
@@ -508,7 +520,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
     const inputs = t.$$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(inputs[2]);                                  // договор — список есть
     assert.ok(t.$(".fpop-fixed:not([hidden])"), "список договоров раскрыт");
-    t.focus(inputs[3]);                                  // детализация — списка нет
+    t.focus(inputs[3]);                   // детализация ДУП — справочника нет
     assert.equal(t.$(".fpop-fixed:not([hidden])"), null,
       "иначе список висел бы поверх таблицы");
   });
@@ -538,7 +550,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
   let t, cell;
 
   before(async () => {
-    t = await mount();
+    t = await mount(undefined, [HR_ROW]);
     t.click(t.$("***REMOVED***op-edit-mode"));
     cell = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
   });
@@ -596,11 +608,53 @@ describe("вкладка «Бюджет»: подсказки при правк�
     assert.equal(cell.textContent, "Астра ООО");
   });
 
-  it("в ячейке без справочника списка не показывает", () => {
+  it("подсказывает детализацию там, где колонка своя", () => {
+    /* У ИТ «Детализация» — колонка бюджета, и писать в неё надо теми же словами,
+       что уже заведены: иначе одна расшифровка расходится на три написания. */
     const detail = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="detail_text"]');
+    t.clickCell(detail);
+    const pop = t.$(".cell-suggest:not([hidden])");
+    assert.ok(pop, "список подставлен к ячейке");
+    assert.deepEqual(Array.from(pop.querySelectorAll(".copt")).map((n) => n.textContent),
+      REFS.by_cfo[1].details);
+  });
+
+  it("по выбору детализации сохраняет её в поле бюджета, а не в комментарий", async () => {
+    const detail = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="detail_text"]');
+    t.clickCell(detail);
+    const option = t.$$(".cell-suggest .copt").find((n) => n.textContent === "Платформа");
+    option.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
+    await settle(t.window);
+    assert.equal(detail.textContent, "Платформа");
+    assert.equal(t.lastPatch("detail").payload.detail, "Платформа",
+      "у ИТ правка уходит в «Детализацию», а не в «Комментарий»");
+  });
+
+  it("в ячейке без справочника списка не показывает", () => {
+    // у ДУП в этой колонке комментарий к строке — прошлые фразы в нём не повторяются
+    const detail = t.$('***REMOVED***t-op tbody tr[data-id="11"] td[data-f="detail_text"]');
     t.focus(detail);
     assert.equal(t.$(".cell-suggest:not([hidden])"), null,
-      "детализация — свободный текст");
+      "детализация ДУП — свободный текст");
+  });
+});
+
+describe("вкладка «Бюджет»: детализация в новой строке", () => {
+  it("даёт список в строке ИТ и не даёт в строке ДУП", async () => {
+    const it = await mount([{ id: 1, name: IT }]);
+    it.click(it.$("***REMOVED***op-add-row"));
+    await settle(it.window, 60);
+    const row = it.$('***REMOVED***t-op tbody tr[data-id="99"]');
+    assert.equal(row.querySelectorAll("td.cell-pick .combo-caret").length, 4,
+      "статья, контрагент, договор и детализация");
+    /* Клик, а не голый фокус: после «+ расход» курсор стоит в статье с раскрытым
+       списком, и закрыть его должен именно переход в другую ячейку. */
+    const detail = row.querySelectorAll("td.cell-pick input")[3];
+    it.clickCell(detail);
+    const pop = it.$(".fpop-fixed:not([hidden])");
+    assert.ok(pop, "список детализации раскрыт");
+    assert.deepEqual(Array.from(pop.querySelectorAll(".copt")).map((n) => n.textContent),
+      REFS.by_cfo[1].details);
   });
 });
 

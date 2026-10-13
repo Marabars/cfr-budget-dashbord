@@ -445,11 +445,16 @@ def copy_year(author: str, from_year: int | None = None, to_year: int | None = N
 ***REMOVED*** ---------- справочники для форм ----------
 
 def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dict:
-    """Статьи, контрагенты и договоры для выпадающих списков.
+    """Статьи, контрагенты, договоры и детализация для выпадающих списков.
 
     Для каждого ЦФО отдаём свой набор, плюс общий список — его показывает галочка
     «показать все». Договоры сгруппированы по контрагенту, чтобы список сужался
     после его выбора.
+
+    Детализация — список только у дирекций, где колонка своя (`detail_source` =
+    `detail`, это ИТ): у остальных в ней живёт комментарий к строке, и прошлые
+    формулировки там не повторяются. В общий список детализация не сводится —
+    чужие расшифровки дирекции не подсказка, а шум.
 
     `cfo_ids` ограничивает выдачу: руководителю не уезжают контрагенты и договоры
     чужих дирекций, поэтому и «показать все» у него не шире собственного ЦФО.
@@ -463,7 +468,8 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
         if allowed is not None and int(cfo_id) not in allowed:
             return None
         return by_cfo.setdefault(int(cfo_id), {
-            "articles": set(), "counterparties": set(), "contracts": {}
+            "articles": set(), "counterparties": set(), "contracts": {},
+            "details": set(),
         })
 
     for ref in repo.list_article_refs():
@@ -482,6 +488,13 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
                 b["counterparties"].add(row["counterparty"])
             if row["contract"]:
                 b["contracts"].setdefault(row["counterparty"] or "", set()).add(row["contract"])
+            ***REMOVED*** Берём то, что видно в колонке «Детализация», — у ИТ при пустой
+            ***REMOVED*** детализации там стоит комментарий, и список должен совпадать с
+            ***REMOVED*** тем, что дирекция читает в таблице.
+            if (row.get("detail_source") or "comment") == "detail":
+                detail = _detail_text(row)
+                if detail:
+                    b["details"].add(detail)
 
     out: dict[str, Any] = {
         "by_cfo": {},
@@ -492,6 +505,7 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
             "articles": sorted(b["articles"]),
             "counterparties": sorted(b["counterparties"]),
             "contracts": {cp: sorted(items) for cp, items in b["contracts"].items()},
+            "details": sorted(b["details"]),
         }
         out["all"]["articles"] |= b["articles"]
         out["all"]["counterparties"] |= b["counterparties"]

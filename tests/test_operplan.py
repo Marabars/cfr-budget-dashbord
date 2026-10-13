@@ -10,8 +10,10 @@ import io
 import openpyxl
 import pytest
 from fastapi.testclient import TestClient
+from openpyxl.utils import get_column_letter
 
 from app import db, operplan, repo
+from app.exporters import excel
 from app.importers import cfo_budgets
 from app.main import app
 
@@ -20,6 +22,22 @@ MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "М
 
 IT = "Первая дирекция"
 HR = "Вторая дирекция"
+
+
+def _col_index(ws, title: str) -> int:
+    """Номер колонки по названию в шапке листа «Бюджеты ЦФО».
+
+    Колонки в раскладку иногда добавляют (классификатор, тип бюджета), и тесты
+    не должны ломаться от сдвига — ищем по подписи, а не по номеру.
+    """
+    for col in range(1, ws.max_column + 1):
+        if ws.cell(row=3, column=col).value == title:
+            return col
+    raise AssertionError(f"в шапке нет колонки «{title}»")
+
+
+def _col_letter(ws, title: str) -> str:
+    return get_column_letter(_col_index(ws, title))
 
 
 ***REMOVED*** ---------- фикстуры ----------
@@ -494,6 +512,29 @@ def test_договоры_сгруппированы_по_контрагенту
     assert contracts["Софт ООО"] == ["Договор №2"]
 
 
+def test_детализация_в_справочнике_только_у_ит(client, loaded):
+    """Своя колонка «Детализация» бывает у ИТ; у остальных там комментарий строки."""
+    refs = client.get("/api/operplan/references?year=2026").json()
+    it_id = str(repo.ensure_cfo(IT))
+    hr_id = str(repo.ensure_cfo(HR))
+
+    details = refs["by_cfo"][it_id]["details"]
+    assert "ИТ инфраструктура" in details
+    assert "Платформа" in details
+    ***REMOVED*** у строки с картриджами детализация пуста, в колонке видно комментарий —
+    ***REMOVED*** в списке он же, иначе список разошёлся бы с таблицей
+    assert "Картриджи" in details
+
+    assert refs["by_cfo"][hr_id]["details"] == []
+    assert "Английский" not in str(refs["by_cfo"][it_id]["details"])
+
+
+def test_общий_список_детализацию_не_сводит(client, loaded):
+    """Чужие расшифровки — не подсказка: в «показать все» детализации нет."""
+    refs = client.get("/api/operplan/references?year=2026").json()
+    assert "details" not in refs["all"]
+
+
 def test_общий_список_собирает_все_цфо(client, loaded):
     refs = client.get("/api/operplan/references?year=2026").json()
     assert "4109_Обучение" in refs["all"]["articles"]
@@ -775,14 +816,16 @@ def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блока�
     assert wb.sheetnames == ["Бюджеты ЦФО", "Справочник"], "листа-инструкции быть не должно"
 
     ws = wb["Бюджеты ЦФО"]
-    header = [ws.cell(row=3, column=c).value for c in range(1, 9)]
-    assert header == ["Статья оборотов", "ЦФО", "Классификатор", "Контрагент",
-                      "Договор", "Детализация", "Комментарий", "ИТОГО"]
+    header = [ws.cell(row=3, column=c).value for c in range(1, 10)]
+    assert header == ["Статья оборотов", "ЦФО", "Тип бюджета", "Классификатор",
+                      "Контрагент", "Договор", "Детализация", "Комментарий", "ИТОГО"]
     ***REMOVED*** блоки ЦФО есть, строки под ними пустые
     blocks = [ws.cell(row=r, column=2).value for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value == "ИТОГО"]
     assert IT in blocks and HR in blocks
-    assert not any(ws.cell(row=r, column=7).value for r in range(4, ws.max_row + 1))
+    comment = _col_index(ws, "Комментарий")
+    assert not any(ws.cell(row=r, column=comment).value
+                   for r in range(4, ws.max_row + 1))
 
 
 def test_в_шаблоне_нет_подсказок_кроме_примечания_к_итого(client, loaded):
@@ -791,7 +834,7 @@ def test_в_шаблоне_нет_подсказок_кроме_примечан
     ws = openpyxl.load_workbook(io.BytesIO(response.content))["Бюджеты ЦФО"]
 
     assert ws.cell(row=2, column=1).value is None, "строка подсказки должна быть пустой"
-    total = ws.cell(row=3, column=8)
+    total = ws.cell(row=3, column=_col_index(ws, "ИТОГО"))
     assert total.value == "ИТОГО"
     assert total.comment is not None, "примечание к ИТОГО потерялось"
     assert "сумма" in total.comment.text
@@ -829,6 +872,50 @@ def test_общий_блок_остаётся_дирекции_без_своег
     assert rules and rules[0].formula1 == "_art0"
 
 
+def test_в_шаблоне_у_ит_выпадающий_список_детализации(client, loaded):
+    """Колонка «Детализация» подсказывает тем же способом, что статья и контрагент."""
+    it_id = repo.ensure_cfo(IT)
+    hr_id = repo.ensure_cfo(HR)
+    response = client.get("/api/export/budget-template.xlsx?year=2027")
+    wb = openpyxl.load_workbook(io.BytesIO(response.content))
+
+    refs = wb["Справочник"]
+    assert refs.cell(row=1, column=4).value == "Детализация"
+    values = {refs.cell(row=r, column=4).value for r in range(2, refs.max_row + 1)}
+    assert "ИТ инфраструктура" in values and "Платформа" in values
+
+    ws = wb["Бюджеты ЦФО"]
+    letter = _col_letter(ws, "Детализация")
+
+    def rule_at(cfo_name: str) -> str | None:
+        first = next(r for r in range(4, ws.max_row + 1)
+                     if ws.cell(row=r, column=1).value == "ИТОГО"
+                     and ws.cell(row=r, column=2).value == cfo_name) + 1
+        found = [dv.formula1 for dv in ws.data_validations.dataValidation
+                 if f"{letter}{first}" in dv.sqref]
+        return found[0] if found else None
+
+    assert rule_at(IT) == f"_det{it_id}", "список берётся из блока своей дирекции"
+    assert rule_at(HR) is None, "у ДУП в этой колонке комментарий — списка быть не должно"
+    assert f"_det{hr_id}" not in wb.defined_names
+
+
+def test_дирекции_без_своей_детализации_общий_список_не_подсовывается(client, loaded):
+    """Запасного списка у детализации нет: чужие расшифровки хуже пустой клетки."""
+    repo.ensure_cfo("Двенадцатая дирекция")
+    response = client.get("/api/export/budget-template.xlsx?year=2027")
+    wb = openpyxl.load_workbook(io.BytesIO(response.content))
+    ws = wb["Бюджеты ЦФО"]
+    letter = _col_letter(ws, "Детализация")
+    first = next(r for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "ИТОГО"
+                 and ws.cell(row=r, column=2).value == "Двенадцатая дирекция") + 1
+    rules = [dv.formula1 for dv in ws.data_validations.dataValidation
+             if f"{letter}{first}" in dv.sqref]
+    assert rules == []
+    assert "_det0" not in wb.defined_names, "общий блок детализации не заводим"
+
+
 def test_договор_в_шаблоне_пуст_у_единственного_бюджета(client, loaded):
     """«Основной бюджет» в колонке «Договор» читался как настоящий договор."""
     hr_id = repo.ensure_cfo(HR)
@@ -838,7 +925,7 @@ def test_договор_в_шаблоне_пуст_у_единственного
     totals = [r for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value == "ИТОГО"]
     assert len(totals) == 1
-    assert ws.cell(row=totals[0], column=5).value is None, "«Договор» должен быть пуст"
+    assert ws.cell(row=totals[0], column=_col_index(ws, "Договор")).value is None,         "«Договор» должен быть пуст"
 
 
 def test_в_шаблоне_остаётся_имя_неосновного_бюджета(client, loaded):
@@ -846,12 +933,14 @@ def test_в_шаблоне_остаётся_имя_неосновного_бюд
     operplan.copy_year("Тест", 2026, 2027)
     response = client.get("/api/export/budget-template.xlsx?year=2027")
     ws = openpyxl.load_workbook(io.BytesIO(response.content))["Бюджеты ЦФО"]
-    names = {ws.cell(row=r, column=2).value: ws.cell(row=r, column=5).value
+    contract = _col_index(ws, "Договор")
+    names = {ws.cell(row=r, column=2).value: ws.cell(row=r, column=contract).value
              for r in range(4, ws.max_row + 1)
              if ws.cell(row=r, column=1).value == "ИТОГО"}
     assert names[HR] is None
     ***REMOVED*** у ИТ две строки ИТОГО — словарь оставит последнюю, обе именованные
-    it_names = [ws.cell(row=r, column=5).value for r in range(4, ws.max_row + 1)
+    it_names = [ws.cell(row=r, column=contract).value
+                for r in range(4, ws.max_row + 1)
                 if ws.cell(row=r, column=1).value == "ИТОГО"
                 and ws.cell(row=r, column=2).value == IT]
     assert sorted(it_names) == ["Бюджет обязательных затрат", "Бюджет развития"]
@@ -904,13 +993,13 @@ def test_заполненный_шаблон_загружается_обратн
     start = next(r for r in range(4, ws.max_row + 1)
                  if ws.cell(row=r, column=1).value == "ИТОГО"
                  and ws.cell(row=r, column=2).value == HR) + 1
+    total_col = _col_index(ws, "ИТОГО")
     ws.cell(row=start, column=1, value="4109_Обучение")
-    ws.cell(row=start, column=7, value=60_000)
-    ws.cell(row=start, column=8, value=60_000)
+    ws.cell(row=start, column=total_col, value=60_000)
     ***REMOVED*** вторая строка: ИТОГО оставлено пустым, заполнены только месяцы
     ws.cell(row=start + 1, column=1, value="4110_Соцрасходы")
-    ws.cell(row=start + 1, column=9, value=25_000)
-    ws.cell(row=start + 1, column=10, value=15_000)
+    ws.cell(row=start + 1, column=total_col + 1, value=25_000)
+    ws.cell(row=start + 1, column=total_col + 2, value=15_000)
     buffer = io.BytesIO()
     wb.save(buffer)
 
@@ -1296,10 +1385,11 @@ def test_выгрузка_несёт_классификатор_и_круг_ег
 
     content = client.get("/api/export/budget.xlsx?year=2027").content
     ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
-    assert ws.cell(row=3, column=3).value == "Классификатор"
+    classifier = _col_index(ws, "Классификатор")
+    counterparty = _col_index(ws, "Контрагент")
     ***REMOVED*** ключ по статье и контрагенту: одна статья в плане встречается не раз
-    values = {(ws.cell(row=r, column=1).value, ws.cell(row=r, column=4).value):
-              ws.cell(row=r, column=3).value
+    values = {(ws.cell(row=r, column=1).value, ws.cell(row=r, column=counterparty).value):
+              ws.cell(row=r, column=classifier).value
               for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value not in (None, "ИТОГО")}
     assert values[(row["article"], row["counterparty"] or None)] == "МРК"
@@ -1339,11 +1429,12 @@ def test_загрузка_чинит_чужое_значение_и_пережи
 def test_шаблон_даёт_выбрать_из_двух(client, loaded):
     content = client.get("/api/export/budget-template.xlsx?year=2027").content
     ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    letter = _col_letter(ws, "Классификатор")
     rules = [r for r in ws.data_validations.dataValidation
-             if str(r.sqref).startswith("C")]
+             if str(r.sqref).startswith(letter)]
     assert len(rules) == 1, "на колонке классификатора один список"
     assert rules[0].formula1 == '"МРГ,МРК"'
-    assert str(rules[0].sqref).startswith("C4")
+    assert str(rules[0].sqref).startswith(f"{letter}4")
 
 
 def _range_values(wb, name: str) -> list[str]:
@@ -1368,12 +1459,12 @@ def test_шаблон_подсказывает_статьи_и_контраге�
         return next(r for r in ws.data_validations.dataValidation
                     if f"{column}{start}" in r.sqref)
 
-    articles = rule_at("A")
+    articles = rule_at(_col_letter(ws, "Статья оборотов"))
     assert articles.type == "list"
     assert not articles.showErrorMessage, "список подсказывает, новую статью не запрещает"
     assert "4109_Обучение" in _range_values(wb, articles.formula1)
     assert "4411_Оборудование" not in _range_values(wb, articles.formula1),         "в блоке ДУП не должно быть статей ИТ"
-    assert _range_values(wb, rule_at("D").formula1), "у контрагентов список тоже есть"
+    assert _range_values(wb, rule_at(_col_letter(ws, "Контрагент")).formula1),         "у контрагентов список тоже есть"
 
 
 ***REMOVED*** Палитра листа «Бюджеты ЦФО» из файла ликвидности: выгрузку кладут рядом с
@@ -1391,7 +1482,7 @@ def _fill(cell) -> str | None:
 
 
 def _budget_palette(ws, row: int) -> dict[str, str | None]:
-    titles = {ws.cell(row=3, column=c).value: c for c in range(1, 21)}
+    titles = {ws.cell(row=3, column=c).value: c for c in range(1, ws.max_column + 1)}
     return {title: _fill(ws.cell(row=row, column=titles[title]))
             for title in ПАЛИТРА_ИСХОДНИКА}
 
@@ -1592,3 +1683,105 @@ def test_факт_загружает_только_финотдел(client, loade
     )
     assert allowed.status_code == 200
     assert client.get("/api/operplan").json()["kpi"]["fact_loaded"] is True
+
+
+***REMOVED*** ---------- «Тип бюджета»: видно там, где бюджетов несколько ----------
+
+def test_тип_бюджета_стоит_у_ит_и_пуст_у_дирекции_с_одним_бюджетом(client, loaded):
+    """У ИТ бюджета два, и строка должна говорить, в каком из них она лежит."""
+    content = client.get("/api/export/budget.xlsx?year=2026").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    kind = _col_index(ws, "Тип бюджета")
+
+    by_cfo: dict[str, set] = {}
+    for r in range(4, ws.max_row + 1):
+        if ws.cell(row=r, column=1).value in (None, "ИТОГО"):
+            continue
+        by_cfo.setdefault(ws.cell(row=r, column=2).value, set()).add(
+            ws.cell(row=r, column=kind).value)
+
+    assert by_cfo[IT] == {"Бюджет обязательных затрат", "Бюджет развития"}
+    assert by_cfo[HR] == {None}, "у дирекции с одним бюджетом колонка пустая"
+
+
+def test_тип_бюджета_повторяет_блок_а_не_спорит_с_ним(client, loaded):
+    """Держатель расхода — блок; колонка обязана совпадать с его названием."""
+    content = client.get("/api/export/budget.xlsx?year=2026").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    kind, contract = _col_index(ws, "Тип бюджета"), _col_index(ws, "Договор")
+
+    block = None
+    checked = 0
+    for r in range(4, ws.max_row + 1):
+        article = ws.cell(row=r, column=1).value
+        if article == "ИТОГО":
+            block = ws.cell(row=r, column=contract).value
+            continue
+        if not article or ws.cell(row=r, column=2).value != IT:
+            continue
+        assert ws.cell(row=r, column=kind).value == block
+        checked += 1
+    assert checked > 0, "строки ИТ должны были встретиться"
+
+
+def test_в_факте_тип_бюджета_тоже_есть(client, loaded):
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    content = client.get("/api/export/budget-fact.xlsx?year=2026").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    kind = _col_index(ws, "Тип бюджета")
+    values = {ws.cell(row=r, column=kind).value for r in range(4, ws.max_row + 1)
+              if ws.cell(row=r, column=2).value == IT}
+    assert values == {"Бюджет обязательных затрат", "Бюджет развития"}
+
+
+def test_загрузка_не_спотыкается_о_новую_колонку(client, loaded):
+    """Колонка показывает, а не ведёт: круг выгрузка → заливка не изменился."""
+    before = client.get("/api/operplan?year=2026").json()["totals"]
+    content = client.get("/api/export/budget.xlsx?year=2026").content
+
+    again = operplan.import_budgets(content, "выгрузка.xlsx", 2026, "Тест")
+    after = client.get("/api/operplan?year=2026").json()["totals"]
+    assert again["rows"] == before["rows_count"]
+    assert after["plan_year"] == pytest.approx(before["plan_year"], rel=1e-9)
+
+    ***REMOVED*** и блоки ИТ не слиплись: имя бюджета по-прежнему читается из «Договора»
+    names = {b["budget_name"] for b in
+             client.get("/api/operplan?year=2026").json()["blocks"]
+             if b["cfo_name"] == IT}
+    assert names == {"Бюджет обязательных затрат", "Бюджет развития"}
+
+
+***REMOVED*** ---------- шаблон наследует блоки от базового года ----------
+
+def test_шаблон_планового_года_берёт_бюджеты_ит_из_базового(client, loaded):
+    """В пустом плановом году у ИТ не было блоков — шаблон брал их из базы."""
+    plan_blocks = client.get("/api/operplan?year=2027").json()["blocks"]
+    assert not [b for b in plan_blocks if b["cfo_name"] == IT],         "в 2027 у ИТ блоков нет — ради этого случая правка и делалась"
+
+    content = client.get("/api/export/budget-template.xlsx?year=2027").content
+    ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
+    contract = _col_index(ws, "Договор")
+    it_blocks = [ws.cell(row=r, column=contract).value
+                 for r in range(4, ws.max_row + 1)
+                 if ws.cell(row=r, column=1).value == "ИТОГО"
+                 and ws.cell(row=r, column=2).value == IT]
+    assert sorted(it_blocks) == ["Бюджет обязательных затрат", "Бюджет развития"]
+
+
+def test_заготовка_основного_бюджета_не_вытесняет_названные(client, loaded):
+    """След тестового «+ расход» в плановом году — не третий бюджет дирекции."""
+    it_id = repo.ensure_cfo(IT)
+    budget_id = repo.ensure_budget(it_id, 2027, "Основной бюджет",
+                                   layer=operplan.LAYER)
+    repo.create_row(budget_id, {"article": "", "counterparty": "", "contract": "",
+                                "detail": "", "comment": "", "approver_comment": "",
+                                "plan_year": 0.0},
+                    months=[0.0] * 12, author="Тест", source="manual", row_no=1)
+
+    names = excel.template_budget_names(2027)[it_id]
+    assert names == ["Бюджет обязательных затрат", "Бюджет развития"]
+
+
+def test_дирекция_с_одним_бюджетом_шаблон_не_меняет(client, loaded):
+    hr_id = repo.ensure_cfo(HR)
+    assert excel.template_budget_names(2027)[hr_id] == ["Основной бюджет"]
