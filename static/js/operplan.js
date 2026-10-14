@@ -189,22 +189,15 @@
       k.outside_total
         ? k.outside_rows + " позиций в " + k.outside_cfo + " ЦФО · от бюджета " + k.base_year
         : "расхода без строки бюджета нет"));
-    renderSummary(k);
+    renderSummary();
   }
 
-  /* Резюме: одной строкой то же, что на плитках, — чтобы не считать в уме. */
-  function renderSummary(k) {
-    var parts = [
-      "план " + k.plan_year + ": " + U.fmt(k.plan_total) + " ₽ по " + k.plan_rows + " строкам",
-      "база " + k.base_year + ": " + U.fmt(k.base_total) + " ₽ по " + k.base_rows + " строкам",
-      k.fact_loaded
-        ? "факт " + k.base_year + ": " + U.fmt(k.base_fact) + " ₽"
-        : "факт " + k.base_year + " не загружен"
-    ];
-    if (state.missing && state.missing.count) {
-      parts.push("замечаний: " + state.missing.count);
-    }
-    document.getElementById("op-sub").textContent = parts.join(" · ");
+  /* Строка под плитками. Прежде она повторяла их словами — план, базу и факт,
+     те же числа второй раз. Оставлено только то, чего на плитках нет. */
+  function renderSummary() {
+    var count = state.missing && state.missing.count;
+    document.getElementById("op-sub").textContent =
+      count ? "замечаний: " + count : "";
   }
 
   /* ---------- какой год перед пользователем ---------- */
@@ -1071,7 +1064,7 @@
       : "все расходы " + data.base_year + " года учтены в плане " + data.plan_year;
     document.getElementById("op-add-all").hidden =
       !data.count || !sectionEditable(state.data) || !state.missingOpen;
-    if (state.data && state.data.kpi) renderSummary(state.data.kpi);
+    if (state.data && state.data.kpi) renderSummary();
 
     if (!data.count) {
       body.appendChild(U.empty(7, "Ничего не потеряно."));
