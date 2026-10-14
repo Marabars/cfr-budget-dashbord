@@ -105,8 +105,12 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
         plan_year: 2027, base_year: 2026, plan_total: total, base_total: 0,
         base_ratio: 0, plan_ratio: 0, base_fact: 0, base_pct: 0,
         fact_loaded: false, plan_rows: rows.length, base_rows: 0,
+        // факт без строки бюджета: четвёртая плитка
+        outside_total: 0, outside_rows: 0, outside_cfo: 0, outside_pct: 0,
+        ...(opts.kpi || {}),
       },
       totals: { plan_year: total, months: Array(MONTHS).fill(0), rows_count: rows.length },
+      outside: opts.outside || [],
       blocks: rows.length ? [{
         budget_id: year === 2027 ? 1 : 2,
         budget_name: "Основной бюджет", cfo_id: 1, cfo_name: IT,
@@ -147,6 +151,26 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
     download: (name, cfoId, params) => {
       calls.push({ kind: "download", name, params });
       return Promise.resolve();
+    },
+    previewImport: (files, year, kind, cfoIds) => {
+      calls.push({ kind: "preview", year, importKind: kind, cfoIds,
+                   names: files.map((f) => f.name) });
+      return Promise.resolve(opts.preview || {
+        year,
+        files: [{ filename: "план-факт.xlsx", format: "planfact", cfo: [IT],
+                  matched: 8, total: 3290797.95, unlinked: 0, out_of_budget: 0,
+                  foreign: 0, errors: 0 }],
+        cfo: [{ id: 1, name: IT, before: 0, last_file: "", last_at: "" }],
+        matched: 8, total: 3290797.95, unlinked: 0, unlinked_total: 0,
+        out_of_budget: 0, out_of_budget_total: 0,
+        foreign: 0, unknown_cfo: [], errors: [], errors_count: 0,
+      });
+    },
+    importBudget: (files, year, kind, cfoIds) => {
+      calls.push({ kind: "import", year, importKind: kind, cfoIds,
+                   names: files.map((f) => f.name) });
+      return Promise.resolve({ rows: 8, unmatched: 0, out_of_budget: 0, foreign: 0,
+                               files: files.map((f) => ({ filename: f.name })), failed: [] });
     },
   };
 
@@ -880,5 +904,210 @@ describe("вкладка «Бюджет»: факт", () => {
     assert.equal(downloads[0].params.year, 2026,
       "плановый год фактом не наполняется — выгружается базовый");
     assert.equal(t.window.location.href, before, "страница никуда не уходит");
+  });
+});
+
+/* Расход под строкой бюджета и то, что потрачено мимо плана. Загрузка факта
+   план не меняет (решение 14.10.2026), поэтому непривязанное показывается
+   плиткой и списком, а не новыми строками. */
+describe("вкладка «Бюджет»: расходы и вне бюджета", () => {
+  const SPENT = {
+    ...FILLED, id: 30, plan_year: 1000000,
+    spends: [
+      { counterparty: "Альфа ООО", contract: "Договор №б/н", detail: "курьер",
+        months: [450000, ...Array(MONTHS - 1).fill(0)], total: 450000 },
+      { counterparty: "Бета ИП", contract: "Договор №04-4333", detail: "",
+        months: [0, 85910, ...Array(MONTHS - 2).fill(0)], total: 85910 },
+    ],
+  };
+
+  it("строка со расходами даёт кнопку раскрытия, без них — нет", async () => {
+    const t = await mount([{ id: 1, name: IT }], [SPENT]);
+    const toggle = t.$('tr[data-id="30"] .no-cell button[title^="Расходы"]');
+    assert.ok(toggle, "у строки с расходами есть кнопка раскрытия");
+    assert.equal(t.$('tr[data-id="10"] .no-cell button[title^="Расходы"]'), null,
+      "у строки без расходов кнопки быть не должно");
+    assert.equal(t.$$("tr.spend-row").length, 0, "до клика расходы свёрнуты");
+  });
+
+  it("раскрывает расходы контрагентами с суммами по месяцам", async () => {
+    const t = await mount([{ id: 1, name: IT }], [SPENT]);
+    t.click(t.$('tr[data-id="30"] .no-cell button[title^="Расходы"]'));
+    await settle(t.window);
+
+    const rows = t.$$("tr.spend-row");
+    assert.equal(rows.length, 2, "показаны оба контрагента");
+    // порядок колонок: № · статья · классификатор · контрагент · договор · детализация
+    const names = rows.map((tr) => tr.children[3].textContent);
+    assert.deepEqual(names, ["Альфа ООО", "Бета ИП"]);
+    // последняя колонка — итог расхода, перед ней двенадцать месяцев
+    const first = rows[0].children;
+    assert.equal(first[first.length - 1].textContent, "450 000");
+    assert.equal(first[first.length - 13].textContent, "450 000", "январь");
+    assert.equal(first[first.length - 12].textContent, "—", "февраль пуст");
+  });
+
+  it("повторный клик сворачивает расходы обратно", async () => {
+    const t = await mount([{ id: 1, name: IT }], [SPENT]);
+    const toggle = () => t.$('tr[data-id="30"] .no-cell button[title^="Расходы"]');
+    t.click(toggle());
+    await settle(t.window);
+    assert.equal(t.$$("tr.spend-row").length, 2);
+    t.click(toggle());
+    await settle(t.window);
+    assert.equal(t.$$("tr.spend-row").length, 0);
+  });
+
+  it("плитка «Вне бюджета» показывает сумму и число дирекций", async () => {
+    const t = await mount([{ id: 1, name: IT }], [], {
+      kpi: { outside_total: 6146625, outside_rows: 1, outside_cfo: 1, outside_pct: 0.02 },
+    });
+    const tiles = t.$$("***REMOVED***op-kpis .kpi");
+    assert.equal(tiles.length, 4, "плиток стало четыре");
+    const outside = tiles[3];
+    assert.match(outside.querySelector(".lbl").textContent, /Вне бюджета 2026/);
+    // у плитки со шкалой подпись лежит под ней, в .batt-note
+    assert.match(outside.querySelector(".batt-note").textContent, /1 позиций в 1 ЦФО/);
+    assert.ok(outside.classList.contains("k-crit"), "ненулевой перерасход подсвечен");
+  });
+
+  it("без перерасхода плитка не кричит", async () => {
+    const t = await mount([{ id: 1, name: IT }]);
+    const outside = t.$$("***REMOVED***op-kpis .kpi")[3];
+    assert.equal(outside.classList.contains("k-crit"), false);
+    assert.match(outside.querySelector(".sub").textContent, /расхода без строки бюджета нет/);
+  });
+});
+
+/* Загрузка факта: галочки дирекций, пачка файлов и предпросмотр. Файл дирекции
+   внешне правдоподобен в любом случае — промах виден только числами. */
+describe("вкладка «Бюджет»: предпросмотр загрузки", () => {
+  const pickFact = (t) => {
+    const radio = t.$('input[name="op-imp-kind"][value="fact"]');
+    radio.checked = true;
+    t.fire(radio, "change");
+  };
+  const putFiles = (t, names) => {
+    // диалог выбора в jsdom не открыть, подкладываем список напрямую
+    Object.defineProperty(t.$("***REMOVED***op-import-file"), "files",
+      { value: names.map((name) => ({ name })), configurable: true });
+  };
+  const boxes = (t) => t.$$("***REMOVED***op-import-cfo input[type=checkbox]");
+
+  it("галочки дирекций показываются только у факта", async () => {
+    const t = await mount();
+    assert.equal(t.$("***REMOVED***op-import-cfo-wrap").hidden, true, "у бюджета выбора нет");
+    pickFact(t);
+    assert.equal(t.$("***REMOVED***op-import-cfo-wrap").hidden, false);
+    const names = t.$$("***REMOVED***op-import-cfo label span").map((n) => n.textContent);
+    assert.deepEqual(names, [IT, HR], "перечислены все доступные дирекции");
+    assert.ok(boxes(t).every((b) => !b.checked), "по умолчанию не отмечено ничего");
+    assert.match(t.$("***REMOVED***op-cfo-hint").textContent, /круг возьмётся из файлов/);
+  });
+
+  it("«все» и «ни одной» переключают отметки разом", async () => {
+    const t = await mount();
+    pickFact(t);
+    t.click(t.$("***REMOVED***op-cfo-all"));
+    assert.ok(boxes(t).every((b) => b.checked));
+    assert.match(t.$("***REMOVED***op-cfo-hint").textContent, /отмечено 2/);
+    t.click(t.$("***REMOVED***op-cfo-none"));
+    assert.ok(boxes(t).every((b) => !b.checked));
+  });
+
+  it("проверка уходит на сервер с отмеченными дирекциями и не пишет", async () => {
+    const t = await mount();
+    pickFact(t);
+    boxes(t)[1].checked = true;          // только вторая дирекция
+    putFiles(t, ["ИТ.xlsx", "персонал.xlsx"]);
+
+    t.click(t.$("***REMOVED***op-import-check"));
+    await settle(t.window);
+
+    const previews = t.calls.filter((c) => c.kind === "preview");
+    assert.equal(previews.length, 1);
+    /* Array.from обязателен: массив собран в realm'е jsdom, и
+       deepStrictEqual разошёлся бы на прототипах, а не на содержимом. */
+    assert.deepEqual(Array.from(previews[0].cfoIds), [2],
+      "отмеченная дирекция уходит на сервер");
+    assert.deepEqual(Array.from(previews[0].names), ["ИТ.xlsx", "персонал.xlsx"],
+      "оба файла уходят за один раз");
+    assert.equal(previews[0].year, 2026, "факт грузится за базовый год");
+    assert.equal(t.calls.filter((c) => c.kind === "import").length, 0,
+      "проверка ничего не записывает");
+    assert.equal(t.$("***REMOVED***op-import-preview").hidden, false);
+  });
+
+  it("загрузка отправляет пачку файлов и отметки", async () => {
+    const t = await mount();
+    pickFact(t);
+    t.click(t.$("***REMOVED***op-cfo-all"));
+    putFiles(t, ["а.xlsx", "б.xlsx", "в.xlsx"]);
+    t.click(t.$("***REMOVED***op-import-run"));
+    await settle(t.window);
+
+    const imports = t.calls.filter((c) => c.kind === "import");
+    assert.equal(imports.length, 1);
+    assert.equal(imports[0].names.length, 3);
+    assert.deepEqual(Array.from(imports[0].cfoIds), [1, 2]);
+  });
+
+  it("бюджет пачкой не отправляет", async () => {
+    const t = await mount();
+    putFiles(t, ["а.xlsx", "б.xlsx"]);        // вид загрузки остался «бюджет»
+    t.click(t.$("***REMOVED***op-import-run"));
+    await settle(t.window);
+    assert.equal(t.calls.filter((c) => c.kind === "import").length, 0);
+    assert.match(t.$("***REMOVED***op-import-note").textContent, /по одному файлу/);
+  });
+
+  it("предпросмотр называет числа, по которым видно промах", async () => {
+    const t = await mount([{ id: 1, name: IT }], [], {
+      preview: {
+        year: 2026,
+        files: [{ filename: "ИТ.xlsx", format: "planfact", cfo: [IT, HR],
+                  matched: 6, total: 3290797.95, unlinked: 12, out_of_budget: 1,
+                  foreign: 0, errors: 0 }],
+        cfo: [
+          // ИТ факт уже грузили — и другим файлом, чем этот
+          { id: 1, name: IT, before: 42351447.02,
+            last_file: "Стратегия на 14.10.xlsx", last_at: "2026-10-14 10:36" },
+          { id: 2, name: HR, before: 0, last_file: "", last_at: "" },
+        ],
+        matched: 6, total: 3290797.95, unlinked: 12, unlinked_total: 8150000,
+        out_of_budget: 1, out_of_budget_total: 6146625,
+        foreign: 0, unknown_cfo: ["Неведомая дирекция"], errors: [], errors_count: 0,
+      },
+    });
+    pickFact(t);
+    putFiles(t, ["ИТ.xlsx"]);
+    t.click(t.$("***REMOVED***op-import-check"));
+    await settle(t.window);
+
+    const text = t.$("***REMOVED***op-import-preview").textContent;
+    assert.match(text, /ИТ\.xlsx/, "файл назван поимённо");
+    /* Замена показывается по каждой дирекции отдельно и с датой прошлой
+       загрузки: иначе старый общий файл молча затирает свежую отдельную. */
+    assert.match(text, /заменится целиком/, "прежний факт предупреждает о замене");
+    assert.match(text, /Стратегия на 14\.10\.xlsx/, "назван файл прошлой загрузки");
+    assert.match(text, /2026-10-14/, "названа дата прошлой загрузки");
+    assert.match(text, /факта ещё нет/, "у второй дирекции заменять нечего");
+    assert.match(text, /план не изменится/, "непривязанное плана не трогает");
+    assert.match(text, /Неведомая дирекция/, "ЦФО не из справочника назван");
+  });
+
+  it("смена отметок убирает устаревший предпросмотр", async () => {
+    const t = await mount();
+    pickFact(t);
+    putFiles(t, ["план-факт.xlsx"]);
+    t.click(t.$("***REMOVED***op-import-check"));
+    await settle(t.window);
+    assert.equal(t.$("***REMOVED***op-import-preview").hidden, false);
+
+    const box = boxes(t)[0];
+    box.checked = true;
+    t.fire(box, "change");
+    assert.equal(t.$("***REMOVED***op-import-preview").hidden, true,
+      "предпросмотр относился к прежнему кругу");
   });
 });

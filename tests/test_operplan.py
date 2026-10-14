@@ -419,13 +419,13 @@ def test_прошлый_год_по_прежнему_заливается_цел
     assert client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "plan"},
-        files={"file": ("бюджеты.xlsx", make_budgets_sheet(),
+        files={"files": ("бюджеты.xlsx", make_budgets_sheet(),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     ).status_code == 200
     assert client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "fact"},
-        files={"file": ("факт.xlsx", make_fact_sheet(),
+        files={"files": ("факт.xlsx", make_fact_sheet(),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     ).status_code == 200
 
@@ -750,14 +750,23 @@ def test_загрузка_факта_ложится_на_строки_плана
     assert kpi["base_fact"] == pytest.approx(97_000)
 
 
-def test_факт_без_строки_в_плане_заводит_её_и_не_задваивает(client, loaded):
+def test_факт_без_строки_в_плане_не_заводит_её(client, loaded):
+    """Загрузка факта плана не меняет (решение пользователя 14.10.2026).
+
+    Прежде она заводила недостающую строку с нулевым бюджетом, и файл дирекции
+    добавил бы Административному отделу двенадцать строк к восьми. Теперь такой
+    расход виден списком непривязанного и в плитке «Вне бюджета», а план
+    остаётся каким был.
+    """
+    before = len(repo.list_rows(2026, layer=operplan.LAYER))
     first = operplan.import_fact(make_fact_sheet(extra=True), "факт.xlsx", 2026, "Тест")
-    assert first["created"] == 1
-    rows_after_first = len(repo.list_rows(2026, layer=operplan.LAYER))
+    assert first["created"] == 0
+    assert first["unlinked"] == 1
+    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == before
 
     second = operplan.import_fact(make_fact_sheet(extra=True), "факт.xlsx", 2026, "Тест")
-    assert second["created"] == 0 and second["matched"] == 3
-    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == rows_after_first
+    assert second["matched"] == first["matched"] and second["unlinked"] == 1
+    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == before
 
 
 def test_повтор_факта_переносит_суммы_факта_а_не_бюджета(client, loaded):
@@ -795,7 +804,7 @@ def test_руководитель_заливает_бюджет_не_стира�
     response = client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "plan"},
-        files={"file": ("бюджет.xlsx", make_budgets_sheet(),
+        files={"files": ("бюджет.xlsx", make_budgets_sheet(),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         headers={"X-User": f"cfo:{hr_id}"},
     )
@@ -823,9 +832,12 @@ def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блока�
     blocks = [ws.cell(row=r, column=2).value for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value == "ИТОГО"]
     assert IT in blocks and HR in blocks
+    ***REMOVED*** Пустыми должны быть строки под блоками: заголовки свой текст несут —
+    ***REMOVED*** «ИТОГО» у блока ЦФО и подпись у блока «ВНЕ БЮДЖЕТА».
     comment = _col_index(ws, "Комментарий")
     assert not any(ws.cell(row=r, column=comment).value
-                   for r in range(4, ws.max_row + 1))
+                   for r in range(4, ws.max_row + 1)
+                   if not ws.cell(row=r, column=1).value)
 
 
 def test_в_шаблоне_нет_подсказок_кроме_примечания_к_итого(client, loaded):
@@ -963,7 +975,7 @@ def test_пустой_договор_в_шаблоне_читается_как_�
     response = client.post(
         "/api/operplan/import",
         data={"year": "2027", "kind": "plan"},
-        files={"file": ("шаблон.xlsx", buffer.getvalue(),
+        files={"files": ("шаблон.xlsx", buffer.getvalue(),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
         headers={"X-User": f"cfo:{hr_id}"},
     )
@@ -1006,7 +1018,7 @@ def test_заполненный_шаблон_загружается_обратн
     response = client.post(
         "/api/operplan/import",
         data={"year": "2027", "kind": "plan"},
-        files={"file": ("шаблон.xlsx", buffer.getvalue(),
+        files={"files": ("шаблон.xlsx", buffer.getvalue(),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     assert response.status_code == 200
@@ -1021,8 +1033,13 @@ def test_заполненный_шаблон_загружается_обратн
 
 ***REMOVED*** ---------- область замены при загрузке ----------
 
-def make_one_cfo_sheet(cfo: str, article: str, amount: float) -> bytes:
-    """Лист «Бюджеты ЦФО» с одной дирекцией и одной строкой."""
+def make_one_cfo_sheet(cfo: str, article: str, amount: float,
+                       comment: str | None = None) -> bytes:
+    """Лист «Бюджеты ЦФО» с одной дирекцией и одной строкой.
+
+    `comment` нужен загрузке факта: она плана не заводит, и строка ложится
+    только на существующую — а строки ДУП различаются как раз комментарием.
+    """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Бюджеты ЦФО"
@@ -1035,6 +1052,8 @@ def make_one_cfo_sheet(cfo: str, article: str, amount: float) -> bytes:
     ws.cell(row=4, column=7, value=amount)
     ws.cell(row=5, column=1, value=article)
     ws.cell(row=5, column=2, value=cfo)
+    if comment:
+        ws.cell(row=5, column=6, value=comment)
     ws.cell(row=5, column=7, value=amount)
     ws.cell(row=5, column=8, value=amount)
     buffer = io.BytesIO()
@@ -1051,7 +1070,7 @@ def test_финотдел_заливая_один_цфо_не_стирает_о�
     result = client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "plan"},
-        files={"file": ("дуп.xlsx", make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
+        files={"files": ("дуп.xlsx", make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     ).json()
     assert result["replaced_cfo"] == 1
@@ -1070,7 +1089,7 @@ def test_пустой_файл_не_стирает_план(client, loaded):
     result = client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "plan"},
-        files={"file": ("шаблон.xlsx", template,
+        files={"files": ("шаблон.xlsx", template,
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     ).json()
     assert result["rows"] == 0 and result["removed"] == 0
@@ -1092,7 +1111,7 @@ def test_факт_по_одному_цфо_не_гасит_факт_осталь
     before = fact_by_cfo()
     assert IT in before and HR in before
 
-    operplan.import_fact(make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
+    operplan.import_fact(make_one_cfo_sheet(HR, "4109_Обучение", 60_000, "Английский"),
                          "факт-дуп.xlsx", 2026, "Тест", cfo_ids=[repo.ensure_cfo(HR)])
     after = fact_by_cfo()
     assert after[IT] == pytest.approx(before[IT]), "факт ИТ трогать нельзя"
@@ -1103,7 +1122,7 @@ def test_повторная_загрузка_факта_убирает_сумм�
     """Строка выпала из файла факта — прежний факт на ней остаться не должен."""
     operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
     hr_id = repo.ensure_cfo(HR)
-    operplan.import_fact(make_one_cfo_sheet(HR, "4109_Обучение", 60_000),
+    operplan.import_fact(make_one_cfo_sheet(HR, "4109_Обучение", 60_000, "Английский"),
                          "факт-дуп.xlsx", 2026, "Тест", cfo_ids=[hr_id])
 
     months = repo.row_fact_months(2026, layer=operplan.LAYER)
@@ -1663,7 +1682,7 @@ def test_факт_загружает_только_финотдел(client, loade
     denied = client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "fact"},
-        files={"file": ("факт.xlsx", make_fact_sheet(), XLSX_MIME)},
+        files={"files": ("факт.xlsx", make_fact_sheet(), XLSX_MIME)},
         headers={"X-User": f"cfo:{hr_id}"},
     )
     assert denied.status_code == 403
@@ -1672,14 +1691,14 @@ def test_факт_загружает_только_финотдел(client, loade
     assert client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "plan"},
-        files={"file": ("бюджет.xlsx", make_budgets_sheet(), XLSX_MIME)},
+        files={"files": ("бюджет.xlsx", make_budgets_sheet(), XLSX_MIME)},
         headers={"X-User": f"cfo:{hr_id}"},
     ).status_code == 200
 
     allowed = client.post(
         "/api/operplan/import",
         data={"year": "2026", "kind": "fact"},
-        files={"file": ("факт.xlsx", make_fact_sheet(), XLSX_MIME)},
+        files={"files": ("факт.xlsx", make_fact_sheet(), XLSX_MIME)},
     )
     assert allowed.status_code == 200
     assert client.get("/api/operplan").json()["kpi"]["fact_loaded"] is True

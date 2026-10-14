@@ -175,20 +175,44 @@ def export_operplan(year: int | None = None, u: auth.User = Depends(user)) -> Re
     return _xlsx(data, f"Оперплан ЦФО {year or cfg['year']}.xlsx")
 
 
+def _scope(cfo: str | None, u: auth.User) -> list[int] | None:
+    """Круг дирекций выгрузки: отмеченные галочками, пересечённые с доступными.
+
+    `cfo` — список id через запятую, как его шлёт форма. Пустой параметр значит
+    «все доступные»: так выгрузка работала до появления галочек. Чужой id
+    молча не отдаётся — пересечение, а не ошибка: круг и так режет сервер.
+    """
+    allowed = u.visible_cfo_ids()
+    if not cfo:
+        return allowed
+    try:
+        chosen = {int(part) for part in cfo.split(",") if part.strip()}
+    except ValueError as exc:
+        raise HTTPException(422, "Список дирекций — это id через запятую") from exc
+    if not chosen:
+        return allowed
+    if allowed is None:
+        return sorted(chosen)
+    return sorted(chosen & set(allowed))
+
+
 @router.get("/export/budget.xlsx")
-def export_budget(year: int | None = None, u: auth.User = Depends(user)) -> Response:
+def export_budget(year: int | None = None, cfo: str | None = None,
+                  u: auth.User = Depends(user)) -> Response:
     """Бюджет слоя планирования листом «Бюджеты ЦФО» — тем же, каким его заливали.
 
     Руководителю выгружается только его дирекция. Файл можно поправить в Excel
-    и вернуть обратно кнопкой «Загрузить из Excel».
+    и вернуть обратно кнопкой «Загрузить из Excel». `cfo` сужает выгрузку до
+    отмеченных галочками дирекций.
     """
     target = int(year or operplan.plan_year())
-    data = excel.budget_sheet(target, u.visible_cfo_ids())
+    data = excel.budget_sheet(target, _scope(cfo, u))
     return _xlsx(data, f"Бюджеты ЦФО {target}.xlsx")
 
 
 @router.get("/export/budget-fact.xlsx")
-def export_budget_fact(year: int | None = None, u: auth.User = Depends(user)) -> Response:
+def export_budget_fact(year: int | None = None, cfo: str | None = None,
+                       u: auth.User = Depends(user)) -> Response:
     """Факт года листом «Бюджеты ЦФО» — выгрузка доступна и руководителю ЦФО.
 
     Смотреть свой факт вправе каждый, а загружать его — только финансовый
@@ -196,19 +220,21 @@ def export_budget_fact(year: int | None = None, u: auth.User = Depends(user)) ->
     год: план будущего года фактом ещё не наполняется.
     """
     target = int(year or operplan.base_year())
-    data = excel.fact_sheet(target, u.visible_cfo_ids())
+    data = excel.fact_sheet(target, _scope(cfo, u))
     return _xlsx(data, f"Факт ЦФО {target}.xlsx")
 
 
 @router.get("/export/budget-template.xlsx")
-def export_budget_template(year: int | None = None, u: auth.User = Depends(user)) -> Response:
+def export_budget_template(year: int | None = None, cfo: str | None = None,
+                           u: auth.User = Depends(user)) -> Response:
     """Пустой лист «Бюджеты ЦФО» под заполнение руками.
 
     Тот же вид, что у выгрузки плана, поэтому заполненный шаблон принимает та же
-    загрузка. Руководителю в шаблон попадают только его дирекции.
+    загрузка. Руководителю в шаблон попадают только его дирекции, а галочками
+    круг сужается дальше — чтобы не рассылать дирекции чужие блоки.
     """
     target = int(year or operplan.plan_year())
-    data = excel.budget_template(target, u.visible_cfo_ids())
+    data = excel.budget_template(target, _scope(cfo, u))
     return _xlsx(data, f"Бюджеты ЦФО {target} — шаблон.xlsx")
 
 

@@ -308,8 +308,10 @@
             ИТОГО · Январь…Декабрь</b>.
             <b>Бюджет</b> заменяет строки плана только по тем ЦФО, чьи строки есть
             в файле — остальные дирекции загрузка не затрагивает.
-            <span id="op-imp-fact-note"><b>Факт</b> ложится
-            на строки прошлого года и план не трогает.</span>
+            <span id="op-imp-fact-note"><b>Факт</b> ложится на строки прошлого года
+            и <b>плана не меняет</b>: ни строк, ни бюджетов не заводит. Принимается
+            и файл дирекции «План-факт» — лист «Оперплан ЦФО» с группировкой строк
+            и листом «ФАКТ».</span>
           </div>
           <div class="row-btns">
             <label class="f-check" id="op-imp-plan"><input type="radio" name="op-imp-kind" value="plan" checked>
@@ -317,11 +319,26 @@
             <label class="f-check" id="op-imp-fact"><input type="radio" name="op-imp-kind" value="fact">
               факт года</label>
             <input type="file" id="op-import-file" accept=".xlsx,.xlsm" class="f-in"
-                   style="max-width:320px">
+                   multiple style="max-width:320px">
+            <button class="btn sm" id="op-import-check">Проверить</button>
             <button class="btn primary sm" id="op-import-run">Загрузить</button>
             <button class="btn sm" id="op-import-cancel">Отмена</button>
             <span class="err" id="op-import-note"></span>
           </div>
+          <!-- Галочками отмечают дирекции, которые грузят. Файлы приходят по
+               одному на дирекцию, поэтому их выбирают пачкой, а отметки режут
+               круг: что не отмечено, то и не тронется. -->
+          <div id="op-import-cfo-wrap" hidden style="margin-top:10px">
+            <div class="sub" style="margin-bottom:6px">
+              Дирекции: <a href="***REMOVED***" id="op-cfo-all">все</a> ·
+              <a href="***REMOVED***" id="op-cfo-none">ни одной</a>
+              <span class="dim" id="op-cfo-hint"></span>
+            </div>
+            <div id="op-import-cfo" class="cfo-picker"></div>
+          </div>
+          <!-- Что сделает загрузка — до того, как она это сделает. Разбор здесь
+               тот же, что и при записи, поэтому показанное и записанное сходятся. -->
+          <div id="op-import-preview" hidden style="margin-top:10px"></div>
         </div>
       </div>
     </div>

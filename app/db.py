@@ -95,6 +95,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE budget_row ADD COLUMN classifier TEXT NOT NULL DEFAULT 'МРГ'"
         )
 
+    ***REMOVED*** слой платежа: весь прежний факт — исполнение, слоя планирования в нём
+    ***REMOVED*** не было, поэтому умолчание 'main' верно для всех существующих записей
+    if _has_table(conn, "fact") and "layer" not in _columns(conn, "fact"):
+        conn.execute("ALTER TABLE fact ADD COLUMN layer TEXT NOT NULL DEFAULT 'main'")
+        conn.execute("CREATE INDEX IF NOT EXISTS ix_fact_layer ON fact(layer, year)")
+
     if "layer" not in _columns(conn, "budget"):
         conn.executescript("""
             CREATE TABLE budget_new (

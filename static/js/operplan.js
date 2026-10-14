@@ -12,6 +12,7 @@
     collapsed: {},       // budget_id -> свёрнут ли блок
     sections: {},        // год -> ответ /api/operplan по этому году
     yearOpen: {},        // год -> развёрнут ли раздел года в таблице
+    spendOpen: {},       // id строки -> раскрыты ли расходы по контрагентам
     missingOpen: false,  // блок замечаний свёрнут, пока его не раскроют
     filters: null,
     fresh: {},           // id строк, заведённых в этой сессии: подсвечены и правятся списками
@@ -178,6 +179,16 @@
       k.fact_loaded ? k.base_pct : null,
       k.fact_loaded ? "освоено от бюджета " + k.base_year
         : "факт за " + k.base_year + " год ещё не загружен"));
+    /* Четвёртая плитка — потраченное мимо плана: и объявленное дирекцией в
+       блоке «ВНЕ БЮДЖЕТА», и то, чему не нашлось строки. При фильтре по
+       дирекции показывает её одну, без фильтра — сумму по всем доступным. */
+    host.appendChild(kpiTile(
+      "Вне бюджета " + k.base_year, U.fmtShort(k.outside_total) + " ₽",
+      k.outside_total ? "k-crit" : "",
+      k.outside_total ? k.outside_pct : null,
+      k.outside_total
+        ? k.outside_rows + " позиций в " + k.outside_cfo + " ЦФО · от бюджета " + k.base_year
+        : "расхода без строки бюджета нет"));
     renderSummary(k);
   }
 
@@ -309,6 +320,7 @@
        замком, — тогда позиция и номер совпадают. */
     tr.appendChild(U.el("td", {}, [U.el("div", { class: "no-cell" }, [
       U.el("span", { text: position || "•" }),
+      (row.spends && row.spends.length) ? spendToggle(row) : null,
       editable ? del : null
     ])]));
 
@@ -334,6 +346,46 @@
     tr.appendChild(U.el("td", { class: "num dim",
       text: row.base_plan_year == null ? "—" : U.fmt(row.base_plan_year) }));
     return tr;
+  }
+
+  /* ---------- расходы под строкой ---------- */
+
+  /* Из чего сложился факт строки: контрагент, договор и те же двенадцать
+     месяцев. Отдельные платежи сюда не разворачиваются — у дирекции вроде
+     Сервисного обслуживания их сотни; в файле дирекции расход тоже сгруппирован
+     по контрагенту. Строки раскрываются по клику на значок в колонке №. */
+  function spendNode(spend, parentPosition) {
+    var cells = [U.el("td", {}, [U.el("div", { class: "no-cell" }, [
+      U.el("span", { class: "dim", text: "↳ " + (parentPosition || "") })])])];
+    FIELDS.forEach(function (f) {
+      var value = "";
+      if (f.key === "counterparty") value = spend.counterparty || "—";
+      else if (f.key === "contract") value = spend.contract || "—";
+      else if (f.key === "detail_text") value = spend.detail || "";
+      cells.push(U.el("td", { class: "wrap dim", text: value }));
+    });
+    cells.push(U.el("td", { class: "num dim", text: "—" }));
+    for (var i = 0; i < 12; i++) {
+      var amount = spend.months[i] || 0;
+      cells.push(U.el("td", { class: "num" + (amount ? "" : " dim"),
+        text: amount ? U.fmt(amount) : "—" }));
+    }
+    cells.push(U.el("td", { class: "num dim", text: U.fmt(spend.total) }));
+    return U.el("tr", { class: "spend-row" }, cells);
+  }
+
+  function spendToggle(row) {
+    var open = !!state.spendOpen[row.id];
+    var btn = U.el("button", {
+      class: "mini", title: "Расходы по контрагентам: " + row.spends.length,
+      text: open ? "−" : "+"
+    });
+    btn.onclick = function (event) {
+      event.stopPropagation();
+      state.spendOpen[row.id] = !open;
+      render();
+    };
+    return btn;
   }
 
   /* ---------- подсказки при правке ячейки ---------- */
@@ -774,6 +826,12 @@
           var node = rowNode(row, block.cfo_name, editable, position[row.id]);
           if (year !== state.data.plan_year_no) node.classList.add("y-past");
           nodes.push(node);
+          /* В режиме правки расходы прячем: они не редактируются и мешают
+             попадать по ячейкам — так же сделано в карточке ЦФО. */
+          if (editable || !state.spendOpen[row.id]) return;
+          (row.spends || []).forEach(function (spend) {
+            nodes.push(spendNode(spend, position[row.id]));
+          });
         });
       });
       // ИТОГО года идёт сразу под его заголовком, до блоков ЦФО
@@ -991,6 +1049,7 @@
     if (!fin) {
       document.querySelector('input[name="op-imp-kind"][value="plan"]').checked = true;
     }
+    renderImportCfo();
 
     /* Выгрузка факта — за базовый год, он же стоит в подписи кнопки. */
     var factBtn = document.getElementById("op-export-fact");
@@ -1119,32 +1178,229 @@
       .catch(function (e) { U.toast(e.message, "error"); });
   }
 
-  function runImport() {
-    var note = document.getElementById("op-import-note");
-    var input = document.getElementById("op-import-file");
-    if (!input.files || !input.files.length) {
-      note.style.color = "var(--critical)";
-      note.textContent = "Выберите файл .xlsx";
-      return;
-    }
+  /* Выбор дирекций галочками. Файлы приходят по одному на дирекцию, и явная
+     отметка защищает от промаха: что не отмечено, то и не тронется — строки
+     чужих ЦФО в файлах будут пропущены, а их факт останется как был.
+     Ни одной галочки — прежнее поведение: круг берётся из самих файлов. */
+  function importCfoList() {
+    var seen = {};
+    var out = [];
+    (state.cfoList || []).forEach(function (c) {
+      if (seen[c.id]) return;
+      seen[c.id] = true;
+      out.push({ id: c.id, name: c.name });
+    });
+    return out;
+  }
+
+  function checkedCfo() {
+    return Array.prototype.filter
+      .call(document.querySelectorAll("***REMOVED***op-import-cfo input[type=checkbox]"),
+        function (box) { return box.checked; })
+      .map(function (box) { return Number(box.value); });
+  }
+
+  function renderImportCfoHint() {
+    var n = checkedCfo().length;
+    document.getElementById("op-cfo-hint").textContent = n
+      ? " — отмечено " + n + ", остальное в файлах будет пропущено"
+      : " — ни одной: круг возьмётся из файлов";
+  }
+
+  function renderImportCfo() {
+    var kind = document.querySelector('input[name="op-imp-kind"]:checked');
+    var isFact = !!kind && kind.value === "fact";
+    document.getElementById("op-import-cfo-wrap").hidden = !isFact;
+    if (!isFact) return;
+
+    var host = document.getElementById("op-import-cfo");
+    var was = {};
+    checkedCfo().forEach(function (id) { was[id] = true; });
+    U.clear(host);
+    importCfoList().forEach(function (c) {
+      var box = U.el("input", { type: "checkbox", value: String(c.id) });
+      box.checked = !!was[c.id];
+      box.onchange = function () {
+        // прежний предпросмотр относился к другому кругу — убираем
+        document.getElementById("op-import-preview").hidden = true;
+        renderImportCfoHint();
+      };
+      host.appendChild(U.el("label", {}, [box, U.el("span", { text: c.name })]));
+    });
+    renderImportCfoHint();
+  }
+
+  function setAllCfo(value) {
+    Array.prototype.forEach.call(
+      document.querySelectorAll("***REMOVED***op-import-cfo input[type=checkbox]"),
+      function (box) { box.checked = value; });
+    document.getElementById("op-import-preview").hidden = true;
+    renderImportCfoHint();
+  }
+
+  /* Что выбрано в форме: вид загрузки, дирекция и год. Год у факта всегда
+     базовый — фактом наполняется прошлый год, а не планируемый. */
+  function importParams() {
     var kind = "plan";
     Array.prototype.forEach.call(
       document.querySelectorAll('input[name="op-imp-kind"]'), function (radio) {
         if (radio.checked) kind = radio.value;
       });
+    return {
+      kind: kind,
+      cfoIds: kind === "fact" ? checkedCfo() : [],
+      year: kind === "fact" ? state.data.base_year_no : state.data.plan_year_no
+    };
+  }
+
+  function importFiles(note) {
+    var input = document.getElementById("op-import-file");
+    if (input.files && input.files.length) {
+      return Array.prototype.slice.call(input.files);
+    }
+    note.style.color = "var(--critical)";
+    note.textContent = "Выберите файл .xlsx";
+    return null;
+  }
+
+  function money(value) { return U.fmt(value) + " ₽"; }
+
+  /* Предпросмотр: сколько строк сойдётся, сколько факта ляжет мимо плана и что
+     станет с прежним фактом. Нужен потому, что загрузка заменяет факт дирекции
+     целиком, и промах виден только числами — файл дирекции внешне правдоподобен
+     в любом случае. */
+  function previewTable(lines) {
+    var table = U.el("table", { class: "mini-table" });
+    lines.forEach(function (line) {
+      table.appendChild(U.el("tr", {}, [
+        U.el("td", { class: "dim", text: line[0] }),
+        U.el("td", { class: line[2] === "crit" ? "err" : (line[2] === "warn" ? "warn" : ""),
+          text: line[1] })
+      ]));
+    });
+    return table;
+  }
+
+  function renderPreview(p) {
+    var host = document.getElementById("op-import-preview");
+    U.clear(host);
+    host.hidden = false;
+
+    // по каждому файлу отдельно: какие дирекции в нём и сколько ляжет
+    var byFile = [];
+    (p.files || []).forEach(function (f) {
+      if (f.error) { byFile.push([f.filename, f.error, "crit"]); return; }
+      var what = (f.cfo && f.cfo.length ? f.cfo.join(", ") : "дирекции не распознаны");
+      byFile.push([f.filename,
+        what + " · " + f.matched + " строк на " + money(f.total) +
+        (f.unlinked ? " · без пары " + f.unlinked : "") +
+        (f.out_of_budget ? " · вне бюджета " + f.out_of_budget : ""),
+        (f.cfo && f.cfo.length) ? "" : "crit"]);
+    });
+    if (byFile.length) {
+      host.appendChild(U.el("div", { class: "sub", text: "Файлы" }));
+      host.appendChild(previewTable(byFile));
+    }
+
+    /* По каждой дирекции отдельно: её факт заменится целиком, а файл одной
+       дирекции может лежать внутри файла другой — бюджеты стратегии и
+       аналитики приходят в файле ИТ. Без даты прежней загрузки не видно,
+       что старый файл затирает более свежую отдельную. */
+    var lines = [];
+    if (!p.cfo.length) lines.push(["Дирекции", "не распознаны", "crit"]);
+    p.cfo.forEach(function (c) {
+      var was = c.before
+        ? "сейчас " + money(c.before) + ", заменится целиком"
+        : "факта ещё нет";
+      if (c.last_file) was += " · залит " + c.last_at + " из «" + c.last_file + "»";
+      lines.push([c.name, was, c.before ? "warn" : ""]);
+    });
+    if (lines.length) {
+      host.appendChild(U.el("div", { class: "sub", style: "margin-top:8px",
+        text: "Дирекции, чей факт заменится" }));
+      host.appendChild(previewTable(lines));
+    }
+
+    var totals = [["Ляжет на строки плана", p.matched + " · " + money(p.total), ""]];
+    if (p.unlinked) {
+      totals.push(["Без строки плана",
+        p.unlinked + " · " + money(p.unlinked_total) +
+        " — попадёт в «вне бюджета», план не изменится", "warn"]);
+    }
+    if (p.out_of_budget) {
+      totals.push(["Вне бюджета по файлам",
+        p.out_of_budget + " · " + money(p.out_of_budget_total), "warn"]);
+    }
+    if (p.foreign) {
+      totals.push(["Пропущено строк чужих дирекций", String(p.foreign), ""]);
+    }
+    if (p.unknown_cfo && p.unknown_cfo.length) {
+      totals.push(["ЦФО нет в справочнике", p.unknown_cfo.join(", "), "crit"]);
+    }
+    if (p.errors_count) {
+      totals.push(["Строк с ошибкой", p.errors_count + ": " +
+        (p.errors || []).slice(0, 3).map(function (e) {
+          return (e.filename ? e.filename + ", " : "") +
+            (e.excel_row ? "строка " + e.excel_row + " — " : "") + (e.problem || "");
+        }).join("; "), "crit"]);
+    }
+    host.appendChild(U.el("div", { class: "sub", style: "margin-top:8px", text: "Итого" }));
+    host.appendChild(previewTable(totals));
+  }
+
+  function runPreview() {
+    var note = document.getElementById("op-import-note");
+    var files = importFiles(note);
+    if (!files) return;
+    var p = importParams();
+    if (p.kind !== "fact") {
+      note.style.color = "var(--critical)";
+      note.textContent = "Проверка есть только у загрузки факта";
+      return;
+    }
     note.style.color = "";
-    note.textContent = "Загружаю…";
-    // факт грузится за базовый год, бюджет — за плановый
-    var year = kind === "fact" ? state.data.base_year_no : state.data.plan_year_no;
-    API.importBudget(input.files[0], year, kind)
+    note.textContent = "Проверяю " + files.length + " файл(ов)…";
+    API.previewImport(files, p.year, p.kind, p.cfoIds)
+      .then(function (result) { note.textContent = ""; renderPreview(result); })
+      .catch(function (e) {
+        document.getElementById("op-import-preview").hidden = true;
+        note.style.color = "var(--critical)";
+        note.textContent = e.message;
+      });
+  }
+
+  function runImport() {
+    var note = document.getElementById("op-import-note");
+    var files = importFiles(note);
+    if (!files) return;
+    var p = importParams();
+    if (p.kind === "plan" && files.length > 1) {
+      note.style.color = "var(--critical)";
+      note.textContent = "Бюджет загружается по одному файлу";
+      return;
+    }
+    note.style.color = "";
+    note.textContent = "Загружаю " + files.length + " файл(ов)…";
+    API.importBudget(files, p.year, p.kind, p.cfoIds)
       .then(function (result) {
         note.textContent = "";
-        input.value = "";
+        document.getElementById("op-import-file").value = "";
+        document.getElementById("op-import-preview").hidden = true;
         document.getElementById("op-import-form").hidden = true;
+        var failed = (result.failed || []).length;
         U.toast("Загружено строк: " + result.rows +
-          (result.unmatched ? ", заведено новых: " + result.unmatched : "") +
+          (result.files ? " из " + result.files.length + " файлов" : "") +
+          (result.unmatched ? ", без строки плана: " + result.unmatched : "") +
+          (result.out_of_budget ? ", вне бюджета: " + result.out_of_budget : "") +
           (result.removed ? ", заменено прежних: " + result.removed : "") +
-          (result.foreign ? ", пропущено чужих ЦФО: " + result.foreign : ""));
+          (result.foreign ? ", пропущено чужих ЦФО: " + result.foreign : ""),
+          failed ? "error" : undefined);
+        if (failed) {
+          // упавший файл называем поимённо: остальные уже залиты
+          U.toast("Не загрузились: " + result.failed.map(function (f) {
+            return f.filename + " — " + f.error;
+          }).join("; "), "error");
+        }
         reloadAll();
       })
       .catch(function (e) { note.style.color = "var(--critical)"; note.textContent = e.message; });
@@ -1242,8 +1498,28 @@
         form.hidden = !form.hidden;
       };
       document.getElementById("op-import-run").onclick = runImport;
+      document.getElementById("op-import-check").onclick = runPreview;
       document.getElementById("op-import-cancel").onclick = function () {
         document.getElementById("op-import-form").hidden = true;
+        document.getElementById("op-import-preview").hidden = true;
+      };
+      /* Смена вида загрузки убирает устаревший предпросмотр: он относился
+         к прежнему выбору и ввёл бы в заблуждение. */
+      Array.prototype.forEach.call(
+        document.querySelectorAll('input[name="op-imp-kind"]'), function (radio) {
+          radio.onchange = function () {
+            document.getElementById("op-import-preview").hidden = true;
+            renderImportCfo();
+          };
+        });
+      document.getElementById("op-cfo-all").onclick = function (e) {
+        e.preventDefault(); setAllCfo(true);
+      };
+      document.getElementById("op-cfo-none").onclick = function (e) {
+        e.preventDefault(); setAllCfo(false);
+      };
+      document.getElementById("op-import-file").onchange = function () {
+        document.getElementById("op-import-preview").hidden = true;
       };
       /* Галочка меняет наполнение списков в ячейках — перерисовываем таблицу. */
       document.getElementById("op-a-all").onchange = render;

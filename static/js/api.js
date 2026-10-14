@@ -39,6 +39,21 @@
     });
   }
 
+  /* Параметры загрузки собираются в одном месте: предпросмотр и запись должны
+     отправлять одно и то же, иначе показанное разойдётся с записанным.
+     Файлов может быть несколько — они приходят по одному на дирекцию,
+     и круг сужается отмеченными галочками `cfo_ids`. */
+  function importForm(files, year, kind, cfoIds) {
+    var form = new FormData();
+    (Array.isArray(files) ? files : [files]).forEach(function (file) {
+      form.append("files", file);
+    });
+    form.append("year", String(year));
+    form.append("kind", kind || "plan");
+    (cfoIds || []).forEach(function (id) { form.append("cfo_ids", String(id)); });
+    return form;
+  }
+
   window.API = {
     setRole: function (value) { role = value || ""; },
     getRole: function () { return role; },
@@ -151,12 +166,14 @@
       return request("POST", "/api/operplan/rows?year=" + year, payload);
     },
     /* kind: "plan" — бюджет года, "fact" — факт года. Файл один и тот же по виду. */
-    importBudget: function (file, year, kind) {
-      var form = new FormData();
-      form.append("file", file);
-      form.append("year", String(year));
-      form.append("kind", kind || "plan");
-      return request("POST", "/api/operplan/import", form, true);
+    importBudget: function (files, year, kind, cfoIds) {
+      return request("POST", "/api/operplan/import",
+        importForm(files, year, kind, cfoIds), true);
+    },
+    /* Предпросмотр загрузки факта: те же файлы и параметры, но без записи. */
+    previewImport: function (files, year, kind, cfoIds) {
+      return request("POST", "/api/operplan/import/preview",
+        importForm(files, year, kind, cfoIds), true);
     },
     patchRow: function (rowId, payload) {
       return request("PATCH", "/api/rows/" + rowId, payload);

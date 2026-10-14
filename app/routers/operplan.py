@@ -1,6 +1,8 @@
 """Вкладка «Оперплан»: план следующего года, справочники, замок, повтор года."""
 from __future__ import annotations
 
+from typing import Sequence
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 
@@ -10,6 +12,9 @@ from app.models import CopyYearIn, LockIn, OperplanRowIn, YearIn
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_UPLOAD_MB = 40
+***REMOVED*** Файлы факта приходят по одному на дирекцию, их дюжина; потолок
+***REMOVED*** с запасом, чтобы случайно выбранная папка не ушла целиком.
+MAX_UPLOAD_FILES = 30
 
 router = APIRouter(prefix="/api/operplan", tags=["operplan"])
 
@@ -87,42 +92,102 @@ def renumber(payload: YearIn, u: auth.User = Depends(user)) -> dict:
 
 ***REMOVED*** ---------- Excel ----------
 
-@router.post("/import")
-async def import_sheet(file: UploadFile = File(...), year: int = Form(...),
-                       kind: str = Form("plan"), u: auth.User = Depends(user)) -> dict:
-    """Загрузка бюджета или факта года листом того же вида, что и выгрузка.
-
-    Круг ЦФО задаёт сервер: руководитель перезальёт только свою дирекцию,
-    чужие строки файла будут пропущены. Факт грузит только финансовый отдел —
-    дирекция свой факт выгружает (`/api/export/budget-fact.xlsx`), но не правит.
-    """
+async def _upload(file: UploadFile, kind: str, year: int, u: auth.User) -> bytes:
+    """Общие проверки загрузки: предпросмотр и запись должны сходиться в них."""
     content = await file.read()
     if not content:
-        raise HTTPException(422, "Файл пустой")
+        raise HTTPException(422, f"Файл пустой: {file.filename or ''}".strip())
     if len(content) > MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(413, f"Файл больше {MAX_UPLOAD_MB} МБ")
+        raise HTTPException(413, f"Файл больше {MAX_UPLOAD_MB} МБ: {file.filename}")
     if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
-        raise HTTPException(422, "Ожидается файл .xlsx")
+        raise HTTPException(422, f"Ожидается файл .xlsx: {file.filename}")
     if kind not in ("plan", "fact"):
         raise HTTPException(422, "Загружать можно бюджет или факт")
     ***REMOVED*** Кнопку руководителю не рисуют, но запрет держит сервер: роль приезжает
     ***REMOVED*** заголовком, и форму можно отправить мимо интерфейса.
     if kind == "fact" and not u.is_fin:
         raise HTTPException(403, "Факт загружает финансовый отдел")
-
-    target = int(year)
     try:
-        operplan.require_edit(u, target)
+        operplan.require_edit(u, int(year))
     except ValueError as exc:
         raise HTTPException(403, str(exc)) from exc
+    return content
 
-    name = file.filename or "budget.xlsx"
+
+async def _uploads(files: Sequence[UploadFile], kind: str, year: int,
+                   u: auth.User) -> list[tuple[str, bytes]]:
+    """Пачка файлов: проверяется каждый, иначе один битый уронил бы всю загрузку."""
+    if not files:
+        raise HTTPException(422, "Не выбран ни один файл")
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(413, f"За раз можно загрузить не больше {MAX_UPLOAD_FILES} файлов")
+    out = []
+    for file in files:
+        out.append(((file.filename or "budget.xlsx"),
+                    await _upload(file, kind, year, u)))
+    return out
+
+
+def _chosen_cfo(cfo_ids: Sequence[int] | None, u: auth.User) -> list[int] | None:
+    """Отмеченные галочками дирекции, если они доступны пользователю.
+
+    Пустой список значит «как в файле»: круг берётся из самих файлов.
+    """
+    if not cfo_ids:
+        return None
+    chosen = []
+    for cfo_id in cfo_ids:
+        if not u.is_fin and not u.can_edit_cfo(int(cfo_id)):
+            raise HTTPException(403, "Нет доступа к этому ЦФО")
+        chosen.append(int(cfo_id))
+    return chosen
+
+
+@router.post("/import/preview")
+async def import_preview(files: list[UploadFile] = File(...), year: int = Form(...),
+                         kind: str = Form("fact"),
+                         cfo_ids: list[int] = Form(default=[]),
+                         u: auth.User = Depends(user)) -> dict:
+    """Что сделает загрузка факта — до того, как она что-то сделает.
+
+    Разбор здесь тот же самый, что и при записи, поэтому показанное на экране
+    и записанное в базу разойтись не могут. Файлов может быть несколько: они
+    приходят по одному на дирекцию.
+    """
+    if kind != "fact":
+        raise HTTPException(422, "Предпросмотр есть только у загрузки факта")
+    payload = await _uploads(files, kind, int(year), u)
+    try:
+        return operplan.preview_fact_files(payload, int(year), u.visible_cfo_ids(),
+                                           _chosen_cfo(cfo_ids, u))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/import")
+async def import_sheet(files: list[UploadFile] = File(...), year: int = Form(...),
+                       kind: str = Form("plan"),
+                       cfo_ids: list[int] = Form(default=[]),
+                       u: auth.User = Depends(user)) -> dict:
+    """Загрузка бюджета или факта года листом того же вида, что и выгрузка.
+
+    Круг ЦФО задаёт сервер: руководитель перезальёт только свою дирекцию,
+    чужие строки файла будут пропущены. Факт грузит только финансовый отдел —
+    дирекция свой факт выгружает (`/api/export/budget-fact.xlsx`), но не правит.
+    Факт можно сузить галочками до нескольких дирекций (`cfo_ids`) и залить
+    пачкой файлов: они приходят по одному на дирекцию.
+    """
+    payload = await _uploads(files, kind, int(year), u)
+    target = int(year)
     try:
         if kind == "fact":
-            result = operplan.import_fact(content, name, target, u.name,
-                                          cfo_ids=u.visible_cfo_ids())
-            return {**result, "kind": kind, "unmatched": result["created"]}
-        result = operplan.import_budgets(content, name, target, u.name,
+            result = operplan.import_fact_files(payload, target, u.name,
+                                                cfo_ids=u.visible_cfo_ids(),
+                                                only_cfo_ids=_chosen_cfo(cfo_ids, u))
+            return {**result, "kind": kind}
+        if len(payload) > 1:
+            raise HTTPException(422, "Бюджет загружается по одному файлу")
+        result = operplan.import_budgets(payload[0][1], payload[0][0], target, u.name,
                                          cfo_ids=u.visible_cfo_ids())
         return {**result, "kind": kind, "unmatched": 0}
     except ValueError as exc:

@@ -131,6 +131,44 @@ def multi_budget_cfos(blocks) -> set[int]:
     return {cfo_id for cfo_id, count in seen.items() if count > 1}
 
 
+OUT_OF_BUDGET_MARK = "ВНЕ БЮДЖЕТА"
+OUT_OF_BUDGET_HINT = "факт, не сопоставленный ни с одной строкой бюджета"
+
+
+def _out_of_budget_block(ws, idx: int, money, items) -> int:
+    """Блок «ВНЕ БЮДЖЕТА» внизу листа — место для расхода без строки бюджета.
+
+    Так его размечают сами дирекции в своих файлах, и так же он возвращается
+    обратно: заголовок уровня блока, под ним расходы. Лимита у такого расхода
+    нет по определению, поэтому колонка ИТОГО несёт факт, а не бюджет.
+    Печатается всегда — пустой блок показывает, куда вписывать.
+    """
+    ws.cell(row=idx, column=COL["Статья оборотов"], value=OUT_OF_BUDGET_MARK).font = Font(bold=True)
+    ws.cell(row=idx, column=COL["Комментарий"], value=OUT_OF_BUDGET_HINT)
+    money(idx, COL["ИТОГО"], sum(item["total"] for item in items), bold=True)
+    for m in range(calc.MONTHS):
+        money(idx, MONTH_COL + m, sum(item["months"][m] for item in items), bold=True)
+    for col in range(1, len(BUDGET_HEADER) + 1):
+        ws.cell(row=idx, column=col).fill = TOTAL_FILL
+    idx += 1
+
+    for item in items:
+        _paint(ws, idx, BUDGET_FILLS)
+        ws.cell(row=idx, column=COL["Статья оборотов"], value=item["article"])
+        ws.cell(row=idx, column=COL["ЦФО"], value=item["cfo_name"])
+        ws.cell(row=idx, column=COL["Контрагент"], value=item["counterparty"])
+        ws.cell(row=idx, column=COL["Договор"], value=item["contract"])
+        ws.cell(row=idx, column=COL["Детализация"], value=item["detail"])
+        if not item["out_of_budget"]:
+            ws.cell(row=idx, column=COL["Комментарий"],
+                    value="не нашлось строки бюджета при загрузке факта")
+        money(idx, COL["ИТОГО"], item["total"])
+        for m, amount in enumerate(item["months"]):
+            money(idx, MONTH_COL + m, amount)
+        idx += 1
+    return idx
+
+
 def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
     """Общая раскладка листа «Бюджеты ЦФО»: план года или факт года."""
     from app import operplan as operplan_service
@@ -202,6 +240,10 @@ def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
             for m, amount in enumerate(months):
                 money(idx, MONTH_COL + m, amount)
             idx += 1
+
+    if fact:
+        idx = _out_of_budget_block(
+            ws, idx, money, operplan_service.unlinked_fact(int(view["year"]), cfo_ids))
 
     _autofilter(ws, 3, LAST_BUDGET_COL, idx - 1)
     _autosize(ws, BUDGET_WIDTHS)
@@ -314,6 +356,21 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
                     ws.cell(row=idx, column=MONTH_COL + m).number_format = MONEY
                 idx += 1
             blocks.append((int(cfo["id"]), first, idx - 1))
+
+    ***REMOVED*** Место под расход вне бюджета. Без него дирекции приписывали его к чужой
+    ***REMOVED*** строке или теряли: в своих файлах такой блок они заводят сами.
+    ws.cell(row=idx, column=COL["Статья оборотов"],
+            value=OUT_OF_BUDGET_MARK).font = Font(bold=True)
+    ws.cell(row=idx, column=COL["Комментарий"], value=OUT_OF_BUDGET_HINT)
+    for col in range(1, len(header) + 1):
+        ws.cell(row=idx, column=col).fill = TOTAL_FILL
+    idx += 1
+    for _ in range(TEMPLATE_ROWS):
+        _paint(ws, idx, BUDGET_FILLS)
+        ws.cell(row=idx, column=COL["ИТОГО"]).number_format = MONEY
+        for m in range(calc.MONTHS):
+            ws.cell(row=idx, column=MONTH_COL + m).number_format = MONEY
+        idx += 1
 
     _classifier_choice(ws, 4, idx - 1)
     _autofilter(ws, 3, LAST_BUDGET_COL, idx - 1)

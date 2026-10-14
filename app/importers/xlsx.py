@@ -29,6 +29,31 @@ def load_rows(source: str | Path | bytes, sheet: str | None = None,
         wb.close()
 
 
+def load_rows_levels(source: str | Path | bytes, sheet: str | None = None,
+                     max_cols: int = MAX_COLS) -> tuple[list[list[Any]], str, list[str], list[int]]:
+    """То же, что `load_rows`, плюс уровень группировки каждой строки.
+
+    Уровень («плюсик» слева в Excel) — то, чем файлы дирекций отделяют плановую
+    строку от расходов под ней, и он надёжнее пометок в тексте. Читается только
+    в обычном режиме: у `read_only` листа нет `row_dimensions` вовсе, поэтому
+    отдельная функция, а не флаг у `load_rows`.
+    """
+    stream: Any = io.BytesIO(source) if isinstance(source, bytes) else source
+    wb = openpyxl.load_workbook(stream, data_only=True)
+    try:
+        names = list(wb.sheetnames)
+        name = sheet if sheet in names else names[0]
+        ws = wb[name]
+        rows = [list(r) for r in ws.iter_rows(max_col=max_cols, values_only=True)]
+        levels = []
+        for i in range(1, len(rows) + 1):
+            dim = ws.row_dimensions.get(i)
+            levels.append(int(dim.outline_level) if dim else 0)
+        return rows, name, names, levels
+    finally:
+        wb.close()
+
+
 def text(value: Any) -> str:
     if value is None:
         return ""

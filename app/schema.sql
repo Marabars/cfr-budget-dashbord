@@ -99,6 +99,11 @@ CREATE TABLE IF NOT EXISTS fact (
   id            INTEGER PRIMARY KEY,
   row_id        INTEGER REFERENCES budget_row(id) ON DELETE SET NULL, -- NULL = не сопоставлен
   cfo_id        INTEGER REFERENCES cfo(id),
+  -- Слой платежа: 'main' — исполнение (1С, сопоставление, карточка ЦФО),
+  -- 'operplan' — расходы слоя планирования из файлов дирекций. Непривязанный
+  -- платёж (row_id IS NULL) слоя по строке не имеет, поэтому слой хранится
+  -- колонкой, а не выводится соединением с budget.
+  layer         TEXT NOT NULL DEFAULT 'main',  -- main | operplan
   year          INTEGER NOT NULL,
   pay_date      TEXT NOT NULL,
   amount        REAL NOT NULL,
@@ -117,6 +122,7 @@ CREATE TABLE IF NOT EXISTS fact (
 );
 CREATE INDEX IF NOT EXISTS ix_fact_row ON fact(row_id);
 CREATE INDEX IF NOT EXISTS ix_fact_unmatched ON fact(year) WHERE row_id IS NULL AND out_of_budget = 0;
+CREATE INDEX IF NOT EXISTS ix_fact_layer ON fact(layer, year);
 
 -- ---------- корректировки лимитов ----------
 CREATE TABLE IF NOT EXISTS adjustment (

@@ -1,6 +1,7 @@
 """Слой доступа к данным: CRUD над ЦФО, бюджетами, строками, заявками и фактом."""
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Iterable, Sequence
 
@@ -344,13 +345,14 @@ def month_amount(row_id: int, month: int) -> float:
 
 def create_fact(data: dict, author: str = "") -> int:
     return db.execute(
-        "INSERT INTO fact(row_id, cfo_id, year, pay_date, amount, article, counterparty, "
+        "INSERT INTO fact(row_id, cfo_id, layer, year, pay_date, amount, article, counterparty, "
         "contract, purpose, claim_number, out_of_budget, source, external_id, matched_by, matched_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
         "CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END)",
         (
             data.get("row_id"),
             data.get("cfo_id"),
+            data.get("layer", LAYER_MAIN),
             int(data["year"]),
             data.get("pay_date", ""),
             float(data["amount"]),
@@ -374,12 +376,12 @@ def fact_exists(external_id: str) -> bool:
     ) is not None
 
 
-def fact_months(year: int) -> dict[int, list[float]]:
+def fact_months(year: int, layer: str = LAYER_MAIN) -> dict[int, list[float]]:
     """Факт по месяцам на строку: {row_id: [12]}."""
     rows = db.query(
         "SELECT row_id, pay_date, amount FROM fact "
-        "WHERE year = ? AND row_id IS NOT NULL AND out_of_budget = 0",
-        (year,),
+        "WHERE year = ? AND layer = ? AND row_id IS NOT NULL AND out_of_budget = 0",
+        (year, layer),
     )
     out: dict[int, list[float]] = {}
     for r in rows:
@@ -395,21 +397,56 @@ def list_facts_by_row(row_id: int) -> list[dict]:
     )]
 
 
-def list_unmatched(year: int, limit: int = 200) -> list[dict]:
+def list_unmatched(year: int, limit: int = 200, layer: str = LAYER_MAIN) -> list[dict]:
     return [dict(r) for r in db.query(
         "SELECT f.*, c.name AS cfo_name FROM fact f LEFT JOIN cfo c ON c.id = f.cfo_id "
-        "WHERE f.year = ? AND f.row_id IS NULL AND f.out_of_budget = 0 "
+        "WHERE f.year = ? AND f.layer = ? AND f.row_id IS NULL AND f.out_of_budget = 0 "
         "ORDER BY f.pay_date DESC, f.id DESC LIMIT ?",
-        (year, limit),
+        (year, layer, limit),
     )]
 
 
-def list_out_of_budget(year: int) -> list[dict]:
-    return [dict(r) for r in db.query(
-        "SELECT f.*, c.name AS cfo_name FROM fact f LEFT JOIN cfo c ON c.id = f.cfo_id "
-        "WHERE f.year = ? AND f.out_of_budget = 1 ORDER BY f.pay_date DESC, f.id DESC",
-        (year,),
-    )]
+def list_out_of_budget(year: int, layer: str = LAYER_MAIN,
+                       cfo_ids: Sequence[int] | None = None) -> list[dict]:
+    sql = ("SELECT f.*, c.name AS cfo_name FROM fact f LEFT JOIN cfo c ON c.id = f.cfo_id "
+           "WHERE f.year = ? AND f.layer = ? AND f.out_of_budget = 1")
+    params: list[Any] = [year, layer]
+    if cfo_ids is not None:
+        if not cfo_ids:
+            return []
+        sql += f" AND f.cfo_id IN ({','.join('?' for _ in cfo_ids)})"
+        params.extend(int(i) for i in cfo_ids)
+    sql += " ORDER BY f.pay_date DESC, f.id DESC"
+    return [dict(r) for r in db.query(sql, params)]
+
+
+def layer_fact_rows(year: int, layer: str, cfo_ids: Sequence[int] | None = None) -> list[dict]:
+    """Все записи факта слоя за год — и привязанные, и нет."""
+    sql = "SELECT * FROM fact WHERE year = ? AND layer = ?"
+    params: list[Any] = [year, layer]
+    if cfo_ids is not None:
+        if not cfo_ids:
+            return []
+        sql += f" AND cfo_id IN ({','.join('?' for _ in cfo_ids)})"
+        params.extend(int(i) for i in cfo_ids)
+    return [dict(r) for r in db.query(sql + " ORDER BY pay_date, id", params)]
+
+
+def clear_layer_fact_rows(year: int, layer: str, cfo_ids: Sequence[int] | None = None) -> int:
+    """Стирает записи факта слоя за год перед повторной загрузкой.
+
+    Отдельно от `clear_layer_fact`: та чистит помесячный свод на строках
+    (`budget_row_fact_month`), эта — расходы по контрагентам в таблице `fact`.
+    Круг один и тот же, иначе свод и детализация разъедутся.
+    """
+    sql = "DELETE FROM fact WHERE year = ? AND layer = ?"
+    params: list[Any] = [year, layer]
+    if cfo_ids is not None:
+        if not cfo_ids:
+            return 0
+        sql += f" AND cfo_id IN ({','.join('?' for _ in cfo_ids)})"
+        params.extend(int(i) for i in cfo_ids)
+    return db.execute(sql, params)
 
 
 def get_fact(fact_id: int) -> dict | None:
@@ -541,6 +578,30 @@ def create_import(kind: str, filename: str, year: int, author: str,
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (kind, filename, year, author, rows_ok, rows_error, mapping, note),
     )
+
+
+def last_fact_loads(year: int) -> dict[int, dict]:
+    """Когда и каким файлом в последний раз грузили факт каждой дирекции.
+
+    Нужно предпросмотру: загрузка заменяет факт дирекции целиком, и файл
+    одной дирекции внутри файла другой (бюджеты стратегии и аналитики лежат
+    в файле ИТ) способен молча затереть более свежую отдельную загрузку.
+    Круг дирекций пишется в `mapping` при загрузке — по нему и ищем.
+    """
+    out: dict[int, dict] = {}
+    rows = db.query(
+        "SELECT filename, uploaded_at, mapping FROM import_batch "
+        "WHERE kind = 'operplan_fact' AND year = ? ORDER BY id DESC", (year,))
+    for row in rows:
+        try:
+            scope = json.loads(row["mapping"] or "{}").get("cfo_ids") or []
+        except ValueError:
+            continue
+        for cfo_id in scope:
+            ***REMOVED*** строки идут от свежих к старым, первая встреченная и есть последняя
+            out.setdefault(int(cfo_id),
+                           {"filename": row["filename"], "at": row["uploaded_at"]})
+    return out
 
 
 def save_column_mapping(cfo_id: int, mapping_json: str) -> None:

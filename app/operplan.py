@@ -11,12 +11,13 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from typing import Any, Iterable, Sequence
 
 from app import calc, db, repo
-from app.importers import cfo_budgets
+from app.importers import cfo_budgets, planfact, xlsx
 
 LAYER = repo.LAYER_OPERPLAN
 DEFAULT_PLAN_YEAR = 2027
@@ -193,7 +194,7 @@ def fact_months_by_row(year: int, cfo_ids: Iterable[int] | None = None,
 
 
 def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
-    """Три показателя вкладки: бюджет нового года, бюджет базового и его план-факт."""
+    """Четыре показателя вкладки: план нового года, бюджет базового, план-факт и вне бюджета."""
     py, by = plan_year(), base_year()
     plan_rows = _year_rows(py, cfo_ids)
     base_rows = _year_rows(by, cfo_ids)
@@ -203,6 +204,13 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
 
     base_ids = {int(r["id"]) for r in base_rows}
     base_fact = sum(sum(v) for v in fact_months_by_row(by, row_ids=base_ids).values())
+
+    ***REMOVED*** Вне бюджета — факт без строки плана: и объявленный дирекцией в блоке
+    ***REMOVED*** «ВНЕ БЮДЖЕТА», и тот, которому строки не нашлось. Считается по тому же
+    ***REMOVED*** кругу ЦФО, что и остальные плитки, поэтому при фильтре по дирекции
+    ***REMOVED*** показывает её одну, а без фильтра — сумму по всем доступным.
+    outside = unlinked_fact(by, cfo_ids)
+    outside_total = sum(item["total"] for item in outside)
 
     return {
         "plan_year": py,
@@ -219,7 +227,45 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
         "fact_loaded": base_fact > 0,
         "plan_rows": len(plan_rows),
         "base_rows": len(base_rows),
+        "outside_total": outside_total,
+        "outside_rows": len(outside),
+        "outside_cfo": len({item["cfo_id"] for item in outside}),
+        ***REMOVED*** доля перерасхода от бюджета базового года
+        "outside_pct": (outside_total / base_total) if base_total else 0.0,
     }
+
+
+def row_spends(year: int, cfo_ids: Iterable[int] | None = None) -> dict[int, list[dict]]:
+    """Расходы по контрагентам под строками плана: `{row_id: [контрагенты]}`.
+
+    Из чего сложился факт строки: контрагент, договор и двенадцать месяцев.
+    Отдельные платежи сюда не разворачиваются намеренно — у дирекции вроде
+    Сервисного обслуживания их сотни, и таблица стала бы нечитаемой; в файле
+    дирекции расход тоже сгруппирован по контрагенту.
+    """
+    allowed = None if cfo_ids is None else [int(i) for i in cfo_ids]
+    grouped: dict[int, dict[tuple, dict]] = {}
+    for item in repo.layer_fact_rows(year, LAYER, allowed):
+        row_id = item["row_id"]
+        if not row_id:
+            continue
+        key = (item["counterparty"], item["contract"], item["purpose"])
+        slot = grouped.setdefault(int(row_id), {}).get(key)
+        if slot is None:
+            slot = grouped[int(row_id)][key] = {
+                "counterparty": item["counterparty"], "contract": item["contract"],
+                "detail": item["purpose"], "months": _empty_months(),
+            }
+        month = calc.month_of(item["pay_date"])
+        if 1 <= month <= calc.MONTHS:
+            slot["months"][month - 1] += float(item["amount"])
+    out: dict[int, list[dict]] = {}
+    for row_id, slots in grouped.items():
+        items = list(slots.values())
+        for slot in items:
+            slot["total"] = sum(slot["months"])
+        out[row_id] = sorted(items, key=lambda s: -s["total"])
+    return out
 
 
 def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
@@ -250,14 +296,17 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
             "rows": [],
         }
 
+    spends = row_spends(year, cfo_ids)
     for row in rows:
         block = blocks.get(int(row["budget_id"]))
         if block is None:
             continue
         rid = int(row["id"])
-        block["rows"].append(
-            _row_view(row, months_all.get(rid, _empty_months()), base_by_key.get(full_key(row)))
-        )
+        item = _row_view(row, months_all.get(rid, _empty_months()),
+                         base_by_key.get(full_key(row)))
+        ***REMOVED*** расходы по контрагентам под строкой: раскрытие на вкладке
+        item["spends"] = spends.get(rid, [])
+        block["rows"].append(item)
 
     out_blocks = []
     for b in blocks.values():
@@ -286,6 +335,8 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
             "rows_count": len(all_rows),
         },
         "blocks": out_blocks,
+        ***REMOVED*** факт без строки бюджета: показывается блоком внизу вкладки и плиткой
+        "outside": unlinked_fact(by, cfo_ids),
     }
 
 
@@ -591,64 +642,500 @@ def _detail_source_of(cfo_id: int) -> str:
     return (row["detail_source"] if row else "comment") or "comment"
 
 
-def import_fact(content: bytes, filename: str, year: int, author: str,
-                cfo_ids: Iterable[int] | None = None) -> dict:
-    """Заливает факт года из листа того же вида, что и «Бюджеты ЦФО».
+def unlinked_fact(year: int, cfo_ids: Iterable[int] | None = None) -> list[dict]:
+    """Факт слоя планирования, которому не досталось строки бюджета.
 
-    Суммы ложатся на строки плана этого года: ищем строку по ключу
-    статья + контрагент + договор + детализация внутри того же ЦФО. Чего в плане
-    не было — заводим строкой с нулевым бюджетом, иначе расход просто исчез бы;
-    повторная загрузка такую строку уже находит и не задваивает.
+    Две причины и обе сюда: дирекция сама отнесла расход в блок «ВНЕ БЮДЖЕТА»
+    (`out_of_budget`), либо строка файла не нашла пары среди наших. Для
+    читателя разница в пометке, а не в месте: и то и другое — потраченное
+    мимо плана.
     """
-    parsed = cfo_budgets.parse(content)
+    allowed = None if cfo_ids is None else [int(i) for i in cfo_ids]
+    grouped: dict[tuple, dict] = {}
+    for item in repo.layer_fact_rows(year, LAYER, allowed):
+        if item["row_id"]:
+            continue
+        key = (item["cfo_id"], item["article"], item["counterparty"],
+               item["contract"], item["purpose"], int(item["out_of_budget"]))
+        slot = grouped.get(key)
+        if slot is None:
+            slot = grouped[key] = {
+                "cfo_id": item["cfo_id"], "article": item["article"],
+                "counterparty": item["counterparty"], "contract": item["contract"],
+                "detail": item["purpose"],
+                "out_of_budget": bool(item["out_of_budget"]),
+                "months": _empty_months(),
+            }
+        month = calc.month_of(item["pay_date"])
+        if 1 <= month <= calc.MONTHS:
+            slot["months"][month - 1] += float(item["amount"])
+    out = list(grouped.values())
+    for slot in out:
+        slot["total"] = sum(slot["months"])
+    names = {int(c["id"]): c["name"] for c in repo.list_cfo()}
+    for slot in out:
+        slot["cfo_name"] = names.get(int(slot["cfo_id"] or 0), "")
+    return sorted(out, key=lambda s: (s["cfo_name"], s["article"], s["counterparty"]))
+
+
+def _find_cfo_id(name: str) -> int | None:
+    """Ищет ЦФО по названию, но не заводит.
+
+    Загрузка факта справочники не правит: пустая колонка ЦФО у строки «ВСЕГО»
+    однажды завела бы дирекцию «Не указано», а опечатка в названии — дубль
+    настоящей дирекции.
+    """
+    found = repo.find_cfo(name or "")
+    return int(found["id"]) if found else None
+
+
+def _items_from_planfact(parsed: dict) -> list[dict]:
+    """Строки файла дирекции в общем виде: плановая строка плюс расходы под ней."""
+    items = []
+    for plan in parsed["plans"]:
+        items.append({
+            "cfo": plan["cfo"], "budget": plan["budget"], "article": plan["article"],
+            "counterparty": plan["counterparty"], "contract": plan["contract"],
+            "detail": plan["detail"], "comment": plan["comment"],
+            "plan_year": plan["plan_year"], "excel_row": plan["excel_row"],
+            "fact_months": planfact.plan_fact_months(plan),
+            "parts": [{
+                "counterparty": p["counterparty"], "contract": p["contract"],
+                "detail": p["detail"], "comment": p["comment"],
+                "article": p["article"] or plan["article"],
+                "months": p["fact_months"], "excel_row": p["excel_row"],
+            } for p in plan["parts"]],
+        })
+    return items
+
+
+def _items_from_budgets(parsed: dict) -> tuple[list[dict], list[dict]]:
+    """Строки нашей выгрузки «Бюджеты ЦФО»: факт лежит прямо в месяцах строки."""
+    items, errors = [], []
+    for row in parsed["rows"]:
+        if row["plan_year"] and not any(row["months"]):
+            ***REMOVED*** Факт складывается из месяцев, колонка ИТОГО для него не читается.
+            ***REMOVED*** Раньше такая строка молча записывала нули и гасила прежний факт.
+            errors.append({"excel_row": row["excel_row"], "article": row["article"],
+                           "problem": "заполнено ИТОГО, но не заполнен ни один месяц"})
+            continue
+        if not any(row["months"]):
+            continue
+        items.append({
+            "cfo": row["cfo"], "budget": row["budget"], "article": row["article"],
+            "counterparty": row["counterparty"], "contract": row["contract"],
+            "detail": row["detail"], "comment": row["comment"],
+            "plan_year": row["plan_year"], "excel_row": row["excel_row"],
+            "fact_months": list(row["months"]), "parts": [],
+        })
+    return items, errors
+
+
+def _link_keys(item: dict, detail_source: str) -> list[tuple]:
+    """Признаки связи строки файла с нашей строкой, от строгого к мягкому.
+
+    Ключ «статья + контрагент + договор + детализация» на файлах дирекций даёт
+    от половины до трёх четвертей: у плановой строки контрагент часто пуст,
+    он живёт на расходах под ней. Сумма годового бюджета вместе с текстом
+    детализации разводит строки надёжнее — на проверенных файлах каскад
+    закрывает от 97 до 100 процентов наших строк.
+    """
+    keyed = dict(item, detail_source=detail_source)
+    detail = _norm(_detail_text(keyed))
+    article = _norm(item.get("article", ""))
+    plan = round(float(item.get("plan_year") or 0), 2)
+    keys = [("k1",) + full_key(keyed)]
+    if detail and plan:
+        keys.append(("k2", article, detail, plan))
+        keys.append(("k3", detail, plan))
+    return keys
+
+
+def _link_rows(items: list[dict], rows: list[dict]) -> dict[int, dict]:
+    """Связывает строки файла с нашими строками. Возвращает {excel_row: наша строка}.
+
+    Наша строка занимается один раз: иначе две одинаковые строки файла легли бы
+    обе на одну и ту же и факт задвоился бы.
+
+    Блок бюджета участвует в привязке только там, где бюджетов у дирекции
+    больше одного — сегодня это один ИТ. У остальных сравнивать нечего и
+    вредно: свой единственный блок дирекции называют в файлах «Бюджет
+    дирекции», у нас он «Основной бюджет», а блоки стратегии и аналитики
+    внутри файла ИТ — это их собственные основные бюджеты.
+    """
+    by_cfo: dict[int, list[dict]] = {}
+    budgets_of: dict[int, set[str]] = {}
+    for row in rows:
+        by_cfo.setdefault(int(row["cfo_id"]), []).append(row)
+        budgets_of.setdefault(int(row["cfo_id"]), set()).add(row["budget_name"])
+    multi = {cfo_id for cfo_id, names in budgets_of.items() if len(names) > 1}
+
+    taken: dict[int, dict] = {}
+    used: set[int] = set()
+    for depth in range(3):
+        index: dict[tuple, list[dict]] = {}
+        for cfo_id, cfo_rows in by_cfo.items():
+            source = _detail_source_of(cfo_id)
+            for row in cfo_rows:
+                if int(row["id"]) in used:
+                    continue
+                keys = _link_keys(row, source)
+                if depth < len(keys):
+                    index.setdefault((cfo_id,) + keys[depth], []).append(row)
+        for item in items:
+            if item["excel_row"] in taken or not item.get("cfo_id"):
+                continue
+            keys = _link_keys(item, _detail_source_of(item["cfo_id"]))
+            if depth >= len(keys):
+                continue
+            found = index.get((item["cfo_id"],) + keys[depth]) or []
+            fresh = [r for r in found if int(r["id"]) not in used]
+            ***REMOVED*** у дирекции с несколькими бюджетами блок разводит одинаковые
+            ***REMOVED*** ключи: у ИТ таких строк восемь десятков в двух блоках
+            if len(fresh) > 1 and item["cfo_id"] in multi:
+                same = [r for r in fresh
+                        if _norm(r["budget_name"]) == _norm(item.get("budget", ""))]
+                if len(same) == 1:
+                    fresh = same
+            ***REMOVED*** неоднозначный признак привязкой не считаем: пусть лучше строка
+            ***REMOVED*** уйдёт в непривязанное, чем факт ляжет не туда
+            if len(fresh) == 1:
+                taken[item["excel_row"]] = fresh[0]
+                used.add(int(fresh[0]["id"]))
+    return taken
+
+
+def _link_spends(items: list[dict], rows: list[dict], busy: set[int]) -> list[dict]:
+    """Второй проход: пристроить расходы строк, которым пары не нашлось.
+
+    Плановая строка файла могла не найтись, а расход под ней — найтись: у него
+    есть свой контрагент и договор, и ключ у него строгий, тот же самый
+    «статья + контрагент + договор». Берём только однозначное совпадение со
+    свободной строкой.
+
+    Проход по каноничной пометке «бюджет из строки N» сюда не добавлен
+    намеренно: замер на двенадцати файлах дал ноль. Пометка на 99% совпадает
+    с группировкой, поэтому у непривязанной строки она указывает на неё же.
+    Проход «по статье, если свободная строка одна» не добавлен тоже — он
+    вернул бы 35 млн, но из них 33,6 млн это «Платежи, перешедшие с 2025 года»
+    с нулевым бюджетом, которым плановой строки не положено вовсе.
+    """
+    free: dict[tuple, list[dict]] = {}
+    for row in rows:
+        if int(row["id"]) in busy:
+            continue
+        free.setdefault((int(row["cfo_id"]),) + match_key(row), []).append(row)
+
+    placed: list[dict] = []
+    for item in items:
+        for part in item.get("parts") or []:
+            if not any(part["months"]):
+                continue
+            found = [r for r in free.get((item["cfo_id"],) + match_key(part), [])
+                     if int(r["id"]) not in busy]
+            if len(found) != 1:
+                continue
+            busy.add(int(found[0]["id"]))
+            placed.append({"row": found[0], "part": part, "item": item,
+                           "cfo_id": item["cfo_id"],
+                           "article": part.get("article") or item["article"],
+                           "months": list(part["months"])})
+    return placed
+
+
+def plan_fact(content: bytes, year: int, cfo_ids: Iterable[int] | None = None,
+              only_cfo_ids: Iterable[int] | None = None) -> dict:
+    """Разбирает файл и раскладывает его по нашим строкам — без единой записи.
+
+    Один и тот же разбор обслуживает предпросмотр и саму загрузку, поэтому
+    показанное на экране и записанное в базу не могут разойтись.
+    """
+    sheets = xlsx.load_rows(content)[2]
+    if planfact.looks_like_planfact(sheets):
+        parsed = planfact.parse(content)
+        items = _items_from_planfact(parsed)
+        errors: list[dict] = []
+        out_of_budget = [{
+            "cfo": x["cfo"], "article": x["article"], "counterparty": x["counterparty"],
+            "contract": x["contract"], "detail": x["detail"], "comment": x["comment"],
+            "months": x["fact_months"], "excel_row": x["excel_row"],
+        } for x in parsed["out_of_budget"] if any(x["fact_months"])]
+        fmt, skipped = "planfact", parsed["skipped_service"]
+        conflicts = parsed["conflicts"]
+    else:
+        parsed = cfo_budgets.parse(content)
+        items, errors = _items_from_budgets(parsed)
+        out_of_budget, fmt = [], "budgets"
+        skipped, conflicts = parsed.get("skipped_service", []), []
+
     allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
-
-    ***REMOVED*** многоключевой индекс: строк с одинаковым ключом в году легально несколько
-    index: dict[tuple, list[int]] = {}
-    for row in _year_rows(year, None if allowed is None else sorted(allowed)):
-        index.setdefault((int(row["cfo_id"]),) + full_key(row), []).append(int(row["id"]))
-
-    ***REMOVED*** Нулевые строки для факта смысла не имеют, а строку в плане завели бы
-    ***REMOVED*** пустую: расход, которого не было, — это не расход.
-    items = [(repo.ensure_cfo(item["cfo"]), item) for item in parsed["rows"]
-             if item["plan_year"] or any(item["months"])]
-    ***REMOVED*** Прежний факт гасим тем же кругом ЦФО, что и в файле: иначе загрузка по
-    ***REMOVED*** одной дирекции обнуляла бы факт остальных, а повторная загрузка своей —
-    ***REMOVED*** оставляла бы старые суммы на строках, выпавших из файла.
-    scope = {cfo_id for cfo_id, _ in items if allowed is None or cfo_id in allowed}
-    cleared = repo.clear_layer_fact(year, LAYER, sorted(scope))
-    matched = created = foreign = 0
-    total = 0.0
-    for cfo_id, item in items:
+    ***REMOVED*** отмеченные галочками дирекции: что не отмечено, то и не тронется
+    chosen = None if only_cfo_ids is None else {int(i) for i in only_cfo_ids}
+    if chosen is not None and not chosen:
+        chosen = None
+    unknown: list[str] = []
+    foreign = 0
+    mine: list[dict] = []
+    for item in items:
+        cfo_id = _find_cfo_id(item["cfo"])
+        if cfo_id is None:
+            if item["cfo"] and item["cfo"] not in unknown:
+                unknown.append(item["cfo"])
+            continue
         if allowed is not None and cfo_id not in allowed:
             foreign += 1
             continue
-        keyed = dict(item, detail_source=_detail_source_of(cfo_id))
-        key = (cfo_id,) + full_key(keyed)
-        ids = index.get(key)
-        if ids:
-            row_id = ids.pop(0)
-            matched += 1
-        else:
-            budget_id = repo.ensure_budget(cfo_id, year, item["budget"], layer=LAYER)
-            row_id = repo.create_row(
-                budget_id,
-                {**item, "plan_year": 0.0,
-                 "approver_comment": "Строка заведена загрузкой факта"},
-                months=_empty_months(), author=author, source="fact",
-                row_no=repo.next_row_no(budget_id),
-            )
-            created += 1
-        repo.set_row_fact(row_id, item["months"])
-        total += sum(item["months"])
+        if chosen is not None and cfo_id not in chosen:
+            foreign += 1
+            continue
+        item["cfo_id"] = cfo_id
+        mine.append(item)
 
-    repo.create_import("operplan_fact", filename, year, author, matched + created, 0,
-                       note=f"строк: {matched + created}, заведено новых: {created}")
-    db.log(author, "Загрузка факта в слой планирования", filename,
-           f"строк: {matched + created}, заведено новых: {created}",
-           f"{year} год, сумма факта: {total:,.2f} ₽".replace(",", " "))
-    return {"year": year, "rows": matched + created, "matched": matched,
-            "created": created, "foreign": foreign, "cleared": cleared, "total": total}
+    for x in out_of_budget:
+        x["cfo_id"] = _find_cfo_id(x["cfo"])
+    out_of_budget = [x for x in out_of_budget if x["cfo_id"] is not None
+                     and (allowed is None or x["cfo_id"] in allowed)
+                     and (chosen is None or x["cfo_id"] in chosen)]
+
+    scope = sorted({item["cfo_id"] for item in mine} |
+                   {x["cfo_id"] for x in out_of_budget})
+    rows = _year_rows(year, scope) if scope else []
+    linked = _link_rows(mine, rows)
+
+    matched = [item for item in mine if item["excel_row"] in linked]
+    unlinked = [item for item in mine if item["excel_row"] not in linked
+                and any(item["fact_months"])]
+    for item in matched:
+        item["row"] = linked[item["excel_row"]]
+
+    ***REMOVED*** Второй проход: расходы непривязанных строк могут найтись поодиночке.
+    busy = {int(item["row"]["id"]) for item in matched}
+    spends = _link_spends(unlinked, rows, busy)
+    ***REMOVED*** то, что пристроено, из непривязанного вычитается — иначе задвоится
+    placed_by_item: dict[int, list[dict]] = {}
+    for p in spends:
+        placed_by_item.setdefault(p["item"]["excel_row"], []).append(p)
+    for item in unlinked:
+        for p in placed_by_item.get(item["excel_row"], []):
+            item["fact_months"] = [a - b for a, b in
+                                   zip(item["fact_months"], p["months"])]
+    unlinked = [item for item in unlinked if any(round(m, 2) for m in item["fact_months"])]
+
+    ***REMOVED*** Строка легла в другой блок бюджета, чем в файле. Молчать об этом нельзя:
+    ***REMOVED*** значит план у нас и у дирекции разошёлся блоками, и либо она переложила
+    ***REMOVED*** расход, либо наша база устарела.
+    ***REMOVED***
+    ***REMOVED*** Считаем только тогда, когда названный в файле блок у этой дирекции
+    ***REMOVED*** действительно есть. Иначе сравнивать нечего: свой единственный блок
+    ***REMOVED*** дирекции называют «Бюджет дирекции», у нас он «Основной бюджет», —
+    ***REMOVED*** пометить этим всю дирекцию значило бы соврать.
+    known: dict[int, set[str]] = {}
+    for row in rows:
+        known.setdefault(int(row["cfo_id"]), set()).add(_norm(row["budget_name"]))
+    moved = [{"excel_row": item["excel_row"], "article": item["article"],
+              "detail": item["detail"] or item["comment"],
+              "from": item.get("budget", ""), "to": item["row"]["budget_name"],
+              "total": sum(item["fact_months"])}
+             for item in matched
+             if _norm(item.get("budget", "")) in known.get(item["cfo_id"], set())
+             and _norm(item["row"]["budget_name"]) != _norm(item.get("budget", ""))]
+
+    was = repo.row_fact_months(year, LAYER)
+    before = sum(sum(v) for r in rows for v in [was.get(int(r["id"]), [])])
+    before_by_cfo: dict[int, float] = {}
+    for r in rows:
+        before_by_cfo[int(r["cfo_id"])] = (before_by_cfo.get(int(r["cfo_id"]), 0.0)
+                                           + sum(was.get(int(r["id"]), [])))
+    loads = repo.last_fact_loads(year)
+    return {
+        "format": fmt, "year": year, "scope": scope,
+        ***REMOVED*** по каждой дирекции круга: сколько факта заменится и чем он был залит.
+        ***REMOVED*** Файл ИТ несёт ещё стратегию и аналитику, и без этой строки старый
+        ***REMOVED*** файл молча затирал бы более свежую отдельную загрузку.
+        "cfo": [{"id": int(c["id"]), "name": c["name"],
+                 "before": before_by_cfo.get(int(c["id"]), 0.0),
+                 "last_file": (loads.get(int(c["id"])) or {}).get("filename", ""),
+                 "last_at": (loads.get(int(c["id"])) or {}).get("at", "")}
+                for c in repo.list_cfo() if int(c["id"]) in scope],
+        "matched": matched, "unlinked": unlinked, "out_of_budget": out_of_budget,
+        "spends": spends, "block_moved": moved,
+        "rows_total": len(rows), "foreign": foreign, "unknown_cfo": unknown,
+        "errors": errors, "skipped_service": skipped, "conflicts": conflicts,
+        "total": (sum(sum(item["fact_months"]) for item in matched)
+                  + sum(sum(p["months"]) for p in spends)),
+        "spends_total": sum(sum(p["months"]) for p in spends),
+        "unlinked_total": sum(sum(item["fact_months"]) for item in unlinked),
+        "out_of_budget_total": sum(sum(x["months"]) for x in out_of_budget),
+        "before_total": before,
+    }
+
+
+def import_fact(content: bytes, filename: str, year: int, author: str,
+                cfo_ids: Iterable[int] | None = None,
+                only_cfo_ids: Iterable[int] | None = None) -> dict:
+    """Заливает факт года: нашу выгрузку «Бюджеты ЦФО» или файл дирекции.
+
+    **План не трогается ни при каких условиях** — ни строки, ни бюджеты, ни
+    справочник ЦФО. Прежде загрузка заводила недостающие строки с нулевым
+    бюджетом, и файл дирекции добавил бы Административному отделу двенадцать
+    строк к восьми. Расход, которому не нашлось строки плана, виден списком
+    непривязанного и в плитке «Вне бюджета», но плана не меняет.
+
+    Факт заменяется целиком по тем дирекциям, что попали в круг: иначе
+    повторная загрузка оставила бы прежние суммы на строках, выпавших из файла.
+    """
+    plan = plan_fact(content, year, cfo_ids, only_cfo_ids)
+    scope = plan["scope"]
+    cleared = repo.clear_layer_fact(year, LAYER, scope)
+    cleared += repo.clear_layer_fact_rows(year, LAYER, scope)
+
+    def spend(cfo_id: int, row_id: int | None, part: dict, out_of_budget: bool,
+              article: str, tag: str) -> None:
+        """Расход по контрагенту — помесячно, одной записью на месяц."""
+        for m, amount in enumerate(part["months"], start=1):
+            if not amount:
+                continue
+            repo.create_fact({
+                "row_id": row_id, "cfo_id": cfo_id, "layer": LAYER, "year": year,
+                "pay_date": f"{year}-{m:02d}-15", "amount": amount,
+                "article": article, "counterparty": part.get("counterparty", ""),
+                "contract": part.get("contract", ""),
+                "purpose": part.get("detail") or part.get("comment", ""),
+                "out_of_budget": out_of_budget, "source": "planfact",
+                ***REMOVED*** ЦФО в ключе обязателен: файлы разных дирекций нумеруются
+                ***REMOVED*** с единицы, и без него десятая строка одного файла
+                ***REMOVED*** сталкивалась с десятой строкой другого.
+                "external_id": f"pf:{year}:{cfo_id}:{tag}:{part['excel_row']}:m{m}",
+            }, author)
+
+    total = 0.0
+    for item in plan["matched"]:
+        row = item["row"]
+        row_id = int(row["id"])
+        months = item["fact_months"]
+        repo.set_row_fact(row_id, months)
+        total += sum(months)
+        parts = item["parts"] or [{
+            ***REMOVED*** у строки без расшифровки контрагент берётся с неё самой, иначе
+            ***REMOVED*** раскрытие строки на вкладке осталось бы пустым
+            "counterparty": item["counterparty"], "contract": item["contract"],
+            "detail": item["detail"], "comment": item["comment"],
+            "months": months, "excel_row": item["excel_row"],
+        }]
+        for part in parts:
+            spend(int(item["cfo_id"]), row_id, part, False,
+                  part.get("article") or item["article"], "row")
+
+    for p in plan["spends"]:
+        row_id = int(p["row"]["id"])
+        repo.set_row_fact(row_id, p["months"])
+        total += sum(p["months"])
+        spend(int(p["cfo_id"]), row_id, p["part"], False, p["article"], "part")
+
+    for item in plan["unlinked"]:
+        spend(int(item["cfo_id"]), None, {
+            "counterparty": item["counterparty"], "contract": item["contract"],
+            "detail": item["detail"], "comment": item["comment"],
+            "months": item["fact_months"], "excel_row": item["excel_row"],
+        }, False, item["article"], "free")
+
+    for x in plan["out_of_budget"]:
+        spend(int(x["cfo_id"]), None, x, True, x["article"], "oob")
+
+    note = (f"строк: {len(plan['matched'])}, без строки плана: {len(plan['unlinked'])}, "
+            f"вне бюджета: {len(plan['out_of_budget'])}"
+            + (f", в другой блок: {len(plan['block_moved'])}"
+               if plan["block_moved"] else ""))
+    ***REMOVED*** круг дирекций сохраняем: по нему предпросмотр следующей загрузки скажет,
+    ***REMOVED*** что именно он собирается заменить и насколько оно свежее
+    repo.create_import("operplan_fact", filename, year, author,
+                       len(plan["matched"]), len(plan["unlinked"]), note=note,
+                       mapping=json.dumps({"cfo_ids": scope}, ensure_ascii=False))
+    db.log(author, "Загрузка факта в слой планирования", filename, note,
+           f"{year} год, формат: {plan['format']}, сумма факта: {total:,.2f} ₽"
+           .replace(",", " "))
+    return {
+        "year": year, "format": plan["format"], "rows": len(plan["matched"]),
+        "matched": len(plan["matched"]), "created": 0,
+        "unlinked": len(plan["unlinked"]), "unlinked_total": plan["unlinked_total"],
+        "out_of_budget": len(plan["out_of_budget"]),
+        "out_of_budget_total": plan["out_of_budget_total"],
+        "foreign": plan["foreign"], "unknown_cfo": plan["unknown_cfo"],
+        "block_moved": len(plan["block_moved"]),
+        "spends": len(plan["spends"]), "spends_total": plan["spends_total"],
+        "errors": plan["errors"], "cleared": cleared, "total": total,
+    }
+
+
+def preview_fact_files(files: Sequence[tuple[str, bytes]], year: int,
+                       cfo_ids: Iterable[int] | None = None,
+                       only_cfo_ids: Iterable[int] | None = None) -> dict:
+    """Предпросмотр пачки файлов: что сделает загрузка, ничего не записывая.
+
+    Дирекции сводятся по всем файлам: одна дирекция может прийти и своим
+    файлом, и внутри чужого (бюджеты стратегии и аналитики лежат в файле ИТ),
+    и тогда важно показать её один раз, а не дважды.
+    """
+    per_file, cfo_rows, errors, unknown = [], {}, [], []
+    totals = {"matched": 0, "total": 0.0, "unlinked": 0, "unlinked_total": 0.0,
+              "out_of_budget": 0, "out_of_budget_total": 0.0, "foreign": 0,
+              "block_moved": 0}
+    moved = []
+    for filename, content in files:
+        try:
+            plan = plan_fact(content, year, cfo_ids, only_cfo_ids)
+        except ValueError as exc:
+            per_file.append({"filename": filename, "error": str(exc)})
+            errors.append({"filename": filename, "problem": str(exc)})
+            continue
+        per_file.append({
+            "filename": filename, "format": plan["format"],
+            "cfo": [c["name"] for c in plan["cfo"]],
+            "matched": len(plan["matched"]), "total": plan["total"],
+            "unlinked": len(plan["unlinked"]),
+            "out_of_budget": len(plan["out_of_budget"]),
+            "foreign": plan["foreign"], "errors": len(plan["errors"]),
+        })
+        for key in totals:
+            totals[key] += (len(plan[key]) if isinstance(plan.get(key), list)
+                            else plan.get(key, 0))
+        for c in plan["cfo"]:
+            cfo_rows.setdefault(c["id"], c)
+        errors.extend({**e, "filename": filename} for e in plan["errors"])
+        unknown.extend(n for n in plan["unknown_cfo"] if n not in unknown)
+        moved.extend({**m, "filename": filename} for m in plan["block_moved"])
+    return {"year": year, "files": per_file, "cfo": list(cfo_rows.values()),
+            "errors": errors[:20], "errors_count": len(errors),
+            "moved": moved[:10], "unknown_cfo": unknown, **totals}
+
+
+def import_fact_files(files: Sequence[tuple[str, bytes]], year: int, author: str,
+                      cfo_ids: Iterable[int] | None = None,
+                      only_cfo_ids: Iterable[int] | None = None) -> dict:
+    """Заливает пачку файлов факта подряд, каждый своей загрузкой.
+
+    Файлы приходят по одному на дирекцию, и грузить их по одному вручную —
+    двенадцать заходов. Разбор у каждого свой: круг замены берётся из файла,
+    поэтому порядок значения не имеет, а падение одного файла не отменяет
+    остальные — он называется в ответе отдельно.
+    """
+    done, failed = [], []
+    totals = {"matched": 0, "total": 0.0, "unlinked": 0, "unlinked_total": 0.0,
+              "out_of_budget": 0, "out_of_budget_total": 0.0, "foreign": 0,
+              "cleared": 0}
+    for filename, content in files:
+        try:
+            result = import_fact(content, filename, year, author, cfo_ids, only_cfo_ids)
+        except ValueError as exc:
+            failed.append({"filename": filename, "error": str(exc)})
+            continue
+        done.append({"filename": filename, "matched": result["matched"],
+                     "total": result["total"], "unlinked": result["unlinked"],
+                     "out_of_budget": result["out_of_budget"]})
+        for key in totals:
+            totals[key] += result.get(key, 0)
+    return {"year": year, "files": done, "failed": failed,
+            "rows": totals["matched"], "unmatched": totals["unlinked"], **totals}
 
 
 def import_articles(content: bytes, filename: str, author: str) -> dict:

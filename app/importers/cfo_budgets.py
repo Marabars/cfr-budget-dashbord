@@ -32,6 +32,8 @@ from app.importers import xlsx
 SHEET_NAME = "Бюджеты ЦФО"
 ARTICLES_SHEET = "ЦФО Статьи"
 TOTAL_MARK = "ИТОГО"
+GRAND_TOTAL_WORDS = ("ВСЕГО", "TOTAL")      ***REMOVED*** итог по всему листу, не блок
+OUT_OF_BUDGET_MARK = "ВНЕ БЮДЖЕТА"          ***REMOVED*** заголовок блока факта без строки бюджета
 DEFAULT_BUDGET = "Основной бюджет"
 
 ALIASES = {
@@ -68,6 +70,7 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
 
     blocks: list[dict] = []
     out_rows: list[dict] = []
+    skipped_service: list[dict] = []
     current: dict | None = None
 
     for i in range(header_idx + 1, len(rows)):
@@ -77,14 +80,23 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             continue
         months = xlsx.read_months(row, month_cols)
         cfo = xlsx.text(cell(row, "cfo"))
+        upper = article.upper()
 
-        if article.upper() == TOTAL_MARK:
+        if upper in GRAND_TOTAL_WORDS or OUT_OF_BUDGET_MARK in upper:
+            ***REMOVED*** Итог по всему листу и блок «вне бюджета» приходят в файлах
+            ***REMOVED*** дирекций. Как строка расхода «ВСЕГО» удваивала весь файл,
+            ***REMOVED*** а ЦФО у неё пустой — заводилась дирекция «Не указано».
+            skipped_service.append({"excel_row": i + 1, "article": article})
+            continue
+
+        if upper == TOTAL_MARK:
             current = {
                 "cfo": cfo,
                 "budget": xlsx.text(cell(row, "contract")) or DEFAULT_BUDGET,
                 "plan_year": xlsx.num(cell(row, "plan_year")),
                 "months": months,
                 "excel_row": i + 1,
+                "rows": 0,
             }
             blocks.append(current)
             continue
@@ -113,6 +125,13 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             "months": months,
             "excel_row": i + 1,
         })
+        if current:
+            current["rows"] += 1
+
+    ***REMOVED*** Блок без единой строки — след разметки: в файлах дирекций «ИТОГО» идёт
+    ***REMOVED*** дважды, сначала без названия бюджета, потом с ним. Пустой блок удваивал
+    ***REMOVED*** контрольную сумму файла и заводил лишний бюджет.
+    blocks = [b for b in blocks if b["rows"]]
 
     return {
         "sheet": sheet_name,
@@ -122,6 +141,7 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
         "month_columns": month_cols,
         "blocks": blocks,
         "rows": out_rows,
+        "skipped_service": skipped_service,
     }
 
 
