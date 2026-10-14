@@ -148,7 +148,25 @@
             App.reload();
             load();
           }).catch(function (e) { U.toast(e.message, "error"); });
-        } } })
+        } } }),
+        /* Своя колонка «Детализация» ставится руками: прежде её включала
+           заливка плана, угадывая по подстроке в названии дирекции. */
+        U.el("button", {
+          class: "btn sm",
+          text: item.detail_source === "detail"
+            ? "Детализация: своя колонка" : "Детализация: комментарий",
+          title: "Откуда брать «Детализацию» у строк этой дирекции",
+          on: { click: function () {
+            var next = item.detail_source === "detail" ? "comment" : "detail";
+            API.setDetailSource(item.id, next).then(function () {
+              U.toast(next === "detail"
+                ? "«Детализация» берётся из своей колонки бюджета"
+                : "«Детализация» берётся из нашего комментария");
+              App.reload();
+              load();
+            }).catch(function (e) { U.toast(e.message, "error"); });
+          } }
+        })
       ]);
       if (item.empty) {
         actions.appendChild(U.el("button", { class: "btn sm", text: "Удалить",

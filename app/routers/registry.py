@@ -51,10 +51,23 @@ def merge(payload: MergeIn, u: auth.User = Depends(user)) -> dict:
 
 
 @router.patch("/cfo/{cfo_id}")
-def rename(cfo_id: int, payload: RenameIn, u: auth.User = Depends(user)) -> dict:
+def edit_cfo(cfo_id: int, payload: RenameIn, u: auth.User = Depends(user)) -> dict:
+    """Правка ЦФО: название и признак «своя колонка Детализация».
+
+    Признак раньше проставляла заливка плана по подстроке в названии —
+    дирекцию переименовали, и колонка молча пропадала.
+    """
     require_fin(u)
+    if payload.name is None and payload.detail_source is None:
+        raise HTTPException(422, "Нечего менять")
     try:
-        return registry.rename(cfo_id, payload.name, u.name)
+        result: dict = {"id": cfo_id}
+        if payload.name is not None:
+            result = registry.rename(cfo_id, payload.name, u.name)
+        if payload.detail_source is not None:
+            result.update(
+                registry.set_detail_source(cfo_id, payload.detail_source, u.name))
+        return result
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

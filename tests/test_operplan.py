@@ -20,10 +20,7 @@ from app.main import app
 MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
                "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
-***REMOVED*** Своя колонка «Детализация» включается по подстроке в названии ЦФО
-***REMOVED*** (operplan.IT_MARKER). Имя стенда строим из неё, чтобы не записывать
-***REMOVED*** в тесты настоящее название дирекции.
-IT = "Первая дирекция, " + operplan.IT_MARKER
+IT = "Первая дирекция"
 HR = "Вторая дирекция"
 
 
@@ -126,6 +123,8 @@ def loaded(client):
     """Слой планирования с загруженным базовым 2026 годом."""
     result = operplan.import_budgets(make_budgets_sheet(), "бюджеты.xlsx", 2026, "Тест")
     assert result["rows"] == 7
+    ***REMOVED*** признак ставится явно: заливка его больше не угадывает по названию
+    repo.set_detail_source(repo.ensure_cfo(IT), "detail")
     return result
 
 

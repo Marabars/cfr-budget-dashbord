@@ -618,6 +618,12 @@ def get_column_mapping(cfo_id: int) -> str:
 
 ***REMOVED*** ---------- справочники для форм Оперплана ----------
 
+def get_cfo_detail_source(cfo_id: int) -> str:
+    """Откуда дирекция берёт «Детализацию»; по умолчанию — наш комментарий."""
+    row = db.query_one("SELECT detail_source FROM cfo WHERE id = ?", (cfo_id,))
+    return (row["detail_source"] if row else "comment") or "comment"
+
+
 def set_detail_source(cfo_id: int, source: str) -> None:
     """Откуда брать «Детализацию» в интерфейсе: 'detail' (из бюджета) или 'comment' (наш)."""
     db.execute("UPDATE cfo SET detail_source = ? WHERE id = ?",

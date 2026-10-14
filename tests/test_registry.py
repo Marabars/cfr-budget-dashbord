@@ -213,3 +213,58 @@ def test_написания_отличающиеся_пробелами_и_ре�
     first = repo.ensure_cfo("Вторая дирекция")
     assert repo.ensure_cfo("  вторая   Дирекция ") == first
     assert len([i for i in registry.stats(2026) if i["id"] == first]) == 1
+
+
+***REMOVED*** ---------- источник «Детализации» ----------
+
+def test_источник_детализации_ставится_в_реестре(client):
+    """Это свойство ЦФО, а не догадка по названию: имя меняется, догадка — нет."""
+    make_cfo(client, "Первая дирекция", "Основной бюджет", "4420_ПО", 100_000)
+    cfo_id = repo.find_cfo("Первая дирекция")["id"]
+    assert repo.get_cfo_detail_source(cfo_id) == "comment", "по умолчанию — комментарий"
+
+    assert client.patch(f"/api/registry/cfo/{cfo_id}",
+                        json={"detail_source": "detail"}).status_code == 200
+    assert repo.get_cfo_detail_source(cfo_id) == "detail"
+
+    assert client.patch(f"/api/registry/cfo/{cfo_id}",
+                        json={"detail_source": "comment"}).status_code == 200
+    assert repo.get_cfo_detail_source(cfo_id) == "comment"
+
+
+def test_заливка_плана_источник_детализации_не_трогает(client):
+    """Самое важное: признак переживает перезаливку бюджета из Excel."""
+    from app import operplan
+    from tests.test_operplan import IT, make_budgets_sheet
+
+    operplan.import_budgets(make_budgets_sheet(), "бюджеты.xlsx", 2026, "Тест")
+    cfo_id = repo.find_cfo(IT)["id"]
+    assert repo.get_cfo_detail_source(cfo_id) == "comment", \
+        "заливка не должна угадывать признак по названию"
+
+    client.patch(f"/api/registry/cfo/{cfo_id}", json={"detail_source": "detail"})
+    operplan.import_budgets(make_budgets_sheet(), "бюджеты.xlsx", 2026, "Тест")
+    assert repo.get_cfo_detail_source(cfo_id) == "detail", \
+        "перезаливка сбросила признак — колонка у дирекции пропадёт"
+
+
+def test_реестр_показывает_источник_детализации(client):
+    make_cfo(client, "Первая дирекция", "Основной бюджет", "4420_ПО", 100_000)
+    cfo_id = repo.find_cfo("Первая дирекция")["id"]
+    client.patch(f"/api/registry/cfo/{cfo_id}", json={"detail_source": "detail"})
+    items = client.get("/api/registry/cfo").json()["items"]
+    наш = next(i for i in items if i["id"] == cfo_id)
+    assert наш["detail_source"] == "detail"
+
+
+def test_пустая_правка_цфо_отклоняется(client):
+    make_cfo(client, "Первая дирекция", "Основной бюджет", "4420_ПО", 100_000)
+    cfo_id = repo.find_cfo("Первая дирекция")["id"]
+    assert client.patch(f"/api/registry/cfo/{cfo_id}", json={}).status_code == 422
+
+
+def test_чужое_значение_источника_не_принимается(client):
+    make_cfo(client, "Первая дирекция", "Основной бюджет", "4420_ПО", 100_000)
+    cfo_id = repo.find_cfo("Первая дирекция")["id"]
+    assert client.patch(f"/api/registry/cfo/{cfo_id}",
+                        json={"detail_source": "что-нибудь"}).status_code == 422

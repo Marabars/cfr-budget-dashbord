@@ -20,7 +20,7 @@ def stats(year: int) -> list[dict]:
     """По каждому ЦФО: сколько бюджетов, строк, план, факт, заявки, алиасы."""
     rows = db.query(
         """
-        SELECT c.id, c.name,
+        SELECT c.id, c.name, c.detail_source,
                (SELECT COUNT(*) FROM budget b WHERE b.cfo_id = c.id AND b.year = ?) AS budgets,
                (SELECT COUNT(*) FROM budget_row r JOIN budget b ON b.id = r.budget_id
                  WHERE b.cfo_id = c.id AND b.year = ? AND r.deleted_at IS NULL) AS rows_count,
@@ -155,6 +155,25 @@ def rename(cfo_id: int, new_name: str, author: str) -> dict:
     db.log(author, "Переименование ЦФО", new_name, f"{old_name} → {new_name}",
            "Прежнее написание сохранено как алиас")
     return {"ok": True, "id": cfo_id, "name": new_name}
+
+
+def set_detail_source(cfo_id: int, source: str, author: str) -> dict:
+    """Откуда дирекция берёт «Детализацию»: своя колонка бюджета или комментарий.
+
+    Это свойство дирекции, а не догадка по её названию: прежде признак
+    проставляла заливка плана, и при переименовании он молча терялся.
+    """
+    if source not in ("detail", "comment"):
+        raise ValueError("Детализация берётся из бюджета или из комментария")
+    row = db.query_one("SELECT name, detail_source FROM cfo WHERE id = ?", (cfo_id,))
+    if not row:
+        raise ValueError("ЦФО не найдено")
+    was = row["detail_source"] or "comment"
+    repo.set_detail_source(cfo_id, source)
+    if was != source:
+        db.log(author, "Источник «Детализации»", row["name"], f"{was} → {source}",
+               "Своя колонка бюджета" if source == "detail" else "Наш комментарий")
+    return {"ok": True, "id": cfo_id, "detail_source": source}
 
 
 def add_alias(cfo_id: int, alias: str, author: str) -> dict:

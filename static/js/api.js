@@ -190,6 +190,11 @@
     renameCfo: function (cfoId, name) {
       return request("PATCH", "/api/registry/cfo/" + cfoId, { name: name });
     },
+    /* Откуда дирекция берёт «Детализацию»: своя колонка бюджета или наш
+       комментарий. Признак дирекции, а не догадка по её названию. */
+    setDetailSource: function (cfoId, source) {
+      return request("PATCH", "/api/registry/cfo/" + cfoId, { detail_source: source });
+    },
     addAlias: function (cfoId, alias) {
       return request("POST", "/api/registry/cfo/" + cfoId + "/alias", { alias: alias });
     },

@@ -113,7 +113,10 @@ class MergeIn(BaseModel):
 
 
 class RenameIn(BaseModel):
-    name: str = Field(min_length=2)
+    """Правка ЦФО в реестре: название и/или источник «Детализации»."""
+    name: str | None = Field(default=None, min_length=2)
+    ***REMOVED*** 'detail' — своя колонка бюджета, 'comment' — наш комментарий
+    detail_source: Literal["detail", "comment"] | None = None
 
 
 class AliasIn(BaseModel):

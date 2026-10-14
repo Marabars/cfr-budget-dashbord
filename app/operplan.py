@@ -22,7 +22,10 @@ from app.importers import cfo_budgets, planfact, xlsx
 LAYER = repo.LAYER_OPERPLAN
 DEFAULT_PLAN_YEAR = 2027
 DEFAULT_BASE_YEAR = 2026
-IT_MARKER = "ИТ-направлению"    ***REMOVED*** у ИТ «Детализация» берётся из бюджета
+***REMOVED*** Откуда дирекция берёт колонку «Детализация» — свойство самой дирекции
+***REMOVED*** (`cfo.detail_source`), а не догадка по её названию: имя меняется, подстрока
+***REMOVED*** устаревает молча. Признак ставится руками в реестре ЦФО, заливка плана его
+***REMOVED*** не трогает.
 
 
 ***REMOVED*** ---------- параметры вкладки ----------
@@ -606,8 +609,6 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
         if allowed is not None and cfo_id not in allowed:
             foreign += 1
             continue
-        if IT_MARKER in row["cfo"].lower():
-            repo.set_detail_source(cfo_id, "detail")
         plan = _plan_or_months(row)
         budget_id = repo.ensure_budget(cfo_id, year, row["budget"], layer=LAYER)
         repo.create_row(budget_id, {**row, "plan_year": plan},
