@@ -20,7 +20,10 @@ from app.main import app
 MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
                "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
-IT = "Первая дирекция"
+***REMOVED*** Своя колонка «Детализация» включается по подстроке в названии ЦФО
+***REMOVED*** (operplan.IT_MARKER). Имя стенда строим из неё, чтобы не записывать
+***REMOVED*** в тесты настоящее название дирекции.
+IT = "Первая дирекция, " + operplan.IT_MARKER
 HR = "Вторая дирекция"
 
 
@@ -1399,7 +1402,12 @@ def test_повтор_года_переносит_классификатор(cli
 
 
 def test_выгрузка_несёт_классификатор_и_круг_его_не_теряет(client, planned):
-    row = plan_row()
+    ***REMOVED*** строку берём с неповторяющейся парой «статья + контрагент»: ниже она
+    ***REMOVED*** служит ключом в выгрузке, а одна статья в плане встречается не раз
+    from collections import Counter
+    все = repo.list_rows(2027, layer=operplan.LAYER)
+    сколько = Counter((r["article"], r["counterparty"]) for r in все)
+    row = next(r for r in все if сколько[(r["article"], r["counterparty"])] == 1)
     client.patch(f"/api/rows/{row['id']}", json={"classifier": "МРК"})
 
     content = client.get("/api/export/budget.xlsx?year=2027").content

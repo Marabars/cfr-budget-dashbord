@@ -400,7 +400,7 @@ describe("вкладка «Бюджет»: выбор дирекции для н
     t.click(t.$("***REMOVED***op-add-row"));
     await settle(t.window, 30);
     const shown = t.$$("***REMOVED***op-add-menu .copt").map((n) => n.textContent);
-    assert.deepEqual(shown, [IT, HR], "по алфавиту: с строками и пустая");
+    assert.deepEqual(shown, [HR, IT], "по алфавиту: «Вторая» раньше «Первой»");
     assert.ok(!t.calls.length, "до выбора дирекции ничего не создаём");
   });
 

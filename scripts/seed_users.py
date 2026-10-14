@@ -43,9 +43,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fin-password", default=os.environ.get("FIN_PASSWORD", ""),
                         help="пароль финотдела; в коде его нет — задайте флагом "
                              "или переменной FIN_PASSWORD")
-    parser.add_argument("--salt", default=os.environ.get("SEED_SALT", ""),
-                        help="(не используется) "
-                             "у кого есть исходники")
     parser.add_argument("--out", default="",
                         help="файл, куда выписать список для раздачи (UTF-8)")
     return parser.parse_args()
@@ -73,8 +70,7 @@ def main() -> int:
     db.init_db()
     print("база:", db.get_db_path())
     print("режим:", "запись" if args.apply else "только показ (добавьте --apply)")
-    if args.salt:
-        print("соль: задана — без неё пароли из этого списка не повторить")
+    print("пароли случайные: повторный запуск выдаст другие — сохраните список")
     print()
 
     taken = existing_logins()
@@ -87,7 +83,7 @@ def main() -> int:
             owned[login] = ids[0]
 
     cfo_rows = db.query("SELECT id, name FROM cfo WHERE active = 1 ORDER BY id")
-    plan = accounts.accounts_for(cfo_rows, salt=args.salt,
+    plan = accounts.accounts_for(cfo_rows,
                                  taken=set(taken) | {args.fin_login}, owned=owned)
 
     lines = []

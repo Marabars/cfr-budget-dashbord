@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app import accounts, auth, db, repo
 from app.main import app
 
+***REMOVED*** пароли для стенда: ни один из них нигде не действует
 FIN_PASSWORD = "test-fin-pass"
 CFO_PASSWORD = "test-cfo-pass"
 
@@ -295,31 +296,42 @@ def test_миграция_добавляет_пароли_не_трогая_уч
 ***REMOVED*** ---------- логины и пароли по названию ЦФО ----------
 
 def test_логин_собирается_из_инициалов_значимых_слов():
-    assert accounts.login_for("Вторая дирекция") == "dup"
-    assert accounts.login_for("Восьмая дирекция") == "dmp"
-    assert accounts.login_for("Первый отдел") == "ao"
-    assert accounts.login_for("Седьмая дирекция") == "deb"
+    assert accounts.login_for("Вторая дирекция") == "vd"
+    assert accounts.login_for("Восьмая дирекция") == "vd"
+    assert accounts.login_for("Первый отдел") == "po"
+    assert accounts.login_for("Седьмая дирекция") == "sd"
 
 
 def test_короткое_название_берётся_словом_целиком():
-    """«Эпсилон» — одно слово: инициал «g» логином быть не может."""
-    assert accounts.login_for("Эпсилон") == "gasfor"
+    """«Эпсилон» — одно слово: инициал «e» логином быть не может."""
+    assert accounts.login_for("Эпсилон") == "epsilon"
     assert accounts.login_for("Ёлка") == "elka"
 
 
 def test_совпавшие_логины_разводятся_цифрой():
-    taken = {"dup"}
-    assert accounts.login_for("Вторая дирекция", taken) == "dup2"
-    assert accounts.login_for("Вторая дирекция", taken | {"dup2"}) == "dup3"
+    taken = {"vd"}
+    assert accounts.login_for("Вторая дирекция", taken) == "vd2"
+    assert accounts.login_for("Вторая дирекция", taken | {"vd2"}) == "vd3"
 
 
-def test_пароль_воспроизводим_и_не_короче_минимума():
-    name = "Десятая дирекция"
-    first = accounts.password_for("da", name)
-    assert first == accounts.password_for("da", name)
-    assert first.startswith("da-")
-    assert len(first) >= auth.MIN_PASSWORD
-    assert accounts.password_for("da", name, salt="соль") != first
+def test_пароль_случаен_и_ниоткуда_не_выводится():
+    """Прежде пароль был хешем от логина и названия — и вычислялся по исходникам.
+
+    Теперь он берётся из secrets: два вызова подряд обязаны разойтись, а из
+    названия ЦФО не должно следовать ничего.
+    """
+    подряд = {accounts.new_password() for _ in range(50)}
+    assert len(подряд) == 50, "пароль повторился — значит он не случаен"
+    образец = accounts.new_password()
+    assert len(образец) >= auth.MIN_PASSWORD
+    ***REMOVED*** сторож: вернётся выведение пароля из названия — тест упадёт
+    assert not hasattr(accounts, "password_for")
+
+
+def test_учётки_одной_дирекции_получают_разные_пароли():
+    rows = [{"id": 1, "name": "Первая дирекция"}, {"id": 2, "name": "Первая дирекция"}]
+    пароли = [a["password"] for a in accounts.accounts_for(rows)]
+    assert пароли[0] != пароли[1]
 
 
 def test_набор_учёток_не_повторяет_логины():
@@ -329,11 +341,11 @@ def test_набор_учёток_не_повторяет_логины():
         {"id": 3, "name": "Двенадцатая дирекция"},
         {"id": 4, "name": "Девятая дирекция"},
     ]
-    plan = accounts.accounts_for(rows, taken={"admin", "dit"})
+    plan = accounts.accounts_for(rows, taken={"admin", "pd"})
     logins = [item["login"] for item in plan]
     assert len(set(logins)) == len(logins)
     assert "admin" not in logins
-    assert logins[0] == "dit2"          ***REMOVED*** «dit» занят — развели цифрой
+    assert logins[0] == "pd2"           ***REMOVED*** «pd» занят — развели цифрой
     assert [item["cfo_id"] for item in plan] == [1, 2, 3, 4]
 
 
@@ -343,7 +355,7 @@ def test_выданной_парой_можно_войти(client, guest):
     cfo_id = repo.ensure_cfo("Вторая дирекция")
     rows = db.query("SELECT id, name FROM cfo WHERE id = ?", (cfo_id,))
     item = accounts.accounts_for(rows)[0]
-    assert item["login"] == "dup"
+    assert item["login"] == "vd"
 
     assert client.post("/api/users", json={
         "login": item["login"], "name": item["cfo_name"], "role": "cfo",
@@ -356,7 +368,7 @@ def test_выданной_парой_можно_войти(client, guest):
 
 
 def test_повторный_расчёт_узнаёт_свои_учётки():
-    """Логин, уже привязанный к этому ЦФО, за ним и остаётся — без «dup2»."""
+    """Логин, уже привязанный к этому ЦФО, за ним и остаётся — без «vd2»."""
     rows = [{"id": 11, "name": "Вторая дирекция"},
             {"id": 12, "name": "Двенадцатая дирекция"}]
     first = accounts.accounts_for(rows, taken={"admin"})
@@ -364,11 +376,14 @@ def test_повторный_расчёт_узнаёт_свои_учётки():
 
     again = accounts.accounts_for(rows, taken={"admin"} | set(owned), owned=owned)
     assert [item["login"] for item in again] == [item["login"] for item in first]
-    assert [item["password"] for item in again] == [item["password"] for item in first]
+    ***REMOVED*** Пароли при этом обязаны разойтись: они случайные, а не выведенные.
+    ***REMOVED*** Прежде повторный запуск давал тот же список — и этим же свойством
+    ***REMOVED*** пароль вычислялся по исходникам.
+    assert [item["password"] for item in again] != [item["password"] for item in first]
 
 
 def test_чужой_логин_всё_равно_разводится():
     """Тот же логин, но за другим ЦФО — занят, и его подбирать заново нельзя."""
     rows = [{"id": 11, "name": "Вторая дирекция"}]
-    plan = accounts.accounts_for(rows, taken={"dup"}, owned={"dup": 99})
-    assert plan[0]["login"] == "dup2"
+    plan = accounts.accounts_for(rows, taken={"vd"}, owned={"vd": 99})
+    assert plan[0]["login"] == "vd2"

@@ -49,7 +49,7 @@ def test_находит_дубль_с_приписанным_словом(client
 
 def test_находит_опечатку_в_названии(client):
     make_cfo(client, "Финансовый отдел", "Основной бюджет", "4106_Аудит", 500_000)
-    make_cfo(client, "Финансовая дирекци", "Основной бюджет", "4106_Аудит", 100_000)
+    make_cfo(client, "Финансовый отедл", "Основной бюджет", "4106_Аудит", 100_000)
     pairs = registry.suggestions(2026)
     assert pairs and pairs[0]["confidence"] == 3
     assert pairs[0]["target"]["name"] == "Финансовый отдел"    ***REMOVED*** где данных больше
