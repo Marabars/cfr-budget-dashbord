@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app import auth, registry, service
-from app.models import AliasIn, MergeIn, RenameIn
+from app.models import AliasIn, CfoIn, MergeIn, RenameIn
 
 router = APIRouter(prefix="/api/registry", tags=["registry"])
 
@@ -46,6 +46,20 @@ def merge(payload: MergeIn, u: auth.User = Depends(user)) -> dict:
     require_fin(u)
     try:
         return registry.merge(payload.source_id, payload.target_id, u.name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/cfo")
+def create_cfo(payload: CfoIn, u: auth.User = Depends(user)) -> dict:
+    """Завести дирекцию, у которой бюджета ещё нет.
+
+    Нужна, когда дирекция только собирается подать бюджет: в шаблоне у неё
+    появится свой блок, и заполнять его будет куда.
+    """
+    require_fin(u)
+    try:
+        return registry.create(payload.name, u.name, payload.detail_source)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

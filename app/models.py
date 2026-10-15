@@ -112,6 +112,12 @@ class MergeIn(BaseModel):
     target_id: int
 
 
+class CfoIn(BaseModel):
+    """Новое ЦФО в справочнике: только название и источник «Детализации»."""
+    name: str = Field(min_length=2)
+    detail_source: Literal["detail", "comment"] = "comment"
+
+
 class RenameIn(BaseModel):
     """Правка ЦФО в реестре: название и/или источник «Детализации»."""
     name: str | None = Field(default=None, min_length=2)

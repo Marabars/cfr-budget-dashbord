@@ -226,6 +226,21 @@
     });
   }
 
+  /* Завести дирекцию, которая бюджет ещё не подавала: в шаблоне у неё
+     появится свой блок, и заполнять его будет куда. */
+  function initAdd() {
+    var button = document.getElementById("reg-add");
+    if (!button) return;
+    button.onclick = function () {
+      var name = window.prompt("Название новой дирекции:");
+      if (!name || !name.trim()) return;
+      API.createCfo(name.trim()).then(function (result) {
+        U.toast("Дирекция «" + result.name + "» заведена — бюджета у неё пока нет");
+        load();
+      }).catch(function (e) { U.toast(e.message); });
+    };
+  }
+
   function initManual() {
     var button = document.getElementById("mm-go");
     if (!button) return;
@@ -240,5 +255,5 @@
     };
   }
 
-  window.Registry = { load: load, init: initManual };
+  window.Registry = { load: load, init: function () { initManual(); initAdd(); } };
 })();

@@ -752,6 +752,29 @@ def test_загрузка_факта_ложится_на_строки_плана
     assert kpi["base_fact"] == pytest.approx(97_000)
 
 
+def test_строка_отдаёт_факт_по_месяцам(client, loaded):
+    """Таблица «<год> · факт» строится из этого поля.
+
+    Источник тот же, что у плитки и выгрузки факта, поэтому раздел с фактом
+    и плитка разойтись не могут.
+    """
+    operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
+    view = client.get("/api/operplan?year=2026").json()
+
+    rows = [row for block in view["blocks"] for row in block["rows"]]
+    assert rows, "в базовом году есть строки"
+    assert all("fact_months" in row for row in rows)
+    assert all(len(row["fact_months"]) == 12 for row in rows)
+
+    total = sum(sum(row["fact_months"]) for row in rows)
+    assert total == pytest.approx(97_000)
+    ***REMOVED*** факт строки сходится с её расшифровкой по контрагентам
+    for row in rows:
+        if row["spends"]:
+            assert sum(row["fact_months"]) == pytest.approx(
+                sum(spend["total"] for spend in row["spends"]))
+
+
 def test_плитка_факта_считает_и_расход_вне_бюджета(client, loaded):
     """«Факт» — всё, что прошло, а не только освоение плана (решение 15.10.2026).
 

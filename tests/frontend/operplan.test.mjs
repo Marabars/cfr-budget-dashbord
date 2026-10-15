@@ -50,6 +50,8 @@ const BASE = {
   approver_comment: "", detail_source: "detail", detail_text: "Серверы прошлого года",
   plan_year: 90000, months: [90000, ...Array(MONTHS - 1).fill(0)], source: "import",
   base_plan_year: null,
+  // факт строки: из него строится раздел «<год> · факт»
+  fact_months: [12000, ...Array(MONTHS - 1).fill(0)],
 };
 
 /* Строка ДУП: та же таблица, но колонка «Детализация» у неё — комментарий,
@@ -970,6 +972,27 @@ describe("вкладка «Бюджет»: расходы и вне бюджет
     // у плитки со шкалой подпись лежит под ней, в .batt-note
     assert.match(outside.querySelector(".batt-note").textContent, /1 позиций в 1 ЦФО/);
     assert.ok(outside.classList.contains("k-crit"), "ненулевой перерасход подсвечен");
+  });
+
+  it("под базовым годом идёт раздел «факт» с теми же строками", async () => {
+    // решение 15.10.2026: факт должен быть виден таблицей, а не только раскрытием строк
+    const t = await mount([{ id: 1, name: IT }], [], {
+      outside: [{ cfo_id: 1, cfo_name: IT, article: "4999_Непредвиденное",
+                  counterparty: "Омега ООО", contract: "", detail: "вне плана",
+                  out_of_budget: 1, months: [7000, ...Array(MONTHS - 1).fill(0)],
+                  total: 7000 }],
+    });
+    const factHead = t.$$("tr.year-row").find((tr) => /факт/.test(tr.textContent));
+    assert.ok(factHead, "раздел «факт» есть под планом и базой");
+
+    t.click(factHead);
+    await settle(t.window);
+    const total = t.$$("tr.total-row").find((tr) => /факт/.test(tr.textContent));
+    assert.ok(total, "у раздела свой ИТОГО");
+    // 12 000 факта базовой строки плюс 7 000 вне бюджета
+    assert.match(total.textContent.replace(/\s/g, ""), /19000/);
+    assert.ok(t.$$("tr").some((tr) => /ВНЕБЮДЖЕТА/.test(tr.textContent.replace(/\s/g, ""))),
+      "расход без строки плана показан отдельным блоком");
   });
 
   it("без перерасхода плитка не кричит", async () => {

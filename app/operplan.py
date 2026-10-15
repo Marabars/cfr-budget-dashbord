@@ -309,6 +309,10 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
         }
 
     spends = row_spends(year, cfo_ids)
+    ***REMOVED*** Факт строки по месяцам — из него вкладка строит раздел «<год> · факт»
+    ***REMOVED*** под плановым. Берём тем же источником, что плитка и выгрузка факта,
+    ***REMOVED*** иначе таблица и плитка разошлись бы.
+    row_fact = fact_months_by_row(year, row_ids={int(r["id"]) for r in rows})
     for row in rows:
         block = blocks.get(int(row["budget_id"]))
         if block is None:
@@ -318,6 +322,7 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
                          base_by_key.get(full_key(row)))
         ***REMOVED*** расходы по контрагентам под строкой: раскрытие на вкладке
         item["spends"] = spends.get(rid, [])
+        item["fact_months"] = row_fact.get(rid, _empty_months())
         block["rows"].append(item)
 
     out_blocks = []

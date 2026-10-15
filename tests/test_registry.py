@@ -268,3 +268,53 @@ def test_чужое_значение_источника_не_принимает�
     cfo_id = repo.find_cfo("Первая дирекция")["id"]
     assert client.patch(f"/api/registry/cfo/{cfo_id}",
                         json={"detail_source": "что-нибудь"}).status_code == 422
+
+
+def test_финотдел_заводит_цфо_без_бюджета(client):
+    """Дирекция, которая бюджет ещё не подала, заводится руками.
+
+    До этого ЦФО появлялось только из импорта — вместе с первыми строками,
+    а значит новой дирекции негде было взять блок в шаблоне.
+    """
+    response = client.post("/api/registry/cfo", json={"name": "Пятая дирекция"})
+    assert response.status_code == 200
+    created = response.json()
+    assert created["name"] == "Пятая дирекция"
+
+    names = [item["name"] for item in client.get("/api/registry/cfo").json()["items"]]
+    assert "Пятая дирекция" in names
+
+
+def test_новое_цфо_получает_блок_в_шаблоне(client):
+    """Ради этого всё и заводится: дирекции нужно место под бюджет.
+
+    Шаблон перечисляет активные ЦФО справочника, поэтому заведённая вручную
+    дирекция получает свой блок — и ей есть куда вписать первый бюджет.
+    """
+    import openpyxl, io as _io
+
+    def cfo_names(content: bytes) -> set[str]:
+        ws = openpyxl.load_workbook(_io.BytesIO(content), data_only=True)["Бюджеты ЦФО"]
+        return {str(c.value).strip() for row in ws.iter_rows() for c in row
+                if isinstance(c.value, str)}
+
+    before = cfo_names(client.get("/api/export/budget-template.xlsx?year=2026").content)
+    client.post("/api/registry/cfo", json={"name": "Пятая дирекция"})
+    after = cfo_names(client.get("/api/export/budget-template.xlsx?year=2026").content)
+
+    assert "Пятая дирекция" not in before
+    assert "Пятая дирекция" in after
+
+
+def test_дубль_цфо_не_заводится(client):
+    client.post("/api/registry/cfo", json={"name": "Пятая дирекция"})
+    again = client.post("/api/registry/cfo", json={"name": "пятая дирекция "})
+    assert again.status_code == 422
+    assert "уже есть" in again.json()["detail"]
+
+
+def test_руководителю_завести_цфо_нельзя(client):
+    cfo_id = repo.ensure_cfo("Дирекция А")
+    response = client.post("/api/registry/cfo", json={"name": "Пятая дирекция"},
+                           headers={"X-User": f"cfo:{cfo_id}"})
+    assert response.status_code == 403

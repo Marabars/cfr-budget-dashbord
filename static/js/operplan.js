@@ -772,6 +772,97 @@
     return tr;
   }
 
+  /* ---------- раздел «<год> · факт» ---------- */
+
+  /* Под плановой таблицей базового года идёт такая же, но с фактом: те же
+     строки и колонки, в месяцах — потраченное, в ИТОГО — факт строки, а в
+     последней колонке остаётся план этой же строки, чтобы сравнивать глазами.
+     Решение пользователя 15.10.2026: до этого факт был виден только плитками
+     и раскрытием строки, таблицы с фактом не было вовсе. */
+  function factRowView(row) {
+    var months = (row.fact_months || []).slice();
+    var sum = 0;
+    for (var i = 0; i < 12; i++) sum += months[i] || 0;
+    var view = {};
+    Object.keys(row).forEach(function (k) { view[k] = row[k]; });
+    view.id = "f" + row.id;          // свой ключ: правка и раскрытие не путаются с планом
+    view.months = months;
+    view.plan_year = sum;
+    view.base_plan_year = row.plan_year;
+    return view;
+  }
+
+  /* Расход без строки плана — тем же списком, что и в плитке «Вне бюджета». */
+  function outsideRowView(item, index) {
+    return {
+      id: "o" + index, article: item.article, classifier: "",
+      counterparty: item.counterparty, contract: item.contract,
+      detail_text: item.detail, months: (item.months || []).slice(),
+      plan_year: item.total, base_plan_year: null, spends: []
+    };
+  }
+
+  function factNodes(sec) {
+    var nodes = [], rows = [];
+    blocksOf(sec, false).forEach(function (block) {
+      var position = {};
+      sortRows(block.rows).forEach(function (row, index) { position[row.id] = index + 1; });
+      var visible = sortRows(block.rows.filter(function (row) {
+        return passes(row, block.cfo_name);
+      }));
+      if (!visible.length) return;
+      var факт = visible.map(factRowView);
+      var sum = факт.reduce(function (acc, r) { return acc + r.plan_year; }, 0);
+      nodes.push(groupNode(block, факт.length, sum));
+      rows = rows.concat(факт);
+      if (state.collapsed[block.budget_id]) return;
+      факт.forEach(function (row, i) {
+        var node = rowNode(row, block.cfo_name, false, position[visible[i].id]);
+        node.classList.add("y-past");
+        nodes.push(node);
+        if (!state.spendOpen[row.id]) return;
+        (row.spends || []).forEach(function (spend) {
+          nodes.push(spendNode(spend, position[visible[i].id]));
+        });
+      });
+    });
+
+    var outside = (sec.outside || []).filter(function (item) {
+      return passes(outsideRowView(item, 0), item.cfo_name);
+    }).map(outsideRowView);
+    if (outside.length) {
+      var sum = outside.reduce(function (acc, r) { return acc + r.plan_year; }, 0);
+      nodes.push(groupNode({ budget_id: "outside", budget_name: "ВНЕ БЮДЖЕТА",
+        cfo_name: "по всем дирекциям" }, outside.length, sum));
+      rows = rows.concat(outside);
+      if (!state.collapsed.outside) {
+        outside.forEach(function (row, i) {
+          var node = rowNode(row, "", false, i + 1);
+          node.classList.add("y-past");
+          nodes.push(node);
+        });
+      }
+    }
+    return { nodes: nodes, rows: rows };
+  }
+
+  function factYearNode(year, rows, open) {
+    var sum = rows.reduce(function (acc, r) { return acc + r.plan_year; }, 0);
+    var td = U.el("td", { colspan: COLS }, [
+      U.el("span", { class: "grp-caret", text: open ? "▾" : "▸" }),
+      U.el("b", { text: year + " год" }),
+      U.el("span", { class: "year-tag is-base", text: "факт" }),
+      U.el("span", { class: "grp-sum",
+        text: U.fmt(sum) + " ₽ · " + rows.length + " строк с фактом" })
+    ]);
+    var tr = U.el("tr", { class: "year-row is-base" }, [td]);
+    tr.onclick = function () {
+      state.yearOpen.fact = !open;
+      render();
+    };
+    return tr;
+  }
+
   function render() {
     if (!state.data) return;
     /* Перерисовка выбрасывает ячейки вместе с их списками: открытый список
@@ -835,6 +926,20 @@
       body.appendChild(totalNode(year, yearRows, sec.totals.rows_count));
       nodes.forEach(function (node) { body.appendChild(node); });
     });
+
+    /* Факт базового года — отдельным разделом под его планом. */
+    var baseSec = state.sections[state.data.base_year_no];
+    if (baseSec) {
+      var факт = factNodes(baseSec);
+      var withFact = факт.rows.filter(function (r) { return r.plan_year; });
+      var factOpen = !!state.yearOpen.fact;
+      body.appendChild(factYearNode(state.data.base_year_no, withFact, factOpen));
+      if (factOpen) {
+        body.appendChild(totalNode(state.data.base_year_no + " · факт",
+          факт.rows, факт.rows.length));
+        факт.nodes.forEach(function (node) { body.appendChild(node); });
+      }
+    }
 
     var ctx = visibleContext();
     if (!ctx.rows.length) {

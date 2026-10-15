@@ -157,6 +157,30 @@ def rename(cfo_id: int, new_name: str, author: str) -> dict:
     return {"ok": True, "id": cfo_id, "name": new_name}
 
 
+def create(name: str, author: str, detail_source: str = "comment") -> dict:
+    """Заводит ЦФО без бюджета — под дирекцию, которая бюджет ещё не подала.
+
+    До этого дирекция появлялась только из импорта (`ensure_cfo`), то есть
+    вместе с первыми строками. Но шаблон перечисляет все активные ЦФО, и чтобы
+    новая дирекция получила свой блок для заполнения, её надо завести заранее.
+    """
+    name = (name or "").strip()
+    if len(name) < 2:
+        raise ValueError("Название короче двух символов")
+    clash = repo.find_cfo(name)
+    if clash:
+        raise ValueError(f"Такое ЦФО уже есть: {clash['name']}")
+    if detail_source not in ("detail", "comment"):
+        raise ValueError("Детализация берётся из бюджета или из комментария")
+
+    cfo_id = repo.ensure_cfo(name)
+    if detail_source != "comment":
+        repo.set_detail_source(cfo_id, detail_source)
+    db.log(author, "Новое ЦФО", name, "заведено вручную",
+           "Бюджета пока нет — блок появится в шаблоне")
+    return {"ok": True, "id": cfo_id, "name": name, "detail_source": detail_source}
+
+
 def set_detail_source(cfo_id: int, source: str, author: str) -> dict:
     """Откуда дирекция берёт «Детализацию»: своя колонка бюджета или комментарий.
 

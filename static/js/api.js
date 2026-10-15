@@ -187,6 +187,9 @@
     merge: function (sourceId, targetId) {
       return request("POST", "/api/registry/merge", { source_id: sourceId, target_id: targetId });
     },
+    createCfo: function (name) {
+      return request("POST", "/api/registry/cfo", { name: name });
+    },
     renameCfo: function (cfoId, name) {
       return request("PATCH", "/api/registry/cfo/" + cfoId, { name: name });
     },
