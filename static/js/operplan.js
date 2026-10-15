@@ -827,22 +827,32 @@
       });
     });
 
-    var outside = (sec.outside || []).filter(function (item) {
-      return passes(outsideRowView(item, 0), item.cfo_name);
-    }).map(outsideRowView);
-    if (outside.length) {
-      var sum = outside.reduce(function (acc, r) { return acc + r.plan_year; }, 0);
-      nodes.push(groupNode({ budget_id: "outside", budget_name: "ВНЕ БЮДЖЕТА",
-        cfo_name: "по всем дирекциям" }, outside.length, sum));
-      rows = rows.concat(outside);
-      if (!state.collapsed.outside) {
-        outside.forEach(function (row, i) {
-          var node = rowNode(row, "", false, i + 1);
-          node.classList.add("y-past");
-          nodes.push(node);
-        });
-      }
-    }
+    /* Расход без строки плана — блоком на каждую дирекцию, как и бюджеты.
+       Одним общим блоком он врал: при фильтре по ЦФО в заголовке всё равно
+       стояло «по всем дирекциям», а чьи это строки — по таблице не читалось. */
+    var byCfo = {};
+    (sec.outside || []).forEach(function (item, index) {
+      var view = outsideRowView(item, index);
+      if (!passes(view, item.cfo_name)) return;
+      var name = item.cfo_name || "ЦФО не указан";
+      (byCfo[name] = byCfo[name] || []).push(view);
+    });
+    Object.keys(byCfo).sort(function (a, b) {
+      return String(a).localeCompare(String(b), "ru");
+    }).forEach(function (name) {
+      var items = byCfo[name];
+      var key = "outside:" + name;
+      var sum = items.reduce(function (acc, r) { return acc + r.plan_year; }, 0);
+      nodes.push(groupNode({ budget_id: key, budget_name: "ВНЕ БЮДЖЕТА",
+        cfo_name: name }, items.length, sum));
+      rows = rows.concat(items);
+      if (state.collapsed[key]) return;
+      items.forEach(function (row, i) {
+        var node = rowNode(row, name, false, i + 1);
+        node.classList.add("y-past");
+        nodes.push(node);
+      });
+    });
     return { nodes: nodes, rows: rows };
   }
 

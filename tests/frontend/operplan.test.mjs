@@ -991,8 +991,10 @@ describe("вкладка «Бюджет»: расходы и вне бюджет
     assert.ok(total, "у раздела свой ИТОГО");
     // 12 000 факта базовой строки плюс 7 000 вне бюджета
     assert.match(total.textContent.replace(/\s/g, ""), /19000/);
-    assert.ok(t.$$("tr").some((tr) => /ВНЕБЮДЖЕТА/.test(tr.textContent.replace(/\s/g, ""))),
-      "расход без строки плана показан отдельным блоком");
+    const outsideHead = t.$$("tr").find((tr) => /ВНЕБЮДЖЕТА/.test(tr.textContent.replace(/\s/g, "")));
+    assert.ok(outsideHead, "расход без строки плана показан отдельным блоком");
+    // блок принадлежит дирекции, а не «всем сразу»: иначе при фильтре заголовок врёт
+    assert.match(outsideHead.textContent, new RegExp(IT));
   });
 
   it("без перерасхода плитка не кричит", async () => {
