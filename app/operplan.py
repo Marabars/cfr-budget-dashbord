@@ -183,7 +183,7 @@ def fact_months_by_row(year: int, cfo_ids: Iterable[int] | None = None,
 
     Факт, загруженный Excel'ем прямо в слой планирования, точнее привязки
     платежей 1С к строкам: берём его, а на пустом слое падаем на привязку.
-    Источник один и у плитки план-факт, и у выгрузки факта — иначе выгрузка
+    Источник один и у плитки «Факт», и у выгрузки факта — иначе выгрузка
     отдавала бы нули там, где плитка показывает сумму.
 
     `row_ids` — готовый круг строк года, когда вызывающий их уже прочитал.
@@ -197,7 +197,7 @@ def fact_months_by_row(year: int, cfo_ids: Iterable[int] | None = None,
 
 
 def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
-    """Четыре показателя вкладки: план нового года, бюджет базового, план-факт и вне бюджета."""
+    """Четыре показателя вкладки: план нового года, бюджет базового, факт и вне бюджета."""
     py, by = plan_year(), base_year()
     plan_rows = _year_rows(py, cfo_ids)
     base_rows = _year_rows(by, cfo_ids)
@@ -215,6 +215,11 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
     outside = unlinked_fact(by, cfo_ids)
     outside_total = sum(item["total"] for item in outside)
 
+    ***REMOVED*** Плитка «Факт» отвечает на вопрос «сколько прошло по факту», а не «сколько
+    ***REMOVED*** освоено плана» (решение пользователя 15.10.2026), поэтому расход вне
+    ***REMOVED*** бюджета в неё входит. Освоение строк плана осталось в `base_fact`.
+    fact_total = base_fact + outside_total
+
     return {
         "plan_year": py,
         "base_year": by,
@@ -225,9 +230,13 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
         ***REMOVED*** набранный план в долях прошлогоднего бюджета: растёт по мере наполнения,
         ***REMOVED*** 100% = план повторил прошлый год, больше 100% = бюджет вырос
         "plan_ratio": (plan_total / base_total) if base_total else 0.0,
+        ***REMOVED*** факт на строках плана: освоение бюджета, без расхода мимо него
         "base_fact": base_fact,
         "base_pct": (base_fact / base_total) if base_total else 0.0,
-        "fact_loaded": base_fact > 0,
+        ***REMOVED*** весь факт года — он и стоит на плитке
+        "fact_total": fact_total,
+        "fact_pct": (fact_total / base_total) if base_total else 0.0,
+        "fact_loaded": fact_total > 0,
         "plan_rows": len(plan_rows),
         "base_rows": len(base_rows),
         "outside_total": outside_total,

@@ -104,6 +104,7 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
       kpi: {
         plan_year: 2027, base_year: 2026, plan_total: total, base_total: 0,
         base_ratio: 0, plan_ratio: 0, base_fact: 0, base_pct: 0,
+        fact_total: 0, fact_pct: 0,
         fact_loaded: false, plan_rows: rows.length, base_rows: 0,
         // факт без строки бюджета: четвёртая плитка
         outside_total: 0, outside_rows: 0, outside_cfo: 0, outside_pct: 0,
@@ -976,6 +977,21 @@ describe("вкладка «Бюджет»: расходы и вне бюджет
     const outside = t.$$("***REMOVED***op-kpis .kpi")[3];
     assert.equal(outside.classList.contains("k-crit"), false);
     assert.match(outside.querySelector(".sub").textContent, /расхода без строки бюджета нет/);
+  });
+
+  it("третья плитка называется «Факт» и показывает весь факт года", async () => {
+    // решение 15.10.2026: на плитке всё, что прошло, вместе с вне бюджета
+    const t = await mount([{ id: 1, name: IT }], [], {
+      kpi: {
+        base_fact: 10_000_000, base_pct: 0.1, fact_total: 16_000_000, fact_pct: 0.16,
+        fact_loaded: true, outside_total: 6_000_000, outside_rows: 1, outside_cfo: 1,
+        outside_pct: 0.06,
+      },
+    });
+    const tile = t.$$("***REMOVED***op-kpis .kpi")[2];
+    assert.match(tile.querySelector(".lbl").textContent, /^Факт 2026$/);
+    assert.match(tile.querySelector(".val").textContent, /16,0 млн/);
+    assert.match(tile.querySelector(".batt-note").textContent, /включая вне бюджета/);
   });
 });
 

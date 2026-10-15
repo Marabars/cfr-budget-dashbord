@@ -173,11 +173,15 @@
     host.appendChild(kpiTile(
       "Бюджет " + k.base_year + " года", U.fmtShort(k.base_total) + " ₽", "k-warm",
       null, k.base_rows + " строк базы"));
+    /* Третья плитка — весь факт года: и тот, что лёг на строки плана, и тот,
+       что прошёл мимо них. Отвечает на «сколько потратили», а не «сколько
+       освоили плана», поэтому вне бюджета отсюда не вычтено — оно лишь
+       показано отдельно соседней плиткой. */
     host.appendChild(kpiTile(
-      "План-факт " + k.base_year, U.fmtShort(k.base_fact) + " ₽",
+      "Факт " + k.base_year, U.fmtShort(k.fact_total) + " ₽",
       k.fact_loaded ? "k-good" : "",
-      k.fact_loaded ? k.base_pct : null,
-      k.fact_loaded ? "освоено от бюджета " + k.base_year
+      k.fact_loaded ? k.fact_pct : null,
+      k.fact_loaded ? "потрачено от бюджета " + k.base_year + ", включая вне бюджета"
         : "факт за " + k.base_year + " год ещё не загружен"));
     /* Четвёртая плитка — потраченное мимо плана: и объявленное дирекцией в
        блоке «ВНЕ БЮДЖЕТА», и то, чему не нашлось строки. При фильтре по

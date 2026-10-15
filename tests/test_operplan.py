@@ -752,6 +752,36 @@ def test_загрузка_факта_ложится_на_строки_плана
     assert kpi["base_fact"] == pytest.approx(97_000)
 
 
+def test_плитка_факта_считает_и_расход_вне_бюджета(client, loaded):
+    """«Факт» — всё, что прошло, а не только освоение плана (решение 15.10.2026).
+
+    Проверка от обратного: верните на плитку `base_fact`, и расход, которому
+    строки плана не нашлось, из неё пропадёт.
+    """
+    operplan.import_fact(make_fact_sheet(extra=True), "факт.xlsx", 2026, "Тест")
+    kpi = client.get("/api/operplan").json()["kpi"]
+
+    assert kpi["outside_total"] > 0, "иначе проверка слепа: вне бюджета ничего нет"
+    assert kpi["fact_total"] == pytest.approx(kpi["base_fact"] + kpi["outside_total"])
+    assert kpi["fact_total"] > kpi["base_fact"]
+    assert kpi["fact_pct"] == pytest.approx(kpi["fact_total"] / kpi["base_total"])
+
+
+def test_факт_считается_загруженным_и_когда_он_весь_вне_бюджета(client, loaded):
+    """Пустой план-факт при ненулевом расходе — не «факт не загружен».
+
+    Дирекция могла отнести весь расход в блок «ВНЕ БЮДЖЕТА»; на строках плана
+    тогда ноль, но факт за год есть, и плитка обязана его показать.
+    """
+    operplan.import_fact(make_fact_sheet(hr_amount=0, it_amount=0, extra=True), "факт.xlsx", 2026, "Тест")
+    kpi = client.get("/api/operplan").json()["kpi"]
+
+    assert kpi["base_fact"] == 0
+    assert kpi["outside_total"] > 0
+    assert kpi["fact_loaded"] is True
+    assert kpi["fact_total"] == pytest.approx(kpi["outside_total"])
+
+
 def test_факт_без_строки_в_плане_не_заводит_её(client, loaded):
     """Загрузка факта плана не меняет (решение пользователя 14.10.2026).
 
