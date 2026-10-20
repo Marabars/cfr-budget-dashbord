@@ -1,4 +1,4 @@
-***REMOVED*** -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Готовит обезличенные данные для HTML-макета (docs/mock-data.demo.js).
 
 Реальные названия дирекций, контрагентов, договоров и суммы в публичный
@@ -57,7 +57,7 @@ DETAILS = ["ИТ инфраструктура", "Лицензии и подпи�
 def spread(total: float, rnd: random.Random) -> list[float]:
     """Распределяет сумму по 12 месяцам неравномерно, как в реальных бюджетах."""
     weights = [rnd.random() ** 2 + 0.1 for _ in range(12)]
-    if rnd.random() < 0.3:                     ***REMOVED*** часть строк — разовые платежи
+    if rnd.random() < 0.3:                     # часть строк — разовые платежи
         weights = [0.0] * 12
         for _ in range(rnd.randint(1, 3)):
             weights[rnd.randrange(12)] = 1.0
@@ -100,7 +100,7 @@ def main() -> int:
                 "plan": plan,
                 "months": spread(plan, rnd),
             })
-            if rnd.random() < 0.2:            ***REMOVED*** дочерняя строка — платёж по лимиту
+            if rnd.random() < 0.2:            # дочерняя строка — платёж по лимиту
                 child_plan = round(plan * rnd.uniform(0.05, 0.4), 2)
                 child_months = [0.0] * 12
                 child_months[rnd.randrange(7)] = child_plan

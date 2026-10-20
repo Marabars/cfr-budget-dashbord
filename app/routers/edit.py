@@ -17,7 +17,7 @@ def _money(value: float) -> str:
     return f"{value:,.2f} ₽".replace(",", " ")
 
 
-***REMOVED*** ---------- строки бюджета ----------
+# ---------- строки бюджета ----------
 
 @router.post("/rows", status_code=201)
 def create_row(payload: RowIn, u: auth.User = Depends(user)) -> dict:
@@ -118,7 +118,7 @@ def delete_row(row_id: int, reason: str = "", u: auth.User = Depends(user)) -> d
     return {"ok": True}
 
 
-***REMOVED*** ---------- факт ----------
+# ---------- факт ----------
 
 @router.post("/facts", status_code=201)
 def create_fact(payload: FactIn, u: auth.User = Depends(user)) -> dict:
@@ -188,7 +188,7 @@ def flag_out_of_budget(fact_id: int, flag: bool = True, u: auth.User = Depends(u
     return {"ok": True}
 
 
-***REMOVED*** ---------- заявки ----------
+# ---------- заявки ----------
 
 @router.post("/claims", status_code=201)
 def create_claim(payload: ClaimIn, u: auth.User = Depends(user)) -> dict:
@@ -231,7 +231,7 @@ def delete_claim(claim_id: int, u: auth.User = Depends(user)) -> dict:
     return {"ok": True}
 
 
-***REMOVED*** ---------- перенос лимита ----------
+# ---------- перенос лимита ----------
 
 @router.post("/adjustments")
 def transfer(payload: TransferIn, u: auth.User = Depends(user)) -> dict:

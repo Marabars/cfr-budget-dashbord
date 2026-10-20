@@ -5,8 +5,8 @@
   var rowsByCfo = {};
 
   function renderList(items) {
-    var body = document.querySelector("***REMOVED***t-claims tbody");
-    var foot = document.querySelector("***REMOVED***t-claims tfoot");
+    var body = document.querySelector("#t-claims tbody");
+    var foot = document.querySelector("#t-claims tfoot");
     U.clear(body);
     U.clear(foot);
     if (!items.length) {

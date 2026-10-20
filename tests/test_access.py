@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from app import accounts, auth, db, repo
 from app.main import app
 
-***REMOVED*** пароли для стенда: ни один из них нигде не действует
+# пароли для стенда: ни один из них нигде не действует
 FIN_PASSWORD = "test-fin-pass"
 CFO_PASSWORD = "test-cfo-pass"
 
@@ -47,7 +47,7 @@ def make_cfo_user(client, cfo_id: int, login: str = "ivanov") -> dict:
     return response.json()
 
 
-***REMOVED*** ---------- пока пароля нет ----------
+# ---------- пока пароля нет ----------
 
 def test_без_настройки_приложение_открыто(client):
     state = client.get("/api/auth/state").json()
@@ -62,7 +62,7 @@ def test_первый_пароль_включает_вход(client, guest):
     state = client.get("/api/auth/state").json()
     assert state["setup_required"] is False
     assert state["user"]["login"] == "fin"
-    ***REMOVED*** тот, у кого сессии нет, теперь внутрь не попадает
+    # тот, у кого сессии нет, теперь внутрь не попадает
     assert guest.get("/api/auth/state").json() == {
         "authenticated": False, "setup_required": False, "user": None,
     }
@@ -82,7 +82,7 @@ def test_повторная_настройка_отклоняется(client):
     assert response.status_code == 409
 
 
-***REMOVED*** ---------- вход и выход ----------
+# ---------- вход и выход ----------
 
 def test_вход_по_паролю(client, guest):
     setup_login(client)
@@ -104,10 +104,10 @@ def test_истёкшая_сессия_не_пускает(client):
     setup_login(client)
     db.execute("UPDATE session SET expires_at = ?", ("2000-01-01T00:00:00",))
     assert client.get("/api/me").status_code == 401
-    assert db.query_one("SELECT 1 FROM session") is None      ***REMOVED*** заодно подчищается
+    assert db.query_one("SELECT 1 FROM session") is None      # заодно подчищается
 
 
-***REMOVED*** ---------- учётные записи ----------
+# ---------- учётные записи ----------
 
 def test_руководитель_видит_только_свои_цфо(client, guest):
     setup_login(client)
@@ -119,7 +119,7 @@ def test_руководитель_видит_только_свои_цфо(client
     me = guest.get("/api/me").json()
     assert me["is_fin"] is False and me["cfo_ids"] == [mine]
     assert [c["id"] for c in guest.get("/api/cfo").json()] == [mine]
-    assert guest.get("/api/users").status_code == 403          ***REMOVED*** учётками ведает финотдел
+    assert guest.get("/api/users").status_code == 403          # учётками ведает финотдел
 
 
 def test_руководителю_нужно_хотя_бы_одно_цфо(client):
@@ -181,11 +181,11 @@ def test_себя_удалить_нельзя_а_второго_финансис
     assert client.post("/api/users", json={
         "login": "petrova", "name": "Петрова", "role": "fin", "password": FIN_PASSWORD,
     }).status_code == 201
-    assert client.delete("/api/users/fin").status_code == 422   ***REMOVED*** под ней вошли
+    assert client.delete("/api/users/fin").status_code == 422   # под ней вошли
     assert client.delete("/api/users/petrova").status_code == 204
 
 
-***REMOVED*** ---------- пароли ----------
+# ---------- пароли ----------
 
 def test_смена_своего_пароля(client, guest):
     setup_login(client)
@@ -195,7 +195,7 @@ def test_смена_своего_пароля(client, guest):
     assert client.post("/api/auth/password", json={
         "current": FIN_PASSWORD, "password": "new-password",
     }).status_code == 200
-    assert client.get("/api/me").status_code == 200             ***REMOVED*** свою сессию сохранили
+    assert client.get("/api/me").status_code == 200             # свою сессию сохранили
     assert guest.post("/api/auth/login",
                       json={"login": "fin", "password": FIN_PASSWORD}).status_code == 401
     assert guest.post("/api/auth/login",
@@ -210,7 +210,7 @@ def test_сброс_пароля_финотделом(client, guest):
 
     assert client.post("/api/users/ivanov/password",
                        json={"password": "vydannyy-parol"}).status_code == 200
-    assert guest.get("/api/me").status_code == 401              ***REMOVED*** сессия закрыта
+    assert guest.get("/api/me").status_code == 401              # сессия закрыта
     assert guest.post("/api/auth/login",
                       json={"login": "ivanov", "password": "vydannyy-parol"}).status_code == 200
 
@@ -224,7 +224,7 @@ def test_руководитель_не_меняет_чужие_пароли(clie
                       json={"password": "chuzhoy-parol"}).status_code == 403
 
 
-***REMOVED*** ---------- просмотр глазами руководителя ----------
+# ---------- просмотр глазами руководителя ----------
 
 def test_финотдел_смотрит_глазами_руководителя(client):
     setup_login(client)
@@ -247,7 +247,7 @@ def test_руководитель_не_притворяется_финотдел
         == [mine]
 
 
-***REMOVED*** ---------- миграция уже работающей базы ----------
+# ---------- миграция уже работающей базы ----------
 
 def test_миграция_добавляет_пароли_не_трогая_учётки(tmp_path, monkeypatch):
     """На рабочей базе колонок входа ещё нет — их доливает ALTER, данные целы."""
@@ -278,22 +278,22 @@ def test_миграция_добавляет_пароли_не_трогая_уч
 
     row = db.query_one("SELECT * FROM app_user WHERE login = 'ivanov'")
     assert row["cfo_ids"] == "1"
-    assert row["password_hash"] == ""      ***REMOVED*** пароля нет — войти под ней нельзя
+    assert row["password_hash"] == ""      # пароля нет — войти под ней нельзя
     assert row["is_active"] == 1
     assert db.query_one("SELECT 1 FROM sqlite_master WHERE name = 'session'") is not None
 
-    ***REMOVED*** пока ни у кого нет пароля, приложение остаётся открытым
+    # пока ни у кого нет пароля, приложение остаётся открытым
     with TestClient(app) as client:
         assert client.get("/api/auth/state").json()["setup_required"] is True
         setup_login(client)
         assert client.post("/api/auth/login",
                            json={"login": "ivanov", "password": "любой"}).status_code == 401
 
-    db.init_db()                            ***REMOVED*** повторный запуск безвреден
+    db.init_db()                            # повторный запуск безвреден
     assert db.query_one("SELECT 1 FROM app_user WHERE login = 'ivanov'") is not None
 
 
-***REMOVED*** ---------- логины и пароли по названию ЦФО ----------
+# ---------- логины и пароли по названию ЦФО ----------
 
 def test_логин_собирается_из_инициалов_значимых_слов():
     assert accounts.login_for("Вторая дирекция") == "vd"
@@ -320,7 +320,7 @@ def test_пароль_случаен_и_ниоткуда_не_выводится
     assert len(подряд) == 50, "пароль повторился — значит он не случаен"
     образец = accounts.new_password()
     assert len(образец) >= auth.MIN_PASSWORD
-    ***REMOVED*** сторож: вернётся выведение пароля из названия — тест упадёт
+    # сторож: вернётся выведение пароля из названия — тест упадёт
     assert not hasattr(accounts, "password_for")
 
 
@@ -341,7 +341,7 @@ def test_набор_учёток_не_повторяет_логины():
     logins = [item["login"] for item in plan]
     assert len(set(logins)) == len(logins)
     assert "admin" not in logins
-    assert logins[0] == "pd2"           ***REMOVED*** «pd» занят — развели цифрой
+    assert logins[0] == "pd2"           # «pd» занят — развели цифрой
     assert [item["cfo_id"] for item in plan] == [1, 2, 3, 4]
 
 
@@ -372,7 +372,7 @@ def test_повторный_расчёт_узнаёт_свои_учётки():
 
     again = accounts.accounts_for(rows, taken={"admin"} | set(owned), owned=owned)
     assert [item["login"] for item in again] == [item["login"] for item in first]
-    ***REMOVED*** Пароли при этом обязаны разойтись: они случайные, а не выведенные.
+    # Пароли при этом обязаны разойтись: они случайные, а не выведенные.
     assert [item["password"] for item in again] != [item["password"] for item in first]
 
 

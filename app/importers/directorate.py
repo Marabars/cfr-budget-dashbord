@@ -17,7 +17,7 @@ from app.importers import xlsx
 TOTAL_WORDS = ("итого", "всего", "total")
 DEFAULT_BUDGET = "Основной бюджет"
 
-***REMOVED*** поля системы -> допустимые названия колонок в файле
+# поля системы -> допустимые названия колонок в файле
 ALIASES: dict[str, tuple[str, ...]] = {
     "article": ("статья оборотов", "статья", "статья затрат"),
     "cfo": ("цфо", "дирекция", "подразделение"),
@@ -37,7 +37,7 @@ FIELD_TITLES = {
     "approver_comment": "Комментарий согласующего",
     "plan_year": "Годовая сумма (проверочная)",
 }
-***REMOVED*** колонка с ФИО в заголовке — комментарий согласующего
+# колонка с ФИО в заголовке — комментарий согласующего
 FIO_RE = re.compile(r"^[А-ЯЁ][а-яё]+\s+[А-ЯЁ]{1,2}\.?[А-ЯЁ]?\.?$")
 
 
@@ -95,7 +95,7 @@ def inspect(source: str | Path | bytes, sheet: str | None = None) -> dict:
         "month_columns": month_cols,
         "columns": columns,
         "months_found": len(month_cols),
-        "needs_budget_name": True,   ***REMOVED*** названия бюджета в файлах дирекций нет
+        "needs_budget_name": True,   # названия бюджета в файлах дирекций нет
     }
 
 

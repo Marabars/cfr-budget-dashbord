@@ -59,45 +59,45 @@ def make_planfact_sheet(closed_through: int = 2, with_out_of_budget: bool = True
             if amount:
                 ws.cell(row=row, column=PF_MONTH + m, value=amount)
 
-    ***REMOVED*** «ВСЕГО» — итог по листу; как строка расхода он удваивал весь файл
+    # «ВСЕГО» — итог по листу; как строка расхода он удваивал весь файл
     put(6, 0, {"Статья оборотов": "ВСЕГО"}, [300, 700, 1000])
-    put(7, 0, {"Статья оборотов": "ИТОГО", "ЦФО": IT})          ***REMOVED*** пустой блок-дубль
+    put(7, 0, {"Статья оборотов": "ИТОГО", "ЦФО": IT})          # пустой блок-дубль
     put(8, 0, {"Статья оборотов": "ИТОГО", "ЦФО": IT, "Договор": budget})
 
-    ***REMOVED*** строка №1: контрагента нет, он на расходах под ней
+    # строка №1: контрагента нет, он на расходах под ней
     put(9, 1, {"Статья оборотов": "4411_Оборудование", "ЦФО": IT,
                "Детализация": "ИТ инфраструктура"}, [300, 700, 1000], budget=100_000, no=1)
     put(10, 2, {"Статья оборотов": "4411_Оборудование", "ЦФО": IT,
                 "Контрагент": "Астра ООО", "Договор": "Договор №1",
                 "Детализация": "ИТ инфраструктура", "Комм наш": "бюджет из строки 1"},
         [200, 500, 600])
-    ***REMOVED*** у расхода пометки «из строки N» нет — его держит только группировка
+    # у расхода пометки «из строки N» нет — его держит только группировка
     put(11, 2, {"Статья оборотов": "4411_Оборудование", "ЦФО": IT,
                 "Контрагент": "Байт ООО", "Договор": "Договор №2",
                 "Детализация": "ИТ инфраструктура"}, [100, 200, 400])
 
-    ***REMOVED*** строка №2: расшифровки нет, факт лежит на ней самой
+    # строка №2: расшифровки нет, факт лежит на ней самой
     put(12, 1, {"Статья оборотов": "4430_Разработка", "ЦФО": IT,
                 "Контрагент": "Софт ООО", "Договор": "Договор №3",
                 "Детализация": "Платформа"}, [50, 90, 70], budget=200_000, no=2)
 
-    ***REMOVED*** плановая строка, которой у нас нет вовсе: ни по ключу, ни по сумме.
-    ***REMOVED*** Её факт плана не создаёт — он уходит в непривязанное.
-    ***REMOVED*** Вторая дирекция внутри файла первой: так приходит файл ИТ, который несёт
-    ***REMOVED*** ещё бюджеты стратегии и аналитики. Блок открывается своим ИТОГО.
+    # плановая строка, которой у нас нет вовсе: ни по ключу, ни по сумме.
+    # Её факт плана не создаёт — он уходит в непривязанное.
+    # Вторая дирекция внутри файла первой: так приходит файл ИТ, который несёт
+    # ещё бюджеты стратегии и аналитики. Блок открывается своим ИТОГО.
     if with_hr:
         put(20, 0, {"Статья оборотов": "ИТОГО", "ЦФО": HR,
                     "Договор": "Бюджет Дирекции по персоналу"})
         put(21, 1, {"Статья оборотов": "4109_Обучение", "ЦФО": HR,
                     "Комментарий": "Английский"}, [500, 300, 900], budget=50_000, no=1)
 
-    ***REMOVED*** Порядок строк важен: всё, что стоит ниже заголовка «ВНЕ БЮДЖЕТА»,
-    ***REMOVED*** разбирается как расход вне бюджета, поэтому сирота идёт выше него.
+    # Порядок строк важен: всё, что стоит ниже заголовка «ВНЕ БЮДЖЕТА»,
+    # разбирается как расход вне бюджета, поэтому сирота идёт выше него.
     if with_orphan:
         put(13, 1, {"Статья оборотов": "4777_Неизвестное", "ЦФО": IT,
                     "Контрагент": "Пришлая ООО", "Договор": "Договор №7",
                     "Детализация": "чего у нас нет"}, [40, 60, 900], budget=12_345, no=3)
-        ***REMOVED*** расход под сиротой: сама строка пары не найдёт, а он может
+        # расход под сиротой: сама строка пары не найдёт, а он может
         put(14, 2, {"Статья оборотов": "4777_Неизвестное", "ЦФО": IT,
                     "Контрагент": "Своя ООО", "Договор": "Договор №8",
                     "Детализация": "чего у нас нет"}, [40, 60, 900])
@@ -137,7 +137,7 @@ def make_payments_sheet() -> bytes:
 
     put(4, "01-15", "4411_Оборудование", "Астра ООО", 0, -100_000, "Оплата счёта")
     put(5, "02-20", "4411_Оборудование", "Байт ООО", 0, -40_000, "Оплата счёта")
-    ***REMOVED*** возврат: приход уменьшает расход, а не добавляет его
+    # возврат: приход уменьшает расход, а не добавляет его
     put(6, "03-05", "1305_Прочий приход", "Депозит ООО", 25_000, 0,
         "Возврат депозита в связи с расторжением договора аренды")
     buffer = io.BytesIO()
@@ -166,7 +166,7 @@ def make_our_budget_sheet() -> bytes:
     put(4, ["ИТОГО", IT, None, "Бюджет обязательных затрат"], [800] + [0] * 11)
     put(5, ["4411_Оборудование", IT, "Астра ООО", "Договор №1", "ИТ инфраструктура",
             "Серверы"], [800] + [0] * 11)
-    ***REMOVED*** ИТОГО заполнено, месяцы пусты — факт из такой строки не собрать
+    # ИТОГО заполнено, месяцы пусты — факт из такой строки не собрать
     put(6, ["4430_Разработка", IT, "Софт ООО", "Договор №3", "Платформа", "Доработки"],
         [0] * 12, total=5_000)
     buffer = io.BytesIO()
@@ -190,8 +190,8 @@ def make_plan_sheet() -> bytes:
         ws.cell(row=row, column=7, value=total)
 
     put(4, ["ИТОГО", IT, None, "Бюджет обязательных затрат"], 300_000)
-    ***REMOVED*** у нашей строки контрагент есть, а у плановой строки файла — нет:
-    ***REMOVED*** строгий ключ её не найдёт, каскад обязан дотянуться комментарием и суммой
+    # у нашей строки контрагент есть, а у плановой строки файла — нет:
+    # строгий ключ её не найдёт, каскад обязан дотянуться комментарием и суммой
     put(5, ["4411_Оборудование", IT, "Астра ООО", "Договор №1", "ИТ инфраструктура",
             "Серверы"], 100_000)
     put(6, ["4430_Разработка", IT, "Софт ООО", "Договор №3", "Платформа",
@@ -219,13 +219,13 @@ def client(tmp_path, monkeypatch):
 def planned(client):
     """Слой планирования с планом 2026 года — базой под факт."""
     operplan.import_budgets(make_plan_sheet(), "план.xlsx", 2026, "Тест")
-    ***REMOVED*** детализация ИТ берётся из колонки бюджета, как на проде
+    # детализация ИТ берётся из колонки бюджета, как на проде
     it = repo.find_cfo(IT)
     db.execute("UPDATE cfo SET detail_source = 'detail' WHERE id = ?", (int(it["id"]),))
     return it
 
 
-***REMOVED*** ---------- разбор ----------
+# ---------- разбор ----------
 
 def test_уровни_группировки_делят_план_и_расход():
     parsed = planfact.parse(make_planfact_sheet())
@@ -248,8 +248,8 @@ def test_пустой_блок_итого_не_считается_блоком()
 def test_прогнозные_месяцы_в_факт_не_идут():
     parsed = planfact.parse(make_planfact_sheet())
     plan = parsed["plans"][0]
-    assert sum(plan["months"]) == 2000           ***REMOVED*** январь + февраль + март
-    assert sum(planfact.plan_fact_months(plan)) == 1000   ***REMOVED*** только январь и февраль
+    assert sum(plan["months"]) == 2000           # январь + февраль + март
+    assert sum(planfact.plan_fact_months(plan)) == 1000   # только январь и февраль
 
 
 def test_факт_родителя_равен_сумме_расходов_под_ним():
@@ -279,7 +279,7 @@ def test_возврат_уменьшает_расход_а_не_увеличив
     amounts = {p["counterparty"]: p["amount"] for p in parsed["payments"]}
     assert amounts["Астра ООО"] == 100_000
     assert amounts["Депозит ООО"] == -25_000, "возврат обязан быть отрицательным"
-    assert parsed["total"] == 115_000           ***REMOVED*** 100 000 + 40 000 − 25 000
+    assert parsed["total"] == 115_000           # 100 000 + 40 000 − 25 000
 
 
 def test_лист_фактов_необязателен():
@@ -309,7 +309,7 @@ def test_свободный_текст_финотдела_пометкой_не_
     assert parts[0]["approver_comment"] == "за счет строки 7", "текст сохраняется как есть"
     assert parts[0]["parent_hint"] is None, "но указателем он не считается"
     assert parsed["conflicts"] == [], "и спором с группировкой тоже"
-    ***REMOVED*** расход всё равно привязан — группировкой
+    # расход всё равно привязан — группировкой
     assert parts[0]["counterparty"] == "Астра ООО"
 
 
@@ -326,10 +326,10 @@ def test_каноничная_пометка_спорящая_с_группир�
 def test_вне_бюджета_разбирается_отдельным_блоком():
     parsed = planfact.parse(make_planfact_sheet())
     assert [x["counterparty"] for x in parsed["out_of_budget"]] == ["Омега ООО"]
-    assert sum(parsed["out_of_budget"][0]["fact_months"]) == 1_500    ***REMOVED*** март — прогноз
+    assert sum(parsed["out_of_budget"][0]["fact_months"]) == 1_500    # март — прогноз
 
 
-***REMOVED*** ---------- загрузка ----------
+# ---------- загрузка ----------
 
 def test_загрузка_факта_не_трогает_план(planned):
     before = [(r["id"], r["article"], r["plan_year"])
@@ -380,6 +380,30 @@ def test_вне_бюджета_видно_списком_и_плиткой(plann
     assert operplan.kpi()["outside_cfo"] == 1
 
 
+def test_у_расхода_детализация_и_комментарий_порознь(planned):
+    """У расхода два текста, как и у строки плана (16.10.2026).
+
+    До этого в базе под них было одно поле, и комментарий расхода не был
+    виден нигде. Проверяется на расходе под строкой: в файле у него
+    заполнена детализация, а комментарий пуст.
+    """
+    operplan.import_fact(make_planfact_sheet(with_hr=True), "план-факт.xlsx", 2026, "Тест")
+
+    # у расхода первой дирекции заполнена детализация, комментарий пуст
+    it_row = next(r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
+                  if r["article"] == "4411_Оборудование")
+    astra = next(s for s in operplan.row_spends(2026)[int(it_row["id"])]
+                 if s["counterparty"] == "Астра ООО")
+    assert (astra["detail"], astra["comment"]) == ("ИТ инфраструктура", "")
+
+    # у расхода второй — наоборот: комментарий есть, детализации нет.
+    # Прежде он уехал бы в то же единственное поле и выглядел детализацией.
+    hr_row = next(r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
+                  if int(r["cfo_id"]) == int(repo.find_cfo(HR)["id"]))
+    hr_spend = operplan.row_spends(2026)[int(hr_row["id"])][0]
+    assert (hr_spend["detail"], hr_spend["comment"]) == ("", "Английский")
+
+
 def test_повторная_загрузка_не_задваивает(planned):
     first = operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
     second = operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
@@ -428,11 +452,11 @@ def test_ошибочная_строка_не_гасит_прежний_факт
     row = next(r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
                if r["article"] == "4430_Разработка")
     operplan.import_fact(make_our_budget_sheet(), "наш.xlsx", 2026, "Тест")
-    ***REMOVED*** строка 6 отвергнута, её прежний факт не заменён нулями и не выдуман
+    # строка 6 отвергнута, её прежний факт не заменён нулями и не выдуман
     assert int(row["id"]) not in repo.row_fact_months(2026, repo.LAYER_OPERPLAN)
 
 
-***REMOVED*** ---------- состав дирекций в файле меняется ----------
+# ---------- состав дирекций в файле меняется ----------
 
 def test_блок_бюджета_разводит_одинаковые_ключи(planned):
     """У дирекции с двумя бюджетами блок — единственное, что их различает.
@@ -441,7 +465,7 @@ def test_блок_бюджета_разводит_одинаковые_ключ�
     такая пара либо уходит в непривязанное, либо факт ложится не в тот бюджет.
     """
     it = int(repo.find_cfo(IT)["id"])
-    ***REMOVED*** две строки с буквально одинаковым ключом в разных блоках
+    # две строки с буквально одинаковым ключом в разных блоках
     pair = {}
     for name, plan_year in (("Бюджет обязательных затрат", 100_000),
                             ("Бюджет развития", 777_000)):
@@ -455,8 +479,8 @@ def test_блок_бюджета_разводит_одинаковые_ключ�
     hit = next(i for i in plan["matched"] if i["article"] == "4411_Оборудование")
     assert int(hit["row"]["id"]) == pair["Бюджет развития"], \
         "файл назвал блок развития — в него и должно лечь"
-    ***REMOVED*** вторая строка образца объявлена тем же блоком и честно считается переездом,
-    ***REMOVED*** а наша — нет: её блок совпал
+    # вторая строка образца объявлена тем же блоком и честно считается переездом,
+    # а наша — нет: её блок совпал
     assert all(m["article"] != "4411_Оборудование" for m in plan["block_moved"])
 
 
@@ -465,7 +489,7 @@ def test_уехавший_блок_виден_в_предпросмотре(plan
     it = int(repo.find_cfo(IT)["id"])
     rows = [r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
             if int(r["cfo_id"]) == it and r["article"] == "4411_Оборудование"]
-    ***REMOVED*** переносим единственную подходящую строку в другой блок
+    # переносим единственную подходящую строку в другой блок
     other = repo.ensure_budget(it, 2026, "Бюджет развития", layer=repo.LAYER_OPERPLAN)
     db.execute("UPDATE budget_row SET budget_id = ? WHERE id = ?",
                (other, int(rows[0]["id"])))
@@ -495,7 +519,7 @@ def test_расход_непривязанной_строки_пристраив
     it = int(repo.find_cfo(IT)["id"])
     budget_id = repo.ensure_budget(it, 2026, "Бюджет обязательных затрат",
                                    layer=repo.LAYER_OPERPLAN)
-    ***REMOVED*** у нас есть строка под расход «Своя ООО», но нет под его плановую строку
+    # у нас есть строка под расход «Своя ООО», но нет под его плановую строку
     target = repo.create_row(budget_id, {
         "article": "4777_Неизвестное", "counterparty": "Своя ООО",
         "contract": "Договор №8", "detail": "подписки", "comment": "",
@@ -505,9 +529,9 @@ def test_расход_непривязанной_строки_пристраив
     plan = operplan.plan_fact(make_planfact_sheet(with_orphan=True), 2026)
     placed = [p for p in plan["spends"] if int(p["row"]["id"]) == target]
     assert len(placed) == 1, "расход «Своя ООО» должен лечь на свою строку"
-    assert sum(placed[0]["months"]) == 100          ***REMOVED*** март — прогноз
+    assert sum(placed[0]["months"]) == 100          # март — прогноз
     assert plan["spends_total"] == 100
-    ***REMOVED*** весь факт сироты был этим расходом, поэтому из непривязанного она ушла
+    # весь факт сироты был этим расходом, поэтому из непривязанного она ушла
     assert all(i["counterparty"] != "Пришлая ООО" for i in plan["unlinked"])
 
 
@@ -539,9 +563,9 @@ def test_круг_берётся_из_файла_а_не_из_прошлой_з�
     hr_rows = [r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
                if int(r["cfo_id"]) == hr]
     before = sum(sum(months.get(int(r["id"]), [])) for r in hr_rows)
-    assert before == 800                      ***REMOVED*** март — прогноз, в факт не идёт
+    assert before == 800                      # март — прогноз, в факт не идёт
 
-    ***REMOVED*** тот же файл, но дирекции персонала в нём больше нет
+    # тот же файл, но дирекции персонала в нём больше нет
     operplan.import_fact(make_planfact_sheet(), "только ИТ.xlsx", 2026, "Тест")
     months = repo.row_fact_months(2026, repo.LAYER_OPERPLAN)
     after = sum(sum(months.get(int(r["id"]), [])) for r in hr_rows)
@@ -565,25 +589,25 @@ def test_предпросмотр_называет_прежнюю_загрузк
     assert by_name[HR]["before"] == 800
     assert by_name[HR]["last_file"] == "персонал на 14.10.xlsx"
     assert by_name[HR]["last_at"]
-    ***REMOVED*** у ИТ факта ещё нет — заменять нечего, и прошлой загрузки тоже нет
+    # у ИТ факта ещё нет — заменять нечего, и прошлой загрузки тоже нет
     assert by_name[IT]["before"] == 0
     assert by_name[IT]["last_file"] == ""
 
 
-***REMOVED*** ---------- слои не смешиваются ----------
+# ---------- слои не смешиваются ----------
 
 def test_факт_планирования_не_виден_сопоставлению(planned, client):
     """Файл берём с сиротой: иначе непривязанного факта в базе нет вовсе и
     проверка проходит на любом коде, хоть с фильтром слоя, хоть без него."""
     operplan.import_fact(make_planfact_sheet(with_orphan=True), "план-факт.xlsx",
                          2026, "Тест")
-    ***REMOVED*** список упорядочен по дирекции и статье: 4777 идёт раньше 4999
+    # список упорядочен по дирекции и статье: 4777 идёт раньше 4999
     assert [x["counterparty"] for x in operplan.unlinked_fact(2026)] == [
         "Пришлая ООО", "Омега ООО"]
     assert repo.list_unmatched(2026) == []
     assert repo.list_out_of_budget(2026) == []
     assert repo.fact_months(2026) == {}
-    ***REMOVED*** а в своём слое он есть
+    # а в своём слое он есть
     assert repo.list_unmatched(2026, layer=repo.LAYER_OPERPLAN)
     assert repo.list_out_of_budget(2026, layer=repo.LAYER_OPERPLAN)
 
@@ -593,15 +617,15 @@ def test_строка_без_пары_не_меняет_план_а_уходит
     result = operplan.import_fact(make_planfact_sheet(with_orphan=True),
                                   "план-факт.xlsx", 2026, "Тест")
     assert result["unlinked"] == 1
-    assert result["unlinked_total"] == 100        ***REMOVED*** март — прогноз, в факт не идёт
+    assert result["unlinked_total"] == 100        # март — прогноз, в факт не идёт
     assert len(repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)) == before
     orphan = next(x for x in operplan.unlinked_fact(2026)
                   if x["counterparty"] == "Пришлая ООО")
-    assert orphan["out_of_budget"] is False       ***REMOVED*** это не «вне бюджета», а промах привязки
+    assert orphan["out_of_budget"] is False       # это не «вне бюджета», а промах привязки
     assert operplan.kpi()["outside_total"] == 1_600
 
 
-***REMOVED*** ---------- Excel ----------
+# ---------- Excel ----------
 
 def test_выгрузка_факта_несёт_блок_вне_бюджета(planned):
     operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
@@ -619,10 +643,10 @@ def test_шаблон_несёт_пустой_блок_вне_бюджета(pla
     marks = [r for r in range(1, ws.max_row + 1)
              if str(ws.cell(row=r, column=1).value or "").upper() == "ВНЕ БЮДЖЕТА"]
     assert len(marks) == 1
-    assert marks[0] < ws.max_row       ***REMOVED*** под заголовком есть куда вписывать
+    assert marks[0] < ws.max_row       # под заголовком есть куда вписывать
 
 
-***REMOVED*** ---------- ручки ----------
+# ---------- ручки ----------
 
 def test_предпросмотр_совпадает_с_загрузкой(planned, client):
     data = make_planfact_sheet()
@@ -663,7 +687,128 @@ def test_загрузка_больше_не_заводит_строк_через
     assert len(repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)) == before
 
 
-***REMOVED*** ---------- пачка файлов и галочки ----------
+# ---------- «Наличие в бюджете» ----------
+
+def _target_row(article: str = "4430_Разработка") -> dict:
+    return next(r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
+                if r["article"] == article)
+
+
+def _row_fact(row_id: int) -> float:
+    return sum(repo.row_fact_months(2026, repo.LAYER_OPERPLAN).get(int(row_id), [0.0] * 12))
+
+
+def test_расход_вне_бюджета_переносится_на_строку_плана(planned):
+    """«В бюджете, за счёт строки N»: расход уходит со своего места на строку.
+
+    Свод строки при этом обязан вырасти ровно на сумму расхода — иначе
+    плитка, таблица факта и выгрузка показали бы разное.
+    """
+    operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
+    target = _target_row()
+    before = _row_fact(target["id"])
+    item = operplan.unlinked_fact(2026)[0]
+    assert item["counterparty"] == "Омега ООО" and item["total"] == 1_500
+
+    operplan.set_fact_link(2026, int(planned["id"]), item, int(target["id"]), "Тест")
+
+    assert operplan.unlinked_fact(2026) == [], "расход больше не вне бюджета"
+    assert _row_fact(target["id"]) == before + 1_500
+    assert operplan.kpi()["outside_total"] == 0
+
+
+def test_решение_переживает_перезаливку_факта(planned):
+    """Главное в задаче: факт заменяется целиком, решение — нет."""
+    operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
+    target = _target_row()
+    before = _row_fact(target["id"])
+    operplan.set_fact_link(2026, int(planned["id"]), operplan.unlinked_fact(2026)[0],
+                           int(target["id"]), "Тест")
+
+    again = operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
+
+    assert again["relinked"], "загрузка должна сама вернуть расход на выбранную строку"
+    assert operplan.unlinked_fact(2026) == []
+    assert _row_fact(target["id"]) == before + 1_500
+
+
+def test_расход_со_строки_уводится_вне_бюджета(planned):
+    """Обратное направление: привязанное разрывается и уходит вне бюджета."""
+    operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
+    row = _target_row("4411_Оборудование")
+    before = _row_fact(row["id"])
+    spend = next(s for s in operplan.row_spends(2026)[int(row["id"])]
+                 if s["counterparty"] == "Астра ООО")
+
+    operplan.set_fact_link(2026, int(planned["id"]), spend, None, "Тест")
+
+    assert _row_fact(row["id"]) == before - spend["total"]
+    outside = [x for x in operplan.unlinked_fact(2026) if x["counterparty"] == "Астра ООО"]
+    assert len(outside) == 1 and outside[0]["total"] == spend["total"]
+    assert outside[0]["out_of_budget"] is True
+
+
+def test_строку_чужой_дирекции_расходу_не_отдают(planned):
+    """Иначе расход одной дирекции испортил бы план-факт другой."""
+    operplan.import_fact(make_planfact_sheet(with_hr=True), "план-факт.xlsx", 2026, "Тест")
+    hr_row = next(r for r in repo.list_rows(2026, layer=repo.LAYER_OPERPLAN)
+                  if int(r["cfo_id"]) == int(repo.find_cfo(HR)["id"]))
+    item = operplan.unlinked_fact(2026)[0]
+    with pytest.raises(ValueError, match="другой дирекции"):
+        operplan.set_fact_link(2026, int(planned["id"]), item, int(hr_row["id"]), "Тест")
+
+
+def test_наличие_в_бюджете_меняет_только_финотдел(planned, client):
+    operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
+    item = operplan.unlinked_fact(2026)[0]
+    body = {"year": 2026, "cfo_id": int(planned["id"]), "article": item["article"],
+            "counterparty": item["counterparty"], "contract": item["contract"],
+            "detail": item["detail"], "row_id": int(_target_row()["id"])}
+
+    denied = client.post("/api/operplan/fact-link", json=body,
+                         headers={"X-User": f"cfo:{int(planned['id'])}"})
+    assert denied.status_code == 403
+
+    allowed = client.post("/api/operplan/fact-link", json=body)
+    assert allowed.status_code == 200, allowed.text
+    assert operplan.unlinked_fact(2026) == []
+
+
+def test_круг_excel_правка_наличия_в_бюджете_возвращается_заливкой(planned, client):
+    """Выгрузил факт → вписал «бюджет из строки N» → залил обратно.
+
+    Так дирекции размечают связь у себя в «Комм наш», и так же её можно
+    поправить пачкой, не трогая экран. Номер — строка того же листа.
+    """
+    operplan.import_fact(make_planfact_sheet(), "план-факт.xlsx", 2026, "Тест")
+    target = _target_row()
+    before = _row_fact(target["id"])
+    assert operplan.unlinked_fact(2026)[0]["counterparty"] == "Омега ООО"
+
+    sheet = client.get("/api/export/budget-fact.xlsx?year=2026")
+    assert sheet.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(sheet.content))
+    ws = wb["Бюджеты ЦФО"]
+    link_col = next(c for c in range(1, ws.max_column + 1)
+                    if ws.cell(row=3, column=c).value == "Наличие в бюджете")
+
+    # строка выгрузки, на которую отнесём расход, и сам расход вне бюджета
+    plan_at = next(r for r in range(4, ws.max_row + 1)
+                   if ws.cell(row=r, column=1).value == target["article"])
+    spend_at = next(r for r in range(4, ws.max_row + 1)
+                    if ws.cell(row=r, column=5).value == "Омега ООО")
+    assert ws.cell(row=spend_at, column=link_col).value == "вне бюджета"
+    ws.cell(row=spend_at, column=link_col).value = f"бюджет из строки {plan_at}"
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    operplan.import_fact(buffer.getvalue(), "факт правленый.xlsx", 2026, "Тест")
+
+    assert operplan.unlinked_fact(2026) == [], "расход перестал быть вне бюджета"
+    assert _row_fact(target["id"]) == before + 1_500
+
+
+# ---------- пачка файлов и галочки ----------
 
 def _file(name: str, data: bytes) -> tuple:
     return ("files", (name, data,

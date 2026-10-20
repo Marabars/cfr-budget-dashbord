@@ -10,20 +10,20 @@
   var filters = null;
   var rowsById = {};
 
+  /* Детализация и комментарий — разные колонки (решение 16.10.2026). Раньше
+     показывалась одна, `detail || comment`, и у строк с заполненными обоими
+     полями комментарий не был виден; правка такой ячейки вдобавок всегда
+     уходила в `detail`, даже когда в ней стоял комментарий. */
   var FILTER_FIELDS = [
     { key: "article", title: "Статья оборотов" },
     { key: "counterparty", title: "Контрагент" },
     { key: "contract", title: "Договор" },
-    { key: "detail_text", title: "Детализация" }
+    { key: "detail", title: "Детализация" },
+    { key: "comment", title: "Комментарий" }
   ];
 
-  /* Детализация строки: своё поле, иначе комментарий из файла. */
-  function detailText(row) {
-    return row.detail || row.comment || "";
-  }
-
   function fieldValue(row, key) {
-    return String((key === "detail_text" ? detailText(row) : row[key]) || "");
+    return String(row[key] || "");
   }
 
   function allRows() {
@@ -63,7 +63,8 @@
   function head(cfg) {
     var row = document.getElementById("cfo-head");
     U.clear(row);
-    ["№", "Статья оборотов", "Контрагент", "Договор", "Детализация"].forEach(function (title) {
+    ["№", "Статья оборотов", "Контрагент", "Договор", "Детализация", "Комментарий"]
+      .forEach(function (title) {
       row.appendChild(U.th(title, title === "№" ? "" : "wrap"));
     });
     ["Бюджет", "Итого&nbsp;опер&nbsp;план", "Факт", "Остаток бюджета", "Свободный лимит"]
@@ -92,6 +93,16 @@
     return U.el("td", { class: "num dim", text: "—" });
   }
 
+  /* Длинный текст в режиме чтения обрезаем многоточием, а целиком показываем
+     подсказкой: в комментарии бывает абзац. В правке нужна обычная ячейка. */
+  function textCell(row, field) {
+    var value = row[field] || "";
+    return editing
+      ? Inline.cell(row.id, field, value, "wrap", true)
+      : U.el("td", { class: "wrap" }, [U.el("div", {
+          class: "clamp", title: value, text: value || "—" })]);
+  }
+
   function rowCells(row, cfg) {
     var del = U.el("button", { class: "mini", title: "Удалить строку", text: "✕" });
     del.onclick = function (event) {
@@ -106,10 +117,8 @@
       Inline.cell(row.id, "article", row.article, "wrap", editing),
       Inline.cell(row.id, "counterparty", row.counterparty || (editing ? "" : "—"), "wrap", editing),
       Inline.cell(row.id, "contract", row.contract || (editing ? "" : "—"), "wrap", editing),
-      editing
-        ? Inline.cell(row.id, "detail_text", detailText(row), "wrap", true)
-        : U.el("td", { class: "wrap" }, [U.el("div", {
-            class: "clamp", title: detailText(row), text: detailText(row) || "—" })]),
+      textCell(row, "detail"),
+      textCell(row, "comment"),
       Inline.cell(row.id, "plan_year", U.fmt(row.plan_year), "num n-plan", editing),
       U.tdn(row.operplan), U.tdn(row.fact, "n-fact"),
       U.tdn(row.cash_remain, row.cash_remain < 0 ? "neg" : ""),
@@ -123,7 +132,6 @@
 
   function paint(td, row, field) {
     if (field === "plan_year") td.textContent = U.fmt(row.plan_year);
-    else if (field === "detail_text") td.textContent = detailText(row);
     else td.textContent = row[field] || (editing ? "" : "—");
   }
 
@@ -134,10 +142,6 @@
       if (value === row.plan_year) return null;
       if (value < 0) throw new Error("Годовая сумма не может быть отрицательной");
       return { plan_year: value };
-    }
-    if (field === "detail_text") {
-      if (text === detailText(row)) return null;
-      return { detail: text };
     }
     var current = row[field] || "";
     if (text === current || (text === "—" && !current)) return null;
@@ -159,7 +163,7 @@
   /* Пересчитанные числа строки обновляем на месте: перерисовка всей таблицы
      отобрала бы фокус у ячейки, в которую пользователь уже перешёл. */
   function repaintRow(row) {
-    var tr = document.querySelector('***REMOVED***t-cfo tr[data-row="' + row.id + '"]');
+    var tr = document.querySelector('#t-cfo tr[data-row="' + row.id + '"]');
     if (!tr) return;
     var cells = tr.children;
     if (cells.length < 10) return;
@@ -177,6 +181,8 @@
       U.el("td", { class: "wrap", text: fact.counterparty || "—" }),
       U.el("td", { class: "wrap", text: fact.contract || "—" }),
       U.el("td", { class: "wrap" }, [U.el("div", { class: "clamp", text: fact.purpose || "—" })]),
+      // у платежа текстовое поле одно — колонка «Комментарий» у него пустая
+      U.el("td", { class: "wrap dim", text: "" }),
       U.el("td", { class: "num dim", text: "—" }),
       U.tdn(fact.amount), U.tdn(fact.amount, "n-fact"),
       U.el("td", { class: "num dim", text: "—" }),
@@ -211,7 +217,7 @@
     ]);
 
     head(cfg);
-    var body = document.querySelector("***REMOVED***t-cfo tbody");
+    var body = document.querySelector("#t-cfo tbody");
     U.clear(body);
 
     initFilters();
@@ -220,7 +226,7 @@
 
     var hasRows = payload.budgets.some(function (b) { return b.rows.length; });
     if (!hasRows) {
-      body.appendChild(U.empty(22,
+      body.appendChild(U.empty(23,
         "В этом ЦФО пока нет строк бюджета. Добавьте строку кнопкой «+ Добавить строку»."));
     }
 
@@ -230,7 +236,7 @@
       if (!rows.length) return;
       shown += rows.length;
       body.appendChild(U.el("tr", { class: "group" }, [
-        U.el("td", { colspan: 22, text: budget.name })
+        U.el("td", { colspan: 23, text: budget.name })
       ]));
       rows.forEach(function (row) {
         var tr = U.el("tr", { class: row.source === "manual" ? "manual" : "",
@@ -245,10 +251,10 @@
       });
     });
     if (hasRows && !shown) {
-      body.appendChild(U.empty(22, "Под фильтр ничего не подошло — снимите часть условий."));
+      body.appendChild(U.empty(23, "Под фильтр ничего не подошло — снимите часть условий."));
     }
     document.getElementById("cfo-count").textContent = shown + " из " + allRows().length + " строк";
-    document.querySelector("***REMOVED***t-cfo").classList.toggle("editing", editing);
+    document.querySelector("#t-cfo").classList.toggle("editing", editing);
     refreshFilterOptions();
 
     document.getElementById("cfo-block-title").textContent =

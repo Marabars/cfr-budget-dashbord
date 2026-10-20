@@ -13,7 +13,7 @@ MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "М
                "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
 
-***REMOVED*** ---------- фикстуры ----------
+# ---------- фикстуры ----------
 
 def make_operplan(path, closed=4):
     """Лист «Оперплан ЦФО» в раскладке реального файла: шапка в 5-й строке."""
@@ -21,7 +21,7 @@ def make_operplan(path, closed=4):
     ws = wb.active
     ws.title = "Оперплан ЦФО"
 
-    ***REMOVED*** строка 1 — начала месяцев, строка 2 — концы, строка 3 — метки ФАКТ/ПРОГНОЗ
+    # строка 1 — начала месяцев, строка 2 — концы, строка 3 — метки ФАКТ/ПРОГНОЗ
     for m in range(12):
         ws.cell(row=1, column=16 + m, value=datetime(2026, m + 1, 1))
         ws.cell(row=3, column=16 + m, value="ФАКТ" if m + 1 <= closed else "ПРОГНОЗ")
@@ -32,10 +32,10 @@ def make_operplan(path, closed=4):
     for c, value in enumerate(header, start=1):
         ws.cell(row=5, column=c, value=value)
 
-    ***REMOVED*** блок 1: ИТОГО по дирекции + две бюджетные строки + дочерний факт
-    ws.append([])  ***REMOVED*** заполнение до 6-й строки произойдёт вручную ниже
+    # блок 1: ИТОГО по дирекции + две бюджетные строки + дочерний факт
+    ws.append([])  # заполнение до 6-й строки произойдёт вручную ниже
     rows = [
-        ***REMOVED*** ИТОГО открывает блок; название бюджета — в колонке «Договор»
+        # ИТОГО открывает блок; название бюджета — в колонке «Договор»
         (6,  {1: "ИТОГО", 2: "Третья дирекция", 4: "Бюджет обязательных затрат",
               9: 13_000_000, 12: 9_000_000, 13: 6_000_000,
               "months": [3_000_000, 3_000_000, 0, 0, 3_000_000] + [0] * 7}),
@@ -47,7 +47,7 @@ def make_operplan(path, closed=4):
         (9,  {0: 2, 1: "4430_Разработка", 2: "Третья дирекция", 5: "Портал",
               9: 3_000_000, 12: 3_000_000, 13: 3_000_000,
               "months": [0, 3_000_000] + [0] * 10}),
-        ***REMOVED*** блок 2: другая дирекция, название бюджета пустое
+        # блок 2: другая дирекция, название бюджета пустое
         (10, {1: "ИТОГО", 2: "Финансовый отдел", 9: 500_000, 12: 500_000, 13: 200_000,
               "months": [200_000, 0, 300_000] + [0] * 9}),
         (11, {0: 1, 1: "4106_Аудит", 2: "Финансовый отдел", 3: "Аудитор ООО",
@@ -106,7 +106,7 @@ def make_fact(path):
     return path
 
 
-***REMOVED*** ---------- Оперплан ЦФО ----------
+# ---------- Оперплан ЦФО ----------
 
 def test_оперплан_находит_шапку_не_в_первой_строке(tmp_path):
     parsed = operplan.parse(make_operplan(tmp_path / "op.xlsx"))
@@ -129,7 +129,7 @@ def test_оперплан_разбивает_на_блоки_цфо_и_бюдж�
     assert blocks[0]["cfo"] == "Третья дирекция"
     assert blocks[0]["budget"] == "Бюджет обязательных затрат"
     assert blocks[0]["plan_year"] == 13_000_000
-    ***REMOVED*** у второго блока названия бюджета в файле нет
+    # у второго блока названия бюджета в файле нет
     assert blocks[1]["budget"] == "Основной бюджет"
 
 
@@ -159,13 +159,13 @@ def test_оперплан_ругается_на_файл_без_нужных_к�
         operplan.parse(path)
 
 
-***REMOVED*** ---------- файлы дирекций ----------
+# ---------- файлы дирекций ----------
 
 def test_файл_дирекции_шапка_в_третьей_строке_и_колонка_с_фио(tmp_path):
     info = directorate.inspect(make_directorate(tmp_path / "d.xlsx"))
     assert info["header_row"] == 3
     assert info["mapping"]["article"] == 0
-    assert info["mapping"]["approver_comment"] == 5   ***REMOVED*** колонка с ФИО согласующего
+    assert info["mapping"]["approver_comment"] == 5   # колонка с ФИО согласующего
     assert info["months_found"] == 12
     assert info["needs_budget_name"] is True
 
@@ -187,7 +187,7 @@ def test_файл_дирекции_читает_план_по_месяцам(tmp
 def test_файл_дирекции_ловит_расхождение_года_и_месяцев(tmp_path):
     path = make_directorate(tmp_path / "d.xlsx")
     wb = openpyxl.load_workbook(path)
-    wb.active.cell(row=4, column=7, value=999_999)   ***REMOVED*** ИТОГО не сходится с месяцами
+    wb.active.cell(row=4, column=7, value=999_999)   # ИТОГО не сходится с месяцами
     wb.save(path)
 
     bad = directorate.check_totals(directorate.parse(path))
@@ -202,7 +202,7 @@ def test_сопоставление_колонок_можно_переопред
     assert parsed["rows"][0]["comment"] == "актуализировать"
 
 
-***REMOVED*** ---------- факт ----------
+# ---------- факт ----------
 
 def test_факт_читает_даты_в_обоих_форматах(tmp_path):
     parsed = fact.parse(make_fact(tmp_path / "f.xlsx"), filename="f.xlsx")
@@ -224,5 +224,5 @@ def test_ключ_платежа_стабилен_и_различает_плат
     path = make_fact(tmp_path / "f.xlsx")
     first = fact.parse(path, filename="f.xlsx")["rows"]
     second = fact.parse(path, filename="f.xlsx")["rows"]
-    assert first[0]["external_id"] == second[0]["external_id"]     ***REMOVED*** повторная загрузка не создаст дубль
+    assert first[0]["external_id"] == second[0]["external_id"]     # повторная загрузка не создаст дубль
     assert first[0]["external_id"] != first[1]["external_id"]

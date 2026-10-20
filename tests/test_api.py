@@ -37,7 +37,7 @@ def budget(client):
     return {"cfo_id": cfo_id, "row_id": response.json()["id"]}
 
 
-***REMOVED*** ---------- базовое ----------
+# ---------- базовое ----------
 
 def test_health_и_настройки(client):
     assert client.get("/health").json()["status"] == "ok"
@@ -52,7 +52,7 @@ def test_по_умолчанию_роль_финотдела(client):
     assert me["is_fin"] is True
 
 
-***REMOVED*** ---------- строки бюджета ----------
+# ---------- строки бюджета ----------
 
 def test_создание_строки_разбивает_план_по_месяцам(client, budget):
     card = client.get(f"/api/cfo/{budget['cfo_id']}").json()
@@ -77,7 +77,7 @@ def test_удаление_строки_убирает_её_из_карточки
     assert "Удаление строки" in actions
 
 
-***REMOVED*** ---------- факт и заявки ----------
+# ---------- факт и заявки ----------
 
 def test_факт_уменьшает_остаток_по_кассе(client, budget):
     client.post("/api/facts", json={
@@ -139,7 +139,7 @@ def test_расход_вне_бюджета_попадает_в_отдельны
     assert dash["out_of_budget_total"] == 66_917
 
 
-***REMOVED*** ---------- сопоставление ----------
+# ---------- сопоставление ----------
 
 def test_неразобранный_платёж_попадает_в_кандидаты_по_статье_и_контрагенту(client, budget):
     fact_id = repo.create_fact({
@@ -175,7 +175,7 @@ def test_автосопоставление_по_номеру_заявки(clien
     assert client.post("/api/facts/auto-match").json()["matched"] == 1
 
 
-***REMOVED*** ---------- перенос лимита ----------
+# ---------- перенос лимита ----------
 
 def test_перенос_лимита_между_месяцами(client, budget):
     response = client.post("/api/adjustments", json={
@@ -186,9 +186,9 @@ def test_перенос_лимита_между_месяцами(client, budget)
     assert response.status_code == 200
     card = client.get(f"/api/cfo/{budget['cfo_id']}").json()
     plan = card["budgets"][0]["rows"][0]["plan_months"]
-    assert plan[10] == pytest.approx(50_000)     ***REMOVED*** ноябрь уменьшился
-    assert plan[8] == pytest.approx(150_000)     ***REMOVED*** сентябрь вырос
-    assert sum(plan) == pytest.approx(1_200_000)  ***REMOVED*** годовой лимит не изменился
+    assert plan[10] == pytest.approx(50_000)     # ноябрь уменьшился
+    assert plan[8] == pytest.approx(150_000)     # сентябрь вырос
+    assert sum(plan) == pytest.approx(1_200_000)  # годовой лимит не изменился
 
 
 def test_перенос_больше_доступного_отклоняется(client, budget):
@@ -222,7 +222,7 @@ def test_перенос_между_цфо_запрещён(client, budget):
     assert "ЦФО" in response.json()["detail"]
 
 
-***REMOVED*** ---------- роли ----------
+# ---------- роли ----------
 
 def test_руководитель_цфо_видит_только_свой_цфо(client, budget):
     other_cfo = repo.ensure_cfo("Финансовый отдел")
@@ -270,7 +270,7 @@ def test_руководитель_цфо_не_смотрит_лимит_чужо
     assert own.status_code == 200
 
 
-***REMOVED*** ---------- дашборд и тепловая карта ----------
+# ---------- дашборд и тепловая карта ----------
 
 def test_дашборд_считает_итоги_и_статусы(client, budget):
     client.post("/api/facts", json={
@@ -280,7 +280,7 @@ def test_дашборд_считает_итоги_и_статусы(client, budg
     assert dash["totals"]["plan_year"] == 1_200_000
     assert dash["totals"]["fact"] == 1_150_000
     card = dash["cards"][0]
-    assert card["status"] == "warning"      ***REMOVED*** 96% при ожидаемых ~62%
+    assert card["status"] == "warning"      # 96% при ожидаемых ~62%
     assert card["totals"]["free_limit"] == 50_000
 
 
@@ -291,12 +291,12 @@ def test_тепловая_карта_отдаёт_отклонения_толь�
     rows = client.get("/api/heatmap").json()["rows"]
     cells = rows[0]["cells"]
     assert cells[0]["closed"] is True
-    assert cells[0]["deviation"] == pytest.approx(0.5)   ***REMOVED*** 150k против плана 100k
+    assert cells[0]["deviation"] == pytest.approx(0.5)   # 150k против плана 100k
     assert cells[11]["closed"] is False
     assert cells[11]["deviation"] is None
 
 
-***REMOVED*** ---------- импорт и экспорт ----------
+# ---------- импорт и экспорт ----------
 
 def _operplan_file(path):
     wb = openpyxl.Workbook()
@@ -335,8 +335,8 @@ def test_импорт_оперплана_создаёт_строки_факт_и
     body = response.json()
     assert body["rows"] == 1
     assert body["closed_through"] == 4
-    assert body["facts"] == 2      ***REMOVED*** январь и февраль — закрытые месяцы
-    assert body["claims"] == 2     ***REMOVED*** сентябрь и декабрь — прогноз
+    assert body["facts"] == 2      # январь и февраль — закрытые месяцы
+    assert body["claims"] == 2     # сентябрь и декабрь — прогноз
 
     dash = client.get("/api/dashboard").json()
     assert dash["totals"]["plan_year"] == 600_000
@@ -361,7 +361,7 @@ def test_предпросмотр_файла_дирекции_возвращае
 def test_экспорт_оперплана_отдаёт_xlsx(client, budget):
     response = client.get("/api/export/operplan.xlsx")
     assert response.status_code == 200
-    assert response.content[:2] == b"PK"          ***REMOVED*** zip-контейнер xlsx
+    assert response.content[:2] == b"PK"          # zip-контейнер xlsx
     assert "attachment" in response.headers["content-disposition"]
 
 

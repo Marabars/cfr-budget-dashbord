@@ -1,16 +1,16 @@
-***REMOVED*** -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Деплой приложения на сервер по SSH.
 
 Секретов в коде нет: доступ берётся из переменных окружения или из внешнего
 xlsx-файла, где в первой колонке имя параметра (login / pass / host или vm),
 а во второй — значение. Пароль не печатается и не пишется в логи.
 
-    set DEPLOY_CREDS=<путь к файлу.xlsx>     ***REMOVED*** или DEPLOY_USER / DEPLOY_PASS / DEPLOY_HOST
-    python scripts/deploy.py check           ***REMOVED*** что на сервере: python, порт, служба
-    python scripts/deploy.py deploy          ***REMOVED*** выложить код и перезапустить
-    python scripts/deploy.py restart         ***REMOVED*** только перезапустить
-    python scripts/deploy.py logs            ***REMOVED*** последние строки журнала
-    python scripts/deploy.py stop            ***REMOVED*** остановить
+    set DEPLOY_CREDS=<путь к файлу.xlsx>     # или DEPLOY_USER / DEPLOY_PASS / DEPLOY_HOST
+    python scripts/deploy.py check           # что на сервере: python, порт, служба
+    python scripts/deploy.py deploy          # выложить код и перезапустить
+    python scripts/deploy.py restart         # только перезапустить
+    python scripts/deploy.py logs            # последние строки журнала
+    python scripts/deploy.py stop            # остановить
 
 Автозапуск: если для пользователя удаётся включить linger, приложение
 регистрируется как служба пользовательского systemd (поднимается после
@@ -27,24 +27,24 @@ from pathlib import Path
 
 try:
     import paramiko
-except ImportError:  ***REMOVED*** pragma: no cover
+except ImportError:  # pragma: no cover
     print("Нужен paramiko:  pip install paramiko")
     raise SystemExit(2)
 
 ROOT = Path(__file__).resolve().parent.parent
-APP_DIR = "cfo-budget-dashboard"          ***REMOVED*** каталог в $HOME
+APP_DIR = "cfo-budget-dashboard"          # каталог в $HOME
 SERVICE = "cfo-budget"
 PORT = int(os.environ.get("DEPLOY_PORT", "8000"))
 
 INCLUDE = ["app", "static", "scripts", "deploy", "requirements.txt", "README.md"]
-***REMOVED*** instruction — генератор инструкции для дирекций: демо-база и 2,4 МБ снимков,
-***REMOVED*** приложению они не нужны и на сервере только занимают место
+# instruction — генератор инструкции для дирекций: демо-база и 2,4 МБ снимков,
+# приложению они не нужны и на сервере только занимают место
 EXCLUDE_DIRS = {"__pycache__", ".git", ".pytest_cache", "data", "venv", ".venv",
                 "instruction"}
 EXCLUDE_SUFFIX = {".pyc", ".db", ".xlsx", ".xls", ".csv", ".log"}
 
 
-***REMOVED*** ---------- доступ ----------
+# ---------- доступ ----------
 
 def credentials() -> tuple[str, str, str]:
     """Логин, пароль и хост из окружения или из xlsx с данными сервера."""
@@ -122,7 +122,7 @@ def sudo(client: paramiko.SSHClient, password: str, command: str,
     return code, text
 
 
-***REMOVED*** ---------- упаковка ----------
+# ---------- упаковка ----------
 
 def make_archive() -> Path:
     """Складывает код в tar.gz, исключая данные, венвы и служебное."""
@@ -149,7 +149,7 @@ def make_archive() -> Path:
     return tmp
 
 
-***REMOVED*** ---------- запуск на сервере ----------
+# ---------- запуск на сервере ----------
 
 def user_unit(target: str) -> str:
     return f"""[Unit]
@@ -213,7 +213,7 @@ def service_active(client: paramiko.SSHClient) -> bool:
                check=False, quiet=True)[1].strip() == "active"
 
 
-***REMOVED*** ---------- команды ----------
+# ---------- команды ----------
 
 def cmd_check() -> None:
     client, host, password = connect()
@@ -263,7 +263,7 @@ def cmd_deploy() -> None:
             sftp.close()
         print("файлы загружены")
 
-        ***REMOVED*** код обновляется, база в data/ остаётся на месте
+        # код обновляется, база в data/ остаётся на месте
         run(client, f"cd {target} && tar xzf {remote} && rm -f {remote}")
 
         print("\n--- venv и зависимости ---")

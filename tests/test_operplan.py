@@ -40,7 +40,7 @@ def _col_letter(ws, title: str) -> str:
     return get_column_letter(_col_index(ws, title))
 
 
-***REMOVED*** ---------- фикстуры ----------
+# ---------- фикстуры ----------
 
 def make_budgets_sheet() -> bytes:
     """Лист «Бюджеты ЦФО» в раскладке рабочего файла: шапка в 3-й строке."""
@@ -60,7 +60,7 @@ def make_budgets_sheet() -> bytes:
         for m, amount in enumerate(months):
             ws.cell(row=row, column=8 + m, value=amount or None)
 
-    ***REMOVED*** блок ИТ: два бюджета, детализация заполнена
+    # блок ИТ: два бюджета, детализация заполнена
     put(4, ["ИТОГО", IT, None, "Бюджет обязательных затрат"],
         [100_000, 50_000] + [0] * 10, total=150_000)
     put(5, ["4411_Оборудование", IT, "Астра ООО", "Договор №1", "ИТ инфраструктура",
@@ -73,7 +73,7 @@ def make_budgets_sheet() -> bytes:
     put(8, ["4430_Разработка", IT, "Софт ООО", "Договор №2", "Платформа", "Доработки"],
         [0, 0, 200_000] + [0] * 9)
 
-    ***REMOVED*** блок ДУП: детализации нет, только комментарий; одна строка с чужой подписью ЦФО
+    # блок ДУП: детализации нет, только комментарий; одна строка с чужой подписью ЦФО
     put(9, ["ИТОГО", HR, None, None], [15_000] + [10_000] * 10 + [60_000], total=175_000)
     put(10, ["4109_Обучение", HR, None, None, None, "Английский"], [0] * 11 + [30_000])
     put(11, ["4109_Обучение", HR, None, None, None, "Библиотека"], [0] * 11 + [20_000])
@@ -97,9 +97,9 @@ def make_articles_sheet() -> bytes:
     ws.cell(row=4, column=3, value="Статьи управленческого учета, характерные для ЦФО")
     ws.cell(row=5, column=2, value=HR)
     ws.cell(row=5, column=3, value="4109_Обучение")
-    ws.cell(row=6, column=3, value="4110_Соцрасходы")        ***REMOVED*** ЦФО тянется сверху
-    ws.cell(row=7, column=3, value="4114_Командировочные")   ***REMOVED*** статьи нет в строках бюджета
-    ws.cell(row=8, column=2, value="Бухгалтерия")            ***REMOVED*** такого ЦФО в бюджетах нет
+    ws.cell(row=6, column=3, value="4110_Соцрасходы")        # ЦФО тянется сверху
+    ws.cell(row=7, column=3, value="4114_Командировочные")   # статьи нет в строках бюджета
+    ws.cell(row=8, column=2, value="Бухгалтерия")            # такого ЦФО в бюджетах нет
     ws.cell(row=8, column=3, value="4106_Аудит")
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -123,7 +123,7 @@ def loaded(client):
     """Слой планирования с загруженным базовым 2026 годом."""
     result = operplan.import_budgets(make_budgets_sheet(), "бюджеты.xlsx", 2026, "Тест")
     assert result["rows"] == 7
-    ***REMOVED*** признак ставится явно: заливка его больше не угадывает по названию
+    # признак ставится явно: заливка его больше не угадывает по названию
     repo.set_detail_source(repo.ensure_cfo(IT), "detail")
     return result
 
@@ -143,7 +143,7 @@ def plan_row(cfo_name: str | None = None) -> dict:
     return rows[0]
 
 
-***REMOVED*** ---------- разбор листа ----------
+# ---------- разбор листа ----------
 
 def test_держатель_бюджета_берётся_из_строки_итого(loaded):
     """Строка с подписью «Эпсилон» лежит внутри блока ДУП и остаётся за ДУП."""
@@ -151,7 +151,7 @@ def test_держатель_бюджета_берётся_из_строки_ит
     gasfor = [r for r in rows if r["comment"] == "Через другое ЮЛ"]
     assert len(gasfor) == 1
     assert gasfor[0]["cfo_name"] == HR
-    ***REMOVED*** прежняя подпись не теряется
+    # прежняя подпись не теряется
     assert "Эпсилон" in gasfor[0]["approver_comment"]
 
 
@@ -169,7 +169,7 @@ def test_контрольная_сумма_блока_сверяется():
 def test_расхождение_итого_попадает_в_отчёт():
     """ИТОГО блока занижено — импорт обязан об этом сказать, а не молча сойтись."""
     wb = openpyxl.load_workbook(io.BytesIO(make_budgets_sheet()))
-    wb["Бюджеты ЦФО"].cell(row=9, column=7, value=1)   ***REMOVED*** ИТОГО блока ДУП
+    wb["Бюджеты ЦФО"].cell(row=9, column=7, value=1)   # ИТОГО блока ДУП
     buffer = io.BytesIO()
     wb.save(buffer)
     parsed = cfo_budgets.parse(buffer.getvalue())
@@ -203,7 +203,7 @@ def test_у_ит_пустая_детализация_подменяется_ко
     assert cartridges["detail_text"] == "Картриджи"
 
 
-***REMOVED*** ---------- слои не смешиваются ----------
+# ---------- слои не смешиваются ----------
 
 def test_слой_планирования_не_виден_дашборду(client, loaded):
     dashboard = client.get("/api/dashboard").json()
@@ -229,7 +229,7 @@ def test_одноимённый_бюджет_живёт_в_обоих_слоях
     assert main_id != plan_id
 
 
-***REMOVED*** ---------- повтор бюджета прошлого года ----------
+# ---------- повтор бюджета прошлого года ----------
 
 def test_повтор_года_переносит_все_строки_с_разбивкой(client, loaded):
     base = operplan.view(2026)["totals"]
@@ -275,7 +275,7 @@ def test_копирование_в_тот_же_год_отклоняется(cli
         operplan.copy_year("Тест", 2026, 2026)
 
 
-***REMOVED*** ---------- были в базовом году, нет в плане ----------
+# ---------- были в базовом году, нет в плане ----------
 
 def test_пропавшие_строки_находятся_по_статье_контрагенту_договору(client, loaded):
     operplan.copy_year("Тест", 2026, 2027)
@@ -289,6 +289,25 @@ def test_пропавшие_строки_находятся_по_статье_к
     assert missing["count"] == 1
     assert missing["items"][0]["article"] == "4430_Разработка"
     assert missing["total"] == pytest.approx(200_000)
+
+
+def test_пропавшая_строка_несёт_детализацию_и_комментарий_порознь(client, loaded):
+    """Панель «Замечания» печатает их разными колонками (решение 16.10.2026).
+
+    Прежде сервер отдавал только склейку `detail_text`, и комментарий строки
+    в панели было не увидеть — как и на самой вкладке.
+    """
+    base = next(r for r in repo.list_rows(2026, layer=operplan.LAYER)
+                if r["article"] == "4430_Разработка")
+    repo.update_row(int(base["id"]),
+                    {"detail": "Платформа", "comment": "Расход на двух подрядчиков"})
+    operplan.copy_year("Тест", 2026, 2027)
+    victim = next(r for r in repo.list_rows(2027, layer=operplan.LAYER)
+                  if r["article"] == "4430_Разработка")
+    repo.delete_row(int(victim["id"]))
+
+    item = operplan.missing_rows(2027)["items"][0]
+    assert (item["detail"], item["comment"]) == ("Платформа", "Расход на двух подрядчиков")
 
 
 def test_добавить_в_план_возвращает_строку(client, loaded):
@@ -307,7 +326,7 @@ def test_добавить_в_план_возвращает_строку(client, 
     assert months[2] == pytest.approx(200_000)
 
 
-***REMOVED*** ---------- KPI ----------
+# ---------- KPI ----------
 
 def test_kpi_считает_оба_года_и_помнит_что_факта_нет(client, loaded):
     operplan.copy_year("Тест", 2026, 2027, index_pct=25)
@@ -319,7 +338,7 @@ def test_kpi_считает_оба_года_и_помнит_что_факта_н
     assert kpi["base_fact"] == 0
 
 
-***REMOVED*** ---------- замок ----------
+# ---------- замок ----------
 
 def test_замок_закрывает_правку_руководителю_но_не_финотделу(client, planned):
     cfo_id = repo.ensure_cfo(HR)
@@ -395,7 +414,118 @@ def test_руководитель_не_правит_чужое_цфо(client, lo
     assert response.status_code == 403
 
 
-***REMOVED*** ---------- прошлый год не правится ----------
+# ---------- удаление пачкой ----------
+
+def test_удаление_пачкой_уносит_только_названные_строки(client, planned):
+    """«Очистить всё» и «Удалить отмеченные» шлют список строк, а не круг «весь год».
+
+    Проверяем на двух из семи: остальные обязаны остаться, иначе кнопка
+    «удалить отмеченные» вела бы себя как очистка года.
+    """
+    rows = repo.list_rows(2027, layer=operplan.LAYER)
+    victims = [int(r["id"]) for r in rows[:2]]
+    before = len(rows)
+
+    response = client.post("/api/operplan/rows/delete",
+                           json={"year": 2027, "ids": victims})
+    assert response.status_code == 200
+    assert response.json()["deleted"] == 2
+    assert response.json()["missing"] == 0
+
+    left = repo.list_rows(2027, layer=operplan.LAYER)
+    assert len(left) == before - 2
+    assert not [r for r in left if int(r["id"]) in victims]
+
+
+def test_удаление_пачкой_чистит_план_целиком(client, planned):
+    ids = [int(r["id"]) for r in repo.list_rows(2027, layer=operplan.LAYER)]
+    total = sum(float(r["plan_year"] or 0) for r in repo.list_rows(2027, layer=operplan.LAYER))
+
+    response = client.post("/api/operplan/rows/delete", json={"year": 2027, "ids": ids})
+    assert response.status_code == 200
+    assert response.json()["deleted"] == len(ids)
+    assert response.json()["total"] == pytest.approx(total, rel=1e-9)
+    assert repo.list_rows(2027, layer=operplan.LAYER) == []
+    # база прошлого года очисткой плана не задета
+    assert repo.list_rows(2026, layer=operplan.LAYER)
+
+
+def test_удаление_пачкой_пишет_в_журнал_одну_запись(client, planned):
+    ids = [int(r["id"]) for r in repo.list_rows(2027, layer=operplan.LAYER)]
+    client.post("/api/operplan/rows/delete", json={"year": 2027, "ids": ids})
+    entries = [r for r in db.query("SELECT action, change FROM audit_log")
+               if r["action"] == "Удаление строк плана"]
+    assert len(entries) == 1, "журнал читают глазами — по записи на строку его не хватит"
+    assert f"удалено строк: {len(ids)}" in entries[0]["change"]
+
+
+def test_удаление_пачкой_не_трогает_прошлый_год(client, loaded):
+    ids = [int(r["id"]) for r in repo.list_rows(2026, layer=operplan.LAYER)]
+    response = client.post("/api/operplan/rows/delete", json={"year": 2026, "ids": ids})
+    assert response.status_code == 403
+    assert "база для сравнения" in response.json()["detail"]
+    assert len(repo.list_rows(2026, layer=operplan.LAYER)) == len(ids)
+
+
+def test_чужая_строка_в_списке_отменяет_всё_удаление(client, planned):
+    """Частично выполненная очистка хуже отказа: право проверяется до первой строки."""
+    hr_id = repo.ensure_cfo(HR)
+    rows = repo.list_rows(2027, layer=operplan.LAYER)
+    mine = [int(r["id"]) for r in rows if r["cfo_id"] == hr_id]
+    stranger = int(next(r for r in rows if r["cfo_name"] == IT)["id"])
+    assert mine, "у ДУП есть свои строки плана"
+
+    response = client.post("/api/operplan/rows/delete",
+                           json={"year": 2027, "ids": mine + [stranger]},
+                           headers={"X-User": f"cfo:{hr_id}"})
+    assert response.status_code == 403
+    assert len(repo.list_rows(2027, layer=operplan.LAYER)) == len(rows), \
+        "ни одна строка не должна уйти, включая свои"
+
+
+def test_уже_удалённая_строка_считается_отдельно_и_не_ошибка(client, planned):
+    """Тот же список могли удалить из соседней вкладки — это не повод падать."""
+    ids = [int(r["id"]) for r in repo.list_rows(2027, layer=operplan.LAYER)[:2]]
+    repo.delete_row(ids[0])
+
+    response = client.post("/api/operplan/rows/delete", json={"year": 2027, "ids": ids})
+    assert response.status_code == 200
+    assert response.json() == {"deleted": 1, "missing": 1,
+                               "total": response.json()["total"], "year": 2027}
+
+
+def test_пустой_список_на_удаление_не_принимается(client, planned):
+    assert client.post("/api/operplan/rows/delete",
+                       json={"year": 2027, "ids": []}).status_code == 422
+
+
+def test_очистка_факта_считает_стёртое_а_не_отдаёт_ноль(client, loaded):
+    """`db.execute` отдаёт lastrowid, и на UPDATE с DELETE это не счёт.
+
+    На этом молча стояли обе очистки факта и удаление строк пачкой: работа
+    делалась, а в ответе был ноль. Проверяем обе двери сразу.
+    """
+    row = repo.list_rows(2026, layer=operplan.LAYER)[0]
+    row_id, cfo_id = int(row["id"]), int(row["cfo_id"])
+    repo.set_row_fact(row_id, [1000.0] + [0.0] * 11)        # один месяц с суммой
+    repo.create_fact({"row_id": row_id, "cfo_id": cfo_id, "layer": operplan.LAYER,
+                      "year": 2026, "amount": 1000.0, "article": row["article"]}, "Тест")
+
+    assert repo.clear_layer_fact(2026, operplan.LAYER, [cfo_id]) == 1
+    assert repo.clear_layer_fact_rows(2026, operplan.LAYER, [cfo_id]) == 1
+    # повторная очистка стирать уже нечего — и счёт честно нулевой
+    assert repo.clear_layer_fact(2026, operplan.LAYER, [cfo_id]) == 0
+    assert repo.clear_layer_fact_rows(2026, operplan.LAYER, [cfo_id]) == 0
+
+
+def test_перестановка_факта_на_строку_считает_записи(client, loaded):
+    row = repo.list_rows(2026, layer=operplan.LAYER)[0]
+    ids = [repo.create_fact({"cfo_id": int(row["cfo_id"]), "layer": operplan.LAYER,
+                             "year": 2026, "amount": 500.0}, "Тест") for _ in range(3)]
+    assert repo.set_facts_row(ids, int(row["id"]), False, "Тест") == 3
+
+
+# ---------- прошлый год не правится ----------
 
 def test_прошлый_год_не_правится_по_ячейке(client, loaded):
     """База для сравнения: ни правки, ни удаления — даже финотделу."""
@@ -432,7 +562,7 @@ def test_прошлый_год_по_прежнему_заливается_цел
     ).status_code == 200
 
 
-***REMOVED*** ---------- правка строки ----------
+# ---------- правка строки ----------
 
 def test_правка_месяцев_пересчитывает_годовую_сумму(client, planned):
     row_id = int(plan_row()["id"])
@@ -489,15 +619,15 @@ def test_новая_строка_плана_попадает_в_нужный_с�
     assert client.get("/api/dashboard").json()["totals"]["plan_year"] == 0
 
 
-***REMOVED*** ---------- справочники ----------
+# ---------- справочники ----------
 
 def test_справочник_статей_объединяет_лист_и_строки(client, loaded):
     operplan.import_articles(make_articles_sheet(), "статьи.xlsx", "Тест")
     refs = client.get("/api/operplan/references?year=2026").json()
     hr_id = str(repo.ensure_cfo(HR))
     articles = refs["by_cfo"][hr_id]["articles"]
-    assert "4109_Обучение" in articles          ***REMOVED*** есть и в листе, и в строках
-    assert "4114_Командировочные" in articles   ***REMOVED*** только в листе-справочнике
+    assert "4109_Обучение" in articles          # есть и в листе, и в строках
+    assert "4114_Командировочные" in articles   # только в листе-справочнике
     assert "4110_Соцрасходы" in articles
 
 
@@ -523,8 +653,8 @@ def test_детализация_в_справочнике_только_у_ит(c
     details = refs["by_cfo"][it_id]["details"]
     assert "ИТ инфраструктура" in details
     assert "Платформа" in details
-    ***REMOVED*** у строки с картриджами детализация пуста, в колонке видно комментарий —
-    ***REMOVED*** в списке он же, иначе список разошёлся бы с таблицей
+    # у строки с картриджами детализация пуста, в колонке видно комментарий —
+    # в списке он же, иначе список разошёлся бы с таблицей
     assert "Картриджи" in details
 
     assert refs["by_cfo"][hr_id]["details"] == []
@@ -553,15 +683,15 @@ def test_руководителю_справочник_отдаёт_только
 
     assert set(refs["by_cfo"]) == {str(it_id)}
     assert str(hr_id) not in refs["by_cfo"]
-    assert "4411_Оборудование" in refs["all"]["articles"]      ***REMOVED*** своё
-    assert "4109_Обучение" not in refs["all"]["articles"]      ***REMOVED*** чужое
+    assert "4411_Оборудование" in refs["all"]["articles"]      # своё
+    assert "4109_Обучение" not in refs["all"]["articles"]      # чужое
     assert "Астра ООО" in refs["all"]["counterparties"]
 
     у_финотдела = client.get("/api/operplan/references?year=2026").json()
     assert "4109_Обучение" in у_финотдела["all"]["articles"]
 
 
-***REMOVED*** ---------- импорт через API ----------
+# ---------- импорт через API ----------
 
 def test_импорт_листа_через_api(client):
     response = client.post(
@@ -630,7 +760,7 @@ def test_лист_без_нужных_колонок_отклоняется(clie
     assert response.status_code == 422
 
 
-***REMOVED*** ---------- миграция старой базы ----------
+# ---------- миграция старой базы ----------
 
 def test_миграция_добавляет_слой_и_не_трогает_данные(tmp_path, monkeypatch):
     """База, созданная до появления слоёв, должна открыться без потерь."""
@@ -682,12 +812,12 @@ def test_миграция_добавляет_слой_и_не_трогает_д�
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     conn.close()
 
-    ***REMOVED*** повторный запуск безвреден
+    # повторный запуск безвреден
     db.init_db()
     assert repo.list_rows(2026)[0]["plan_year"] == 999000
 
 
-***REMOVED*** ---------- Excel: выгрузка, загрузка, факт ----------
+# ---------- Excel: выгрузка, загрузка, факт ----------
 
 def make_fact_sheet(hr_amount: float = 7_000, it_amount: float = 90_000,
                     extra: bool = False) -> bytes:
@@ -768,7 +898,7 @@ def test_строка_отдаёт_факт_по_месяцам(client, loaded):
 
     total = sum(sum(row["fact_months"]) for row in rows)
     assert total == pytest.approx(97_000)
-    ***REMOVED*** факт строки сходится с её расшифровкой по контрагентам
+    # факт строки сходится с её расшифровкой по контрагентам
     for row in rows:
         if row["spends"]:
             assert sum(row["fact_months"]) == pytest.approx(
@@ -828,7 +958,7 @@ def test_повтор_факта_переносит_суммы_факта_а_н�
     operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
     result = client.post("/api/operplan/copy-year",
                          json={"from_year": 2026, "to_year": 2027, "source": "fact"}).json()
-    assert result["copied"] == 2          ***REMOVED*** перенеслись только строки с фактом
+    assert result["copied"] == 2          # перенеслись только строки с фактом
     plan = client.get("/api/operplan?year=2027").json()
     assert plan["totals"]["plan_year"] == pytest.approx(97_000)
 
@@ -864,14 +994,14 @@ def test_руководитель_заливает_бюджет_не_стира�
         headers={"X-User": f"cfo:{hr_id}"},
     )
     assert response.status_code == 200
-    assert response.json()["foreign"] == 3       ***REMOVED*** три строки ИТ в файле пропущены
+    assert response.json()["foreign"] == 3       # три строки ИТ в файле пропущены
 
     it_after = [r for r in repo.list_rows(2026, layer=operplan.LAYER)
                 if r["cfo_name"] == IT]
     assert len(it_after) == len(it_before), "чужие строки не должны стираться"
 
 
-***REMOVED*** ---------- шаблон Excel ----------
+# ---------- шаблон Excel ----------
 
 def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блоками_и_справочником(client, loaded):
     response = client.get("/api/export/budget-template.xlsx?year=2027")
@@ -880,15 +1010,16 @@ def test_шаблон_отдаёт_лист_бюджеты_цфо_с_блока�
     assert wb.sheetnames == ["Бюджеты ЦФО", "Справочник"], "листа-инструкции быть не должно"
 
     ws = wb["Бюджеты ЦФО"]
-    header = [ws.cell(row=3, column=c).value for c in range(1, 10)]
+    header = [ws.cell(row=3, column=c).value for c in range(1, 11)]
     assert header == ["Статья оборотов", "ЦФО", "Тип бюджета", "Классификатор",
-                      "Контрагент", "Договор", "Детализация", "Комментарий", "ИТОГО"]
-    ***REMOVED*** блоки ЦФО есть, строки под ними пустые
+                      "Контрагент", "Договор", "Детализация", "Комментарий",
+                      "Наличие в бюджете", "ИТОГО"]
+    # блоки ЦФО есть, строки под ними пустые
     blocks = [ws.cell(row=r, column=2).value for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value == "ИТОГО"]
     assert IT in blocks and HR in blocks
-    ***REMOVED*** Пустыми должны быть строки под блоками: заголовки свой текст несут —
-    ***REMOVED*** «ИТОГО» у блока ЦФО и подпись у блока «ВНЕ БЮДЖЕТА».
+    # Пустыми должны быть строки под блоками: заголовки свой текст несут —
+    # «ИТОГО» у блока ЦФО и подпись у блока «ВНЕ БЮДЖЕТА».
     comment = _col_index(ws, "Комментарий")
     assert not any(ws.cell(row=r, column=comment).value
                    for r in range(4, ws.max_row + 1)
@@ -905,7 +1036,7 @@ def test_в_шаблоне_нет_подсказок_кроме_примечан
     assert total.value == "ИТОГО"
     assert total.comment is not None, "примечание к ИТОГО потерялось"
     assert "сумма" in total.comment.text
-    ***REMOVED*** примечание ровно одно и висит на шапке, а не расползлось по колонке
+    # примечание ровно одно и висит на шапке, а не расползлось по колонке
     with_note = [c.coordinate for row in ws.iter_rows() for c in row if c.comment]
     assert with_note == [total.coordinate]
 
@@ -929,7 +1060,7 @@ def test_общий_блок_остаётся_дирекции_без_своег
     ws = wb["Справочник"]
     labels = [ws.cell(row=r, column=1).value for r in range(2, ws.max_row + 1)]
     assert "— все дирекции —" in labels
-    ***REMOVED*** и список у её блока непустой — ссылается на общий диапазон
+    # и список у её блока непустой — ссылается на общий диапазон
     budgets = wb["Бюджеты ЦФО"]
     first = next(r for r in range(4, budgets.max_row + 1)
                  if budgets.cell(row=r, column=1).value == "ИТОГО"
@@ -1005,7 +1136,7 @@ def test_в_шаблоне_остаётся_имя_неосновного_бюд
              for r in range(4, ws.max_row + 1)
              if ws.cell(row=r, column=1).value == "ИТОГО"}
     assert names[HR] is None
-    ***REMOVED*** у ИТ две строки ИТОГО — словарь оставит последнюю, обе именованные
+    # у ИТ две строки ИТОГО — словарь оставит последнюю, обе именованные
     it_names = [ws.cell(row=r, column=contract).value
                 for r in range(4, ws.max_row + 1)
                 if ws.cell(row=r, column=1).value == "ИТОГО"
@@ -1063,7 +1194,7 @@ def test_заполненный_шаблон_загружается_обратн
     total_col = _col_index(ws, "ИТОГО")
     ws.cell(row=start, column=1, value="4109_Обучение")
     ws.cell(row=start, column=total_col, value=60_000)
-    ***REMOVED*** вторая строка: ИТОГО оставлено пустым, заполнены только месяцы
+    # вторая строка: ИТОГО оставлено пустым, заполнены только месяцы
     ws.cell(row=start + 1, column=1, value="4110_Соцрасходы")
     ws.cell(row=start + 1, column=total_col + 1, value=25_000)
     ws.cell(row=start + 1, column=total_col + 2, value=15_000)
@@ -1082,11 +1213,11 @@ def test_заполненный_шаблон_загружается_обратн
     plan = client.get("/api/operplan?year=2027").json()
     assert plan["totals"]["plan_year"] == pytest.approx(100_000)
     rows = {r["article"]: r for b in plan["blocks"] for r in b["rows"]}
-    ***REMOVED*** ИТОГО пустой строки собрано из месяцев, а не осталось нулём
+    # ИТОГО пустой строки собрано из месяцев, а не осталось нулём
     assert rows["4110_Соцрасходы"]["plan_year"] == pytest.approx(40_000)
 
 
-***REMOVED*** ---------- область замены при загрузке ----------
+# ---------- область замены при загрузке ----------
 
 def make_one_cfo_sheet(cfo: str, article: str, amount: float,
                        comment: str | None = None) -> bytes:
@@ -1187,7 +1318,7 @@ def test_повторная_загрузка_факта_убирает_сумм�
     assert not stale, "факт остался на строках, которых в новом файле нет"
 
 
-***REMOVED*** ---------- пустая строка, заводимая кнопкой в заголовке блока ----------
+# ---------- пустая строка, заводимая кнопкой в заголовке блока ----------
 
 def test_строка_заводится_без_статьи(client, loaded):
     """Кнопка «+ расход» создаёт пустую строку — заполняют её уже в таблице."""
@@ -1213,7 +1344,7 @@ def test_пустая_строка_дозаполняется_правкой(cli
                         json={"article": "4109_Обучение"}).status_code == 200
     assert client.patch(f"/api/rows/{row_id}",
                         json={"counterparty": "Подрядчик ООО"}).status_code == 200
-    ***REMOVED*** равномерная раскладка 120 000 по месяцам: ИТОГО пересчитывается по ним
+    # равномерная раскладка 120 000 по месяцам: ИТОГО пересчитывается по ним
     months = [10_000.0] * 12
     result = client.patch(f"/api/rows/{row_id}", json={"months": months}).json()
     assert result["row"]["plan_year"] == pytest.approx(120_000)
@@ -1235,7 +1366,7 @@ def test_руководитель_не_заводит_строку_в_чужом
     assert response.status_code == 403
 
 
-***REMOVED*** ---------- нумерация строк ----------
+# ---------- нумерация строк ----------
 
 def test_сохранить_закрепляет_нумерацию_по_порядку_таблицы(client, planned):
     """До «Сохранить» номера тянутся из файла; кнопка проставляет их подряд."""
@@ -1323,7 +1454,7 @@ def test_пустая_строка_при_перенумерации_идёт_п
     assert int(repo.get_row(row_id)["row_no"]) == 1
 
 
-***REMOVED*** ---------- круг: строка с нулевой суммой ----------
+# ---------- круг: строка с нулевой суммой ----------
 
 def test_нулевая_строка_со_статьёй_переживает_круг(client, loaded):
     """Расход заведён, сумму ещё не проставили — выгрузка и заливка её не теряют.
@@ -1412,7 +1543,7 @@ def test_факт_нулевые_строки_не_заводит(client, loaded
     assert len(repo.list_rows(2026, layer=operplan.LAYER)) == before
 
 
-***REMOVED*** ---------- классификатор МРГ/МРК ----------
+# ---------- классификатор МРГ/МРК ----------
 
 def test_новая_строка_по_умолчанию_мрг(client, loaded):
     """Выбирать за пользователя нечего — строка заводится как МРГ."""
@@ -1454,8 +1585,8 @@ def test_повтор_года_переносит_классификатор(cli
 
 
 def test_выгрузка_несёт_классификатор_и_круг_его_не_теряет(client, planned):
-    ***REMOVED*** строку берём с неповторяющейся парой «статья + контрагент»: ниже она
-    ***REMOVED*** служит ключом в выгрузке, а одна статья в плане встречается не раз
+    # строку берём с неповторяющейся парой «статья + контрагент»: ниже она
+    # служит ключом в выгрузке, а одна статья в плане встречается не раз
     from collections import Counter
     все = repo.list_rows(2027, layer=operplan.LAYER)
     сколько = Counter((r["article"], r["counterparty"]) for r in все)
@@ -1466,7 +1597,7 @@ def test_выгрузка_несёт_классификатор_и_круг_ег
     ws = openpyxl.load_workbook(io.BytesIO(content))["Бюджеты ЦФО"]
     classifier = _col_index(ws, "Классификатор")
     counterparty = _col_index(ws, "Контрагент")
-    ***REMOVED*** ключ по статье и контрагенту: одна статья в плане встречается не раз
+    # ключ по статье и контрагенту: одна статья в плане встречается не раз
     values = {(ws.cell(row=r, column=1).value, ws.cell(row=r, column=counterparty).value):
               ws.cell(row=r, column=classifier).value
               for r in range(4, ws.max_row + 1)
@@ -1484,11 +1615,11 @@ def test_загрузка_чинит_чужое_значение_и_пережи
     """Файл из чужих рук важнее описки в одной колонке — строка не теряется."""
     wb = openpyxl.load_workbook(io.BytesIO(make_budgets_sheet()))
     ws = wb["Бюджеты ЦФО"]
-    ***REMOVED*** у фикстуры колонки нет вовсе — сначала грузим как есть
+    # у фикстуры колонки нет вовсе — сначала грузим как есть
     operplan.import_budgets(make_budgets_sheet(), "без колонки.xlsx", 2027, "Тест")
     assert {r["classifier"] for r in repo.list_rows(2027, layer=operplan.LAYER)} == {"МРГ"}
 
-    ***REMOVED*** теперь вставляем колонку и пишем в неё мусор и строчные буквы
+    # теперь вставляем колонку и пишем в неё мусор и строчные буквы
     ws.insert_cols(3)
     ws.cell(row=3, column=3, value="Классификатор")
     filled = [r for r in range(4, ws.max_row + 1)
@@ -1529,7 +1660,7 @@ def test_шаблон_подсказывает_статьи_и_контраге�
     content = client.get("/api/export/budget-template.xlsx?year=2027").content
     wb = openpyxl.load_workbook(io.BytesIO(content))
     ws = wb["Бюджеты ЦФО"]
-    ***REMOVED*** строка, с которой начинается блок ДУП
+    # строка, с которой начинается блок ДУП
     start = next(r for r in range(4, ws.max_row + 1)
                  if ws.cell(row=r, column=1).value == "ИТОГО"
                  and ws.cell(row=r, column=2).value == HR) + 1
@@ -1546,8 +1677,8 @@ def test_шаблон_подсказывает_статьи_и_контраге�
     assert _range_values(wb, rule_at(_col_letter(ws, "Контрагент")).formula1),         "у контрагентов список тоже есть"
 
 
-***REMOVED*** Палитра листа «Бюджеты ЦФО» из файла ликвидности: выгрузку кладут рядом с
-***REMOVED*** исходником и сверяют глазами, поэтому цвета проверяются по колонкам поимённо.
+# Палитра листа «Бюджеты ЦФО» из файла ликвидности: выгрузку кладут рядом с
+# исходником и сверяют глазами, поэтому цвета проверяются по колонкам поимённо.
 ПАЛИТРА_ИСХОДНИКА = {
     "Статья оборотов": "DCDCDC", "ЦФО": "D6DCE5", "Классификатор": "D6DCE5",
     "Контрагент": "D6DCE5", "Договор": "D6DCE5", "Детализация": "D6DCE5",
@@ -1643,7 +1774,7 @@ def test_миграция_проставляет_мрг_существующим
     row = repo.get_row(42)
     assert row["classifier"] == "МРГ"
     assert row["plan_year"] == 999
-    db.init_db()                            ***REMOVED*** повторный запуск безвреден
+    db.init_db()                            # повторный запуск безвреден
     assert repo.get_row(42)["classifier"] == "МРГ"
 
 
@@ -1654,9 +1785,9 @@ def test_отчёт_загрузки_совпадает_с_тем_что_лег�
     ws = wb["Бюджеты ЦФО"]
     filled = [r for r in range(4, ws.max_row + 1)
               if ws.cell(row=r, column=1).value not in (None, "ИТОГО")]
-    ***REMOVED*** У первой строки стираем ИТОГО и оставляем один месяц. Чистится присваиванием
-    ***REMOVED*** в .value: openpyxl в ws.cell(..., value=None) понимает None как «не задавать»
-    ***REMOVED*** и оставляет прежнее значение — на этом тест уже один раз оказался пустым.
+    # У первой строки стираем ИТОГО и оставляем один месяц. Чистится присваиванием
+    # в .value: openpyxl в ws.cell(..., value=None) понимает None как «не задавать»
+    # и оставляет прежнее значение — на этом тест уже один раз оказался пустым.
     ws.cell(row=filled[0], column=7).value = None
     for c in range(8, 20):
         ws.cell(row=filled[0], column=c).value = None
@@ -1680,7 +1811,7 @@ def test_отчёт_загрузки_не_считает_чужие_цфо(clien
     assert result["total"] == pytest.approx(in_db)
 
 
-***REMOVED*** ---------- факт: выгружают все, загружает финансовый отдел ----------
+# ---------- факт: выгружают все, загружает финансовый отдел ----------
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -1704,7 +1835,7 @@ def test_выгрузка_факта_без_года_берёт_базовый(c
     operplan.import_fact(make_fact_sheet(), "факт.xlsx", 2026, "Тест")
     rows = cfo_budgets.parse(client.get("/api/export/budget-fact.xlsx").content)["rows"]
     assert sum(r["plan_year"] for r in rows) == pytest.approx(97_000)
-    ***REMOVED*** встречная проверка: взялся бы плановый год — лист пришёл бы пустым
+    # встречная проверка: взялся бы плановый год — лист пришёл бы пустым
     assert cfo_budgets.parse(
         client.get("/api/export/budget-fact.xlsx?year=2027").content)["rows"] == []
 
@@ -1730,7 +1861,7 @@ def test_руководитель_выгружает_факт_только_св�
     parsed = cfo_budgets.parse(content)
     assert {row["cfo"] for row in parsed["rows"]} == {HR}
     assert sum(r["plan_year"] for r in parsed["rows"]) == pytest.approx(7_000)
-    ***REMOVED*** встречная проверка: не ограничь выгрузка круг ЦФО — приехал бы и ИТ
+    # встречная проверка: не ограничь выгрузка круг ЦФО — приехал бы и ИТ
     for_fin = cfo_budgets.parse(
         client.get("/api/export/budget-fact.xlsx?year=2026").content)
     assert {row["cfo"] for row in for_fin["rows"]} == {HR, IT}
@@ -1764,7 +1895,7 @@ def test_факт_загружает_только_финотдел(client, loade
     assert client.get("/api/operplan").json()["kpi"]["fact_loaded"] is True
 
 
-***REMOVED*** ---------- «Тип бюджета»: видно там, где бюджетов несколько ----------
+# ---------- «Тип бюджета»: видно там, где бюджетов несколько ----------
 
 def test_тип_бюджета_стоит_у_ит_и_пуст_у_дирекции_с_одним_бюджетом(client, loaded):
     """У ИТ бюджета два, и строка должна говорить, в каком из них она лежит."""
@@ -1823,14 +1954,14 @@ def test_загрузка_не_спотыкается_о_новую_колонк
     assert again["rows"] == before["rows_count"]
     assert after["plan_year"] == pytest.approx(before["plan_year"], rel=1e-9)
 
-    ***REMOVED*** и блоки ИТ не слиплись: имя бюджета по-прежнему читается из «Договора»
+    # и блоки ИТ не слиплись: имя бюджета по-прежнему читается из «Договора»
     names = {b["budget_name"] for b in
              client.get("/api/operplan?year=2026").json()["blocks"]
              if b["cfo_name"] == IT}
     assert names == {"Бюджет обязательных затрат", "Бюджет развития"}
 
 
-***REMOVED*** ---------- шаблон наследует блоки от базового года ----------
+# ---------- шаблон наследует блоки от базового года ----------
 
 def test_шаблон_планового_года_берёт_бюджеты_ит_из_базового(client, loaded):
     """В пустом плановом году у ИТ не было блоков — шаблон брал их из базы."""

@@ -14,10 +14,10 @@
     <div class="gate-brand">
       <svg class="logo-mark" viewBox="0 0 38 38" aria-hidden="true">
         <defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="***REMOVED***8A62F0"/><stop offset="1" stop-color="***REMOVED***5B2FD0"/>
+          <stop offset="0" stop-color="#8A62F0"/><stop offset="1" stop-color="#5B2FD0"/>
         </linearGradient></defs>
-        <rect width="38" height="38" rx="8" fill="url(***REMOVED***lg2)"/>
-        <text x="19" y="25" text-anchor="middle" fill="***REMOVED***fff" font-family="Calibri, sans-serif"
+        <rect width="38" height="38" rx="8" fill="url(#lg2)"/>
+        <text x="19" y="25" text-anchor="middle" fill="#fff" font-family="Calibri, sans-serif"
               font-size="15" font-weight="700" letter-spacing="0.5">MR</text>
       </svg>
       <span class="wordmark">MR <span>Group</span></span>
@@ -47,10 +47,10 @@
     <div class="brand">
       <svg class="logo-mark" viewBox="0 0 38 38" aria-label="Холдинг">
         <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="***REMOVED***8A62F0"/><stop offset="1" stop-color="***REMOVED***5B2FD0"/>
+          <stop offset="0" stop-color="#8A62F0"/><stop offset="1" stop-color="#5B2FD0"/>
         </linearGradient></defs>
-        <rect width="38" height="38" rx="8" fill="url(***REMOVED***lg)"/>
-        <text x="19" y="25" text-anchor="middle" fill="***REMOVED***fff" font-family="Calibri, sans-serif"
+        <rect width="38" height="38" rx="8" fill="url(#lg)"/>
+        <text x="19" y="25" text-anchor="middle" fill="#fff" font-family="Calibri, sans-serif"
               font-size="15" font-weight="700" letter-spacing="0.5">MR</text>
       </svg>
       <span class="wordmark">MR <span>Group</span></span>
@@ -330,8 +330,8 @@
                круг: что не отмечено, то и не тронется. -->
           <div id="op-import-cfo-wrap" hidden style="margin-top:10px">
             <div class="sub" style="margin-bottom:6px">
-              Дирекции: <a href="***REMOVED***" id="op-cfo-all">все</a> ·
-              <a href="***REMOVED***" id="op-cfo-none">ни одной</a>
+              Дирекции: <a href="#" id="op-cfo-all">все</a> ·
+              <a href="#" id="op-cfo-none">ни одной</a>
               <span class="dim" id="op-cfo-hint"></span>
             </div>
             <div id="op-import-cfo" class="cfo-picker"></div>
@@ -357,6 +357,11 @@
       <button class="btn sm icon" id="op-edit-mode" title="Разрешить правку">✎</button>
       <button class="btn primary sm" id="op-save" hidden>✓ Сохранить</button>
       <button class="btn primary sm" id="op-add-row">+ расход</button>
+      <!-- Удаление пачкой. «Отмеченные» появляются, только когда есть что
+           удалять; «Очистить всё» стоит рядом с правом править план и перед
+           работой спрашивает, какой именно бюджет чистит. -->
+      <button class="btn sm danger" id="op-del-selected" hidden></button>
+      <button class="btn sm danger" id="op-clear-all" hidden>✕ Очистить всё</button>
       <div class="top-spacer"></div>
       <label class="f-check" id="op-all-wrap"><input type="checkbox" id="op-a-all">
         все статьи и контрагенты</label>
@@ -385,6 +390,7 @@
       <thead><tr>
         <th class="wrap">ЦФО</th><th class="wrap">Статья оборотов</th><th class="wrap">Контрагент</th>
         <th class="wrap">Договор</th><th class="wrap">Детализация</th>
+        <th class="wrap">Комментарий</th>
         <th class="num">Сумма базового года</th><th></th>
       </tr></thead><tbody></tbody>
     </table></div></div>

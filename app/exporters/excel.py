@@ -12,23 +12,23 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from app import calc, service
 
-MONEY = "***REMOVED*** ***REMOVED******REMOVED***0.00"
+MONEY = "# ##0.00"
 
-***REMOVED*** Палитра взята из файла ликвидности, а не придумана: выгрузку кладут рядом с
-***REMOVED*** исходником и сверяют глазами, а лист «Оперплан ЦФО» прямо вставляют обратно
-***REMOVED*** в книгу. Цвета прочитаны из самого файла — тема Office и tint уже разрешены
-***REMOVED*** в hex, поэтому здесь плоские значения.
-HEAD_FILL = PatternFill("solid", fgColor="F2F2F2")       ***REMOVED*** шапка
-TOTAL_FILL = PatternFill("solid", fgColor="D6DCE5")      ***REMOVED*** строка ИТОГО блока
-ARTICLE_FILL = PatternFill("solid", fgColor="DCDCDC")    ***REMOVED*** № и «Статья оборотов»
-TEXT_FILL = PatternFill("solid", fgColor="D6DCE5")       ***REMOVED*** ЦФО, контрагент, договор
-NOTE_FILL = PatternFill("solid", fgColor="FFE4B5")       ***REMOVED*** «Комментарий»
-OWN_NOTE_FILL = PatternFill("solid", fgColor="FBE5D6")   ***REMOVED*** «Комм наш»
-MONTH_FILL = PatternFill("solid", fgColor="F0FFF0")      ***REMOVED*** месяцы
-CALC_FILL = PatternFill("solid", fgColor="E5FFEB")       ***REMOVED*** расчётные колонки оперплана
-MONEY_HEAD_FILL = PatternFill("solid", fgColor="DDF2FF")  ***REMOVED*** шапки денежных колонок
-PLAN_HEAD_FILL = PatternFill("solid", fgColor="DDDDFF")   ***REMOVED*** шапка «БЮДЖЕТ»
-REMAIN_HEAD_FILL = PatternFill("solid", fgColor="FFE7E7")  ***REMOVED*** шапка «Остаток бюджета»
+# Палитра взята из файла ликвидности, а не придумана: выгрузку кладут рядом с
+# исходником и сверяют глазами, а лист «Оперплан ЦФО» прямо вставляют обратно
+# в книгу. Цвета прочитаны из самого файла — тема Office и tint уже разрешены
+# в hex, поэтому здесь плоские значения.
+HEAD_FILL = PatternFill("solid", fgColor="F2F2F2")       # шапка
+TOTAL_FILL = PatternFill("solid", fgColor="D6DCE5")      # строка ИТОГО блока
+ARTICLE_FILL = PatternFill("solid", fgColor="DCDCDC")    # № и «Статья оборотов»
+TEXT_FILL = PatternFill("solid", fgColor="D6DCE5")       # ЦФО, контрагент, договор
+NOTE_FILL = PatternFill("solid", fgColor="FFE4B5")       # «Комментарий»
+OWN_NOTE_FILL = PatternFill("solid", fgColor="FBE5D6")   # «Комм наш»
+MONTH_FILL = PatternFill("solid", fgColor="F0FFF0")      # месяцы
+CALC_FILL = PatternFill("solid", fgColor="E5FFEB")       # расчётные колонки оперплана
+MONEY_HEAD_FILL = PatternFill("solid", fgColor="DDF2FF")  # шапки денежных колонок
+PLAN_HEAD_FILL = PatternFill("solid", fgColor="DDDDFF")   # шапка «БЮДЖЕТ»
+REMAIN_HEAD_FILL = PatternFill("solid", fgColor="FFE7E7")  # шапка «Остаток бюджета»
 THIN = Side(style="thin", color="BFBFBF")
 BORDER = Border(bottom=THIN)
 
@@ -71,27 +71,30 @@ def _to_bytes(wb: Workbook) -> bytes:
     return buffer.getvalue()
 
 
-***REMOVED*** Раскладка листа «Бюджеты ЦФО» в одном месте: выгрузка и шаблон обязаны
-***REMOVED*** совпадать колонка в колонку, иначе заполненный шаблон не зальётся.
-***REMOVED*** Классификатор стоит сразу за ЦФО — он про ту же строку, что и дирекция,
-***REMOVED*** «Тип бюджета» рядом с ним: он про то, в каком бюджете дирекции лежит расход.
+# Раскладка листа «Бюджеты ЦФО» в одном месте: выгрузка и шаблон обязаны
+# совпадать колонка в колонку, иначе заполненный шаблон не зальётся.
+# Классификатор стоит сразу за ЦФО — он про ту же строку, что и дирекция,
+# «Тип бюджета» рядом с ним: он про то, в каком бюджете дирекции лежит расход.
+# «Наличие в бюджете» — колонка расхода, а не строки плана: у строк плана она
+# пуста, заполняется в блоке «ВНЕ БЮДЖЕТА» выгрузки факта. Там же её и правят
+# руками — так замыкается круг «выгрузил → поправил → залил».
 BUDGET_HEADER = ["Статья оборотов", "ЦФО", "Тип бюджета", "Классификатор",
                  "Контрагент", "Договор", "Детализация", "Комментарий",
-                 "ИТОГО"] + calc.MONTH_NAMES
+                 "Наличие в бюджете", "ИТОГО"] + calc.MONTH_NAMES
 COL = {title: i + 1 for i, title in enumerate(BUDGET_HEADER)}
-MONTH_COL = COL["ИТОГО"] + 1           ***REMOVED*** первая колонка месяца
+MONTH_COL = COL["ИТОГО"] + 1           # первая колонка месяца
 BUDGET_WIDTHS = {COL["Статья оборотов"]: 38, COL["ЦФО"]: 30, COL["Тип бюджета"]: 28,
                  COL["Классификатор"]: 15,
                  COL["Контрагент"]: 28, COL["Договор"]: 26, COL["Детализация"]: 34,
-                 COL["Комментарий"]: 30, COL["ИТОГО"]: 16}
-***REMOVED*** Цвета колонок — оттуда же, откуда раскладка. «ИТОГО» в исходнике без заливки,
-***REMOVED*** классификатор и тип бюджета — наши колонки, встают в один ряд с ЦФО
-***REMOVED*** и контрагентом.
+                 COL["Комментарий"]: 30, COL["Наличие в бюджете"]: 30, COL["ИТОГО"]: 16}
+# Цвета колонок — оттуда же, откуда раскладка. «ИТОГО» в исходнике без заливки,
+# классификатор и тип бюджета — наши колонки, встают в один ряд с ЦФО
+# и контрагентом.
 BUDGET_FILLS = {COL["Статья оборотов"]: ARTICLE_FILL, COL["ЦФО"]: TEXT_FILL,
                 COL["Тип бюджета"]: TEXT_FILL,
                 COL["Классификатор"]: TEXT_FILL, COL["Контрагент"]: TEXT_FILL,
                 COL["Договор"]: TEXT_FILL, COL["Детализация"]: TEXT_FILL,
-                COL["Комментарий"]: NOTE_FILL}
+                COL["Комментарий"]: NOTE_FILL, COL["Наличие в бюджете"]: OWN_NOTE_FILL}
 BUDGET_FILLS.update({MONTH_COL + m: MONTH_FILL for m in range(calc.MONTHS)})
 LAST_BUDGET_COL = len(BUDGET_HEADER)
 
@@ -133,6 +136,7 @@ def multi_budget_cfos(blocks) -> set[int]:
 
 OUT_OF_BUDGET_MARK = "ВНЕ БЮДЖЕТА"
 OUT_OF_BUDGET_HINT = "факт, не сопоставленный ни с одной строкой бюджета"
+LINK_HINT = "«вне бюджета» или «бюджет из строки N» — номер строки этого листа"
 
 
 def _out_of_budget_block(ws, idx: int, money, items) -> int:
@@ -145,6 +149,7 @@ def _out_of_budget_block(ws, idx: int, money, items) -> int:
     """
     ws.cell(row=idx, column=COL["Статья оборотов"], value=OUT_OF_BUDGET_MARK).font = Font(bold=True)
     ws.cell(row=idx, column=COL["Комментарий"], value=OUT_OF_BUDGET_HINT)
+    ws.cell(row=idx, column=COL["Наличие в бюджете"], value=LINK_HINT)
     money(idx, COL["ИТОГО"], sum(item["total"] for item in items), bold=True)
     for m in range(calc.MONTHS):
         money(idx, MONTH_COL + m, sum(item["months"][m] for item in items), bold=True)
@@ -159,6 +164,10 @@ def _out_of_budget_block(ws, idx: int, money, items) -> int:
         ws.cell(row=idx, column=COL["Контрагент"], value=item["counterparty"])
         ws.cell(row=idx, column=COL["Договор"], value=item["contract"])
         ws.cell(row=idx, column=COL["Детализация"], value=item["detail"])
+        # Текущее состояние расхода. Чтобы отнести его на строку плана, человек
+        # меняет эту клетку на «бюджет из строки N», где N — номер строки этого
+        # же листа: так размечают связь сами дирекции в своих файлах.
+        ws.cell(row=idx, column=COL["Наличие в бюджете"], value=OUT_OF_BUDGET_MARK.lower())
         if not item["out_of_budget"]:
             ws.cell(row=idx, column=COL["Комментарий"],
                     value="не нашлось строки бюджета при загрузке факта")
@@ -210,8 +219,8 @@ def _budget_layout_sheet(year: int, cfo_ids=None, fact: bool = False) -> bytes:
                        else block["plan_year"])
         block_months = ([sum(m[i] for _, _, m in rows) for i in range(calc.MONTHS)]
                         if facts is not None else block["months"])
-        ***REMOVED*** «Тип бюджета» повторяет название блока — держателем расхода остаётся
-        ***REMOVED*** блок, колонка его только показывает.
+        # «Тип бюджета» повторяет название блока — держателем расхода остаётся
+        # блок, колонка его только показывает.
         budget_type = (block["budget_name"]
                        if int(block["cfo_id"]) in multi else None)
 
@@ -257,10 +266,10 @@ def cfo_budgets_sheet_name() -> str:
     return cfo_budgets.SHEET_NAME
 
 
-TEMPLATE_ROWS = 12          ***REMOVED*** пустых строк на блок — хватает на один ЦФО без вставок
+TEMPLATE_ROWS = 12          # пустых строк на блок — хватает на один ЦФО без вставок
 REFS_SHEET = "Справочник"
 REFS_COL = {"Статьи оборотов": 2, "Контрагенты": 3, "Детализация": 4}
-ALL_CFO = 0                 ***REMOVED*** ключ общего блока справочника: у ЦФО id идут с единицы
+ALL_CFO = 0                 # ключ общего блока справочника: у ЦФО id идут с единицы
 
 
 def template_budget_names(year: int, cfo_ids=None) -> dict[int, list[str]]:
@@ -323,19 +332,19 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
     _total_note(ws, 3)
 
     idx = 4
-    blocks: list[tuple[int, int, int]] = []     ***REMOVED*** ЦФО и диапазон его пустых строк
+    blocks: list[tuple[int, int, int]] = []     # ЦФО и диапазон его пустых строк
     for cfo in cfo_list:
         names = budgets_by_cfo.get(int(cfo["id"])) or [DEFAULT_BUDGET]
-        ***REMOVED*** Колонку «Тип бюджета» заполняем только там, где бюджетов несколько:
-        ***REMOVED*** у остальных она повторяла бы «Основной бюджет» на каждой строке.
+        # Колонку «Тип бюджета» заполняем только там, где бюджетов несколько:
+        # у остальных она повторяла бы «Основной бюджет» на каждой строке.
         multi = len(names) > 1
         for budget_name in names:
             ws.cell(row=idx, column=1, value="ИТОГО").font = Font(bold=True)
             ws.cell(row=idx, column=2, value=cfo["name"]).font = Font(bold=True)
-            ***REMOVED*** В колонке «Договор» строки ИТОГО лежит название бюджета блока,
-            ***REMOVED*** а не договор: загрузка читает его оттуда. Пустая клетка значит
-            ***REMOVED*** «Основной бюджет», поэтому у дирекции с единственным бюджетом её
-            ***REMOVED*** не заполняем — в пустом шаблоне это читалось как настоящий договор.
+            # В колонке «Договор» строки ИТОГО лежит название бюджета блока,
+            # а не договор: загрузка читает его оттуда. Пустая клетка значит
+            # «Основной бюджет», поэтому у дирекции с единственным бюджетом её
+            # не заполняем — в пустом шаблоне это читалось как настоящий договор.
             if budget_name != DEFAULT_BUDGET:
                 ws.cell(row=idx, column=COL["Договор"], value=budget_name)
             if multi:
@@ -348,8 +357,8 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
                 _paint(ws, idx, BUDGET_FILLS)
                 cell = ws.cell(row=idx, column=COL["ИТОГО"])
                 cell.number_format = MONEY
-                ***REMOVED*** Тип проставлен заранее: строка и так принадлежит блоку, под
-                ***REMOVED*** которым стоит, и вписывать его руками дирекции незачем.
+                # Тип проставлен заранее: строка и так принадлежит блоку, под
+                # которым стоит, и вписывать его руками дирекции незачем.
                 if multi:
                     ws.cell(row=idx, column=COL["Тип бюджета"], value=budget_name)
                 for m in range(calc.MONTHS):
@@ -357,8 +366,8 @@ def budget_template(year: int, cfo_ids=None) -> bytes:
                 idx += 1
             blocks.append((int(cfo["id"]), first, idx - 1))
 
-    ***REMOVED*** Место под расход вне бюджета. Без него дирекции приписывали его к чужой
-    ***REMOVED*** строке или теряли: в своих файлах такой блок они заводят сами.
+    # Место под расход вне бюджета. Без него дирекции приписывали его к чужой
+    # строке или теряли: в своих файлах такой блок они заводят сами.
     ws.cell(row=idx, column=COL["Статья оборотов"],
             value=OUT_OF_BUDGET_MARK).font = Font(bold=True)
     ws.cell(row=idx, column=COL["Комментарий"], value=OUT_OF_BUDGET_HINT)
@@ -530,8 +539,8 @@ def _reference_choice(wb: Workbook, ws, blocks: list[tuple[int, int, int]],
             rule.add(f"{letter}{first}:{letter}{last}")
 
 
-***REMOVED*** Раскладка «Оперплан ЦФО» своя: № впереди, за месяцами идут расчётные колонки.
-***REMOVED*** Цвета — из того же листа исходника, туда выгрузку и вставляют.
+# Раскладка «Оперплан ЦФО» своя: № впереди, за месяцами идут расчётные колонки.
+# Цвета — из того же листа исходника, туда выгрузку и вставляют.
 OPERPLAN_FILLS = {1: ARTICLE_FILL, 2: ARTICLE_FILL, 3: TEXT_FILL, 4: TEXT_FILL,
                   5: TEXT_FILL, 6: TEXT_FILL, 7: NOTE_FILL, 8: OWN_NOTE_FILL,
                   10: HEAD_FILL, 11: CALC_FILL, 12: CALC_FILL, 13: CALC_FILL}
@@ -567,7 +576,7 @@ def operplan(year: int | None = None, cfo_ids=None) -> bytes:
     for col, title in enumerate(header, start=1):
         ws.cell(row=5, column=col, value=title)
     _style_header(ws, 5, len(header))
-    _paint(ws, 5, OPERPLAN_HEAD_FILLS)       ***REMOVED*** денежные колонки в шапке своего цвета
+    _paint(ws, 5, OPERPLAN_HEAD_FILLS)       # денежные колонки в шапке своего цвета
 
     row_idx = 6
     for block in view["blocks"]:
@@ -657,7 +666,7 @@ def summary(year: int | None = None, cfo_ids=None) -> bytes:
         cell.number_format = MONEY
         cell.font = Font(bold=True)
 
-    ***REMOVED*** строка ИТОГО в фильтр не входит: сортировкой её утащило бы в середину
+    # строка ИТОГО в фильтр не входит: сортировкой её утащило бы в середину
     _autofilter(ws, 3, len(header), totals_row - 1)
     _autosize(ws, {1: 46, 2: 28, 3: 18, 4: 18, 5: 16, 6: 18, 7: 18, 8: 18, 9: 12, 10: 22, 11: 16})
     return _to_bytes(wb)

@@ -8,59 +8,59 @@
 /* Дизайн-система взята с внутреннего дашборда рассадки: тёмная тема, фиолетовый акцент, Calibri */
 :root {
   color-scheme: dark;
-  --plane: ***REMOVED***0A0814;          /* bg-deep */
-  --surface: ***REMOVED***13112A;        /* bg-surface */
-  --raised: ***REMOVED***1C1A35;         /* bg-raised — поля, вторичные кнопки */
-  --ink: ***REMOVED***E5E3EB;
-  --ink2: ***REMOVED***C4BEDD;
-  --muted: ***REMOVED***FFFFFF;
-  --faint: ***REMOVED***6B6592;
-  --border: ***REMOVED***2E2A4A;
-  --grid: ***REMOVED***241F3F;
-  --axis: ***REMOVED***433E67;           /* border-hi */
+  --plane: #0A0814;          /* bg-deep */
+  --surface: #13112A;        /* bg-surface */
+  --raised: #1C1A35;         /* bg-raised — поля, вторичные кнопки */
+  --ink: #E5E3EB;
+  --ink2: #C4BEDD;
+  --muted: #FFFFFF;
+  --faint: #6B6592;
+  --border: #2E2A4A;
+  --grid: #241F3F;
+  --axis: #433E67;           /* border-hi */
   --hover: rgba(255, 255, 255, .035);
-  --accent: ***REMOVED***7549E8;
-  --accent-2: ***REMOVED***8A62F0;
+  --accent: #7549E8;
+  --accent-2: #8A62F0;
   --accent-soft: rgba(117, 73, 232, .16);
-  --good: ***REMOVED***82D6CC;           /* teal */
-  --good-ink: ***REMOVED***82D6CC;
-  --warning: ***REMOVED***BD9375;        /* warm */
-  --serious: ***REMOVED***E09A5F;
-  --critical: ***REMOVED***F48A8A;
+  --good: #82D6CC;           /* teal */
+  --good-ink: #82D6CC;
+  --warning: #BD9375;        /* warm */
+  --serious: #E09A5F;
+  --critical: #F48A8A;
   --crit-bg: rgba(198, 40, 40, .15);
-  --hm-0: ***REMOVED***232042;
-  --hm-b1: ***REMOVED***1D3D3A; --hm-b2: ***REMOVED***2C5C56; --hm-b3: ***REMOVED***4A8F86; --hm-b4: ***REMOVED***82D6CC;
-  --hm-r1: ***REMOVED***4A1F1F; --hm-r2: ***REMOVED***7A2E2E; --hm-r3: ***REMOVED***B04545; --hm-r4: ***REMOVED***F48A8A;
-  --hm-ink-3: ***REMOVED***E5E3EB; --hm-ink-4: ***REMOVED***0A0814;
+  --hm-0: #232042;
+  --hm-b1: #1D3D3A; --hm-b2: #2C5C56; --hm-b3: #4A8F86; --hm-b4: #82D6CC;
+  --hm-r1: #4A1F1F; --hm-r2: #7A2E2E; --hm-r3: #B04545; --hm-r4: #F48A8A;
+  --hm-ink-3: #E5E3EB; --hm-ink-4: #0A0814;
   --r-sm: 5px; --r: 8px; --r-lg: 12px;
 }
 /* светлая тема — только по явному переключателю */
 :root[data-theme="light"] {
   color-scheme: light;
-  --plane: ***REMOVED***EFEDF6;
-  --surface: ***REMOVED***FFFFFF;
-  --raised: ***REMOVED***F6F4FC;
-  --ink: ***REMOVED***17142B;
-  --ink2: ***REMOVED***4A4568;
-  --muted: ***REMOVED***635D85;
-  --faint: ***REMOVED***A8A3C4;
-  --border: ***REMOVED***DFDBEE;
-  --grid: ***REMOVED***ECE9F5;
-  --axis: ***REMOVED***C6C0DE;
+  --plane: #EFEDF6;
+  --surface: #FFFFFF;
+  --raised: #F6F4FC;
+  --ink: #17142B;
+  --ink2: #4A4568;
+  --muted: #635D85;
+  --faint: #A8A3C4;
+  --border: #DFDBEE;
+  --grid: #ECE9F5;
+  --axis: #C6C0DE;
   --hover: rgba(23, 20, 43, .04);
-  --accent: ***REMOVED***6A3FD8;
-  --accent-2: ***REMOVED***7549E8;
+  --accent: #6A3FD8;
+  --accent-2: #7549E8;
   --accent-soft: rgba(117, 73, 232, .12);
-  --good: ***REMOVED***1F9E90;
-  --good-ink: ***REMOVED***167C71;
-  --warning: ***REMOVED***9A6C46;
-  --serious: ***REMOVED***C4703A;
-  --critical: ***REMOVED***C62828;
+  --good: #1F9E90;
+  --good-ink: #167C71;
+  --warning: #9A6C46;
+  --serious: #C4703A;
+  --critical: #C62828;
   --crit-bg: rgba(198, 40, 40, .10);
-  --hm-0: ***REMOVED***ECE9F5;
-  --hm-b1: ***REMOVED***D6F0EC; --hm-b2: ***REMOVED***A5DDD5; --hm-b3: ***REMOVED***5FB3A8; --hm-b4: ***REMOVED***1F8478;
-  --hm-r1: ***REMOVED***FBDCDC; --hm-r2: ***REMOVED***F0AEAE; --hm-r3: ***REMOVED***DC7070; --hm-r4: ***REMOVED***B32F2F;
-  --hm-ink-3: ***REMOVED***FFFFFF; --hm-ink-4: ***REMOVED***FFFFFF;
+  --hm-0: #ECE9F5;
+  --hm-b1: #D6F0EC; --hm-b2: #A5DDD5; --hm-b3: #5FB3A8; --hm-b4: #1F8478;
+  --hm-r1: #FBDCDC; --hm-r2: #F0AEAE; --hm-r3: #DC7070; --hm-r4: #B32F2F;
+  --hm-ink-3: #FFFFFF; --hm-ink-4: #FFFFFF;
 }
 
 * { box-sizing: border-box; }
@@ -78,7 +78,7 @@ select, input, textarea { font: inherit; color: inherit; }
 /* ---------- header ---------- */
 .top {
   position: sticky; top: 0; z-index: 30;
-  background: ***REMOVED***070512;
+  background: #070512;
   border-bottom: 1px solid var(--border);
   padding: 10px 20px 0;
 }
@@ -189,15 +189,15 @@ tbody tr:hover { background: var(--hover); }
 .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* закреплённые первые колонки в широкой таблице ЦФО */
-***REMOVED***t-cfo th:nth-child(1), ***REMOVED***t-cfo td:nth-child(1),
-***REMOVED***t-cfo th:nth-child(2), ***REMOVED***t-cfo td:nth-child(2) {
+#t-cfo th:nth-child(1), #t-cfo td:nth-child(1),
+#t-cfo th:nth-child(2), #t-cfo td:nth-child(2) {
   position: sticky; background: var(--surface); z-index: 1;
 }
-***REMOVED***t-cfo th:nth-child(1), ***REMOVED***t-cfo td:nth-child(1) { left: 0; min-width: 72px; }
-***REMOVED***t-cfo th:nth-child(2), ***REMOVED***t-cfo td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--grid); }
-***REMOVED***t-cfo thead th:nth-child(1), ***REMOVED***t-cfo thead th:nth-child(2) { z-index: 3; }
-***REMOVED***t-cfo tr:hover td:nth-child(1), ***REMOVED***t-cfo tr:hover td:nth-child(2) { background: var(--plane); }
-***REMOVED***t-cfo tr.group td { position: static; }
+#t-cfo th:nth-child(1), #t-cfo td:nth-child(1) { left: 0; min-width: 72px; }
+#t-cfo th:nth-child(2), #t-cfo td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--grid); }
+#t-cfo thead th:nth-child(1), #t-cfo thead th:nth-child(2) { z-index: 3; }
+#t-cfo tr:hover td:nth-child(1), #t-cfo tr:hover td:nth-child(2) { background: var(--plane); }
+#t-cfo tr.group td { position: static; }
 tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--raised); }
 tr.group td {
   background: var(--raised); font-weight: 700; font-size: 13px;
@@ -260,7 +260,7 @@ label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted)
   transition: background 120ms, box-shadow 120ms, border-color 120ms;
 }
 .btn:hover { background: var(--border); border-color: var(--axis); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: ***REMOVED***fff; font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
 .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); box-shadow: 0 0 0 4px var(--accent-soft); }
 .btn.sm { padding: 5px 12px; font-size: 13px; }
 .row-actions { display: flex; gap: 6px; }
@@ -348,11 +348,11 @@ tr:hover .mini { visibility: visible; }
   border: 1px solid var(--border); border-radius: 14px; padding: 4px 12px;
   font-size: 14px; background: var(--raised); color: var(--ink2);
 }
-.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: ***REMOVED***fff; font-weight: 600; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .chip:hover { border-color: var(--axis); color: var(--ink); }
 .legend-inline { font-size: 13px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
 .mono-s { font-size: 13px; color: var(--muted); font-weight: 700; }
-/* всё, что раньше было приглушённым (***REMOVED***ADA6CF), теперь жирное белое */
+/* всё, что раньше было приглушённым (#ADA6CF), теперь жирное белое */
 .kpi .lbl, .card > header .sub, .dim, .legend-inline, label.f,
 .cc-sub, .cc-meta, .cc-foot, .hm td.fc, .mini { font-weight: 700; }
 </style>
@@ -364,10 +364,10 @@ tr:hover .mini { visibility: visible; }
     <div class="brand">
       <svg class="logo-mark" viewBox="0 0 38 38" aria-label="Холдинг">
         <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="***REMOVED***8A62F0"/><stop offset="1" stop-color="***REMOVED***5B2FD0"/>
+          <stop offset="0" stop-color="#8A62F0"/><stop offset="1" stop-color="#5B2FD0"/>
         </linearGradient></defs>
-        <rect width="38" height="38" rx="8" fill="url(***REMOVED***lg)"/>
-        <text x="19" y="25" text-anchor="middle" fill="***REMOVED***fff" font-family="Calibri, sans-serif"
+        <rect width="38" height="38" rx="8" fill="url(#lg)"/>
+        <text x="19" y="25" text-anchor="middle" fill="#fff" font-family="Calibri, sans-serif"
               font-size="15" font-weight="700" letter-spacing="0.5">MR</text>
       </svg>
       <span class="wordmark">MR <span>Group</span></span>
@@ -902,8 +902,8 @@ tr:hover .mini { visibility: visible; }
 
   // ---------- сводка ----------
   function renderSum() {
-    var tb = document.querySelector("***REMOVED***t-sum tbody"); tb.innerHTML = "";
-    var tf = document.querySelector("***REMOVED***t-sum tfoot"); tf.innerHTML = "";
+    var tb = document.querySelector("#t-sum tbody"); tb.innerHTML = "";
+    var tf = document.querySelector("#t-sum tfoot"); tf.innerHTML = "";
     var rows = visible.slice().sort(function (a, b) { return b.plan - a.plan; });
     var t = { plan: 0, fact: 0, claims: 0, operplan: 0, cash: 0, free: 0 };
 
@@ -1013,7 +1013,7 @@ tr:hover .mini { visibility: visible; }
     { d: "07.07.2026", cfo: "Четвёртая дирекция", cp: "Бета Софт ООО", p: "Срочная доработка лендинга", sum: 67000, who: "Петров С. (рук. ЦФО)" }
   ];
   function renderOob() {
-    var tb = document.querySelector("***REMOVED***t-oob tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-oob tbody"); tb.innerHTML = "";
     var tot = 0;
     OOB.forEach(function (r) {
       tot += r.sum;
@@ -1026,8 +1026,8 @@ tr:hover .mini { visibility: visible; }
         ])])
       ]));
     });
-    document.querySelector("***REMOVED***t-oob tfoot").innerHTML = "";
-    document.querySelector("***REMOVED***t-oob tfoot").appendChild(el("tr", {}, [
+    document.querySelector("#t-oob tfoot").innerHTML = "";
+    document.querySelector("#t-oob tfoot").appendChild(el("tr", {}, [
       el("td", { text: "ИТОГО вне бюджета" }), el("td"), el("td"), el("td"), tdn(tot, "neg"), el("td"), el("td")
     ]));
   }
@@ -1079,7 +1079,7 @@ tr:hover .mini { visibility: visible; }
       hr.appendChild(th(m + (i + 1 <= closedThrough ? "" : i + 1 === CURRENT_MONTH ? "" : " <span class='dim'>план</span>"), "num"));
     });
 
-    var tb = document.querySelector("***REMOVED***t-cfo tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-cfo tbody"); tb.innerHTML = "";
     var det = rowsOf(name);
 
     document.getElementById("cfo-block-title").textContent =
@@ -1199,9 +1199,9 @@ tr:hover .mini { visibility: visible; }
     MONTHS_FULL.forEach(function (m, i) { ms.appendChild(el("option", { value: String(i), text: m })); });
     ms.value = "7";
 
-    Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***add-form .chip[data-kind]"), function (c) {
+    Array.prototype.forEach.call(document.querySelectorAll("#add-form .chip[data-kind]"), function (c) {
       c.onclick = function () {
-        Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***add-form .chip[data-kind]"),
+        Array.prototype.forEach.call(document.querySelectorAll("#add-form .chip[data-kind]"),
           function (x) { x.setAttribute("aria-pressed", "false"); });
         c.setAttribute("aria-pressed", "true");
         addKind = c.getAttribute("data-kind");
@@ -1320,7 +1320,7 @@ tr:hover .mini { visibility: visible; }
     { no: "ЗП-2026-04255", d: "10.09.2026", cfo: "Служба безопасности", line: "— (нет бюджетной строки)", cp: "Исполнитель не определён", sum: 440000, flag: "oob" }
   ];
   function renderClaims() {
-    var tb = document.querySelector("***REMOVED***t-claims tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-claims tbody"); tb.innerHTML = "";
     var tot = 0;
     CLAIMS.forEach(function (c) {
       tot += c.sum;
@@ -1335,7 +1335,7 @@ tr:hover .mini { visibility: visible; }
         ])])
       ]));
     });
-    var tf = document.querySelector("***REMOVED***t-claims tfoot"); tf.innerHTML = "";
+    var tf = document.querySelector("#t-claims tfoot"); tf.innerHTML = "";
     tf.appendChild(el("tr", {}, [el("td", { text: "ИТОГО заявок" }), el("td"), el("td"), el("td"), el("td"), tdn(tot), el("td"), el("td")]));
   }
 
@@ -1348,7 +1348,7 @@ tr:hover .mini { visibility: visible; }
     { d: "04.08.2026", cp: "Эпсилон Групп ООО", p: "без статьи · Диагностика печатной техники", sum: 384000 }
   ];
   function renderMatch() {
-    var tb = document.querySelector("***REMOVED***t-unmatched tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-unmatched tbody"); tb.innerHTML = "";
     UNMATCHED.forEach(function (u, i) {
       var tr = el("tr", { class: "pick", "aria-selected": "false" }, [
         td(u.d), el("td", { class: "wrap", text: u.cp }), el("td", { class: "wrap", text: u.p }), tdn(u.sum)
@@ -1405,12 +1405,12 @@ tr:hover .mini { visibility: visible; }
     return { bg: "var(--hm-" + arm + step + ")", cls: "d" + step };
   }
   function renderHeat() {
-    var thead = document.querySelector("***REMOVED***t-heat thead"); thead.innerHTML = "";
+    var thead = document.querySelector("#t-heat thead"); thead.innerHTML = "";
     var hr = el("tr", {}, [th("", "rowh")]);
     MONTHS.forEach(function (m) { hr.appendChild(th(m)); });
     thead.appendChild(hr);
 
-    var tb = document.querySelector("***REMOVED***t-heat tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-heat tbody"); tb.innerHTML = "";
     visible.slice().sort(function (a, b) { return b.plan - a.plan; }).forEach(function (d) {
       var tr = el("tr", {}, [el("th", { class: "rowh" }, [
         el("div", { text: d.cfo }), el("div", { class: "mono-s", text: d.budget })
@@ -1450,7 +1450,7 @@ tr:hover .mini { visibility: visible; }
     { t: "27.07.2026 10:05", who: "Смирнова А. (финотдел)", type: "Корректировка бюджета", obj: "ДИТ · Бюджет развития", was: "205 405 524 → 212 405 524 ₽", why: "Приказ о корректировке от 24.07.2026" }
   ];
   function renderLog() {
-    var tb = document.querySelector("***REMOVED***t-log tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-log tbody"); tb.innerHTML = "";
     LOG.forEach(function (r) {
       tb.appendChild(el("tr", {}, [
         td(r.t), el("td", { class: "dim", text: r.who }), td(r.type),
@@ -1474,7 +1474,7 @@ tr:hover .mini { visibility: visible; }
     ["—", "нет в файле", "Бюджет (обязательные / развитие)", "need"]
   ];
   function renderMap() {
-    var tb = document.querySelector("***REMOVED***t-map tbody"); tb.innerHTML = "";
+    var tb = document.querySelector("#t-map tbody"); tb.innerHTML = "";
     MAP.forEach(function (r) {
       var st = r[3] === "ok" ? badge("good", "распознано")
         : r[3] === "guess" ? badge("warning", "предположение") : badge("serious", "указать вручную");
@@ -1513,9 +1513,9 @@ tr:hover .mini { visibility: visible; }
     t.onclick = function () { selectTab(t.dataset.p); };
   });
 
-  Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***dash-sort .chip"), function (c) {
+  Array.prototype.forEach.call(document.querySelectorAll("#dash-sort .chip"), function (c) {
     c.onclick = function () {
-      Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***dash-sort .chip"),
+      Array.prototype.forEach.call(document.querySelectorAll("#dash-sort .chip"),
         function (x) { x.setAttribute("aria-pressed", "false"); });
       c.setAttribute("aria-pressed", "true");
       dashSort = c.getAttribute("data-s");
@@ -1523,9 +1523,9 @@ tr:hover .mini { visibility: visible; }
     };
   });
 
-  Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***sum-filter .chip"), function (c) {
+  Array.prototype.forEach.call(document.querySelectorAll("#sum-filter .chip"), function (c) {
     c.onclick = function () {
-      Array.prototype.forEach.call(document.querySelectorAll("***REMOVED***sum-filter .chip"), function (x) { x.setAttribute("aria-pressed", "false"); });
+      Array.prototype.forEach.call(document.querySelectorAll("#sum-filter .chip"), function (x) { x.setAttribute("aria-pressed", "false"); });
       c.setAttribute("aria-pressed", "true");
       sumFilter = c.dataset.f;
       applyFilters();

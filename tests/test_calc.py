@@ -10,23 +10,23 @@ def months(*values: float) -> list[float]:
     return out[:12]
 
 
-***REMOVED*** ---------- базовые формулы ----------
+# ---------- базовые формулы ----------
 
 def test_totals_повторяют_формулы_листа_оперплан():
-    ***REMOVED*** Arrange — строка «Аренда VM (Мастертел)» из реального файла
+    # Arrange — строка «Аренда VM (Мастертел)» из реального файла
     plan_year = 8_600_000.0
-    fact = months(0, 650_000, 650_000, 650_000)          ***REMOVED*** закрыто по апрель
-    claims = months(0, 0, 0, 0, 650_000)                  ***REMOVED*** заявка на май
+    fact = months(0, 650_000, 650_000, 650_000)          # закрыто по апрель
+    claims = months(0, 0, 0, 0, 650_000)                  # заявка на май
 
-    ***REMOVED*** Act
+    # Act
     t = calc.totals(plan_year=plan_year, fact_months=fact, claim_months=claims)
 
-    ***REMOVED*** Assert
+    # Assert
     assert t["fact"] == 1_950_000
     assert t["claims"] == 650_000
-    assert t["operplan"] == 2_600_000          ***REMOVED*** Итого опер план = факт + заявки
-    assert t["cash_remain"] == 6_650_000       ***REMOVED*** Остаток бюджета = БЮДЖЕТ − Факт
-    assert t["free_limit"] == 6_000_000        ***REMOVED*** Бюджет-опер план = БЮДЖЕТ − Итого опер план
+    assert t["operplan"] == 2_600_000          # Итого опер план = факт + заявки
+    assert t["cash_remain"] == 6_650_000       # Остаток бюджета = БЮДЖЕТ − Факт
+    assert t["free_limit"] == 6_000_000        # Бюджет-опер план = БЮДЖЕТ − Итого опер план
 
 
 def test_освоение_в_процентах_и_нулевой_план():
@@ -40,20 +40,20 @@ def test_перерасход_даёт_отрицательный_остаток
     assert t["free_limit"] == pytest.approx(-439_983.2)
 
 
-***REMOVED*** ---------- перенос неиспользованного остатка ----------
+# ---------- перенос неиспользованного остатка ----------
 
 def test_неиспользованный_остаток_переходит_на_следующий_месяц():
-    ***REMOVED*** Arrange — план по 100 в январе и феврале, в январе потратили 40
+    # Arrange — план по 100 в январе и феврале, в январе потратили 40
     plan = months(100, 100)
     spent = months(40, 0)
 
-    ***REMOVED*** Act
+    # Act
     res = calc.monthly_limits(plan, spent, carryover=True)
 
-    ***REMOVED*** Assert
+    # Assert
     assert res["limit"][0] == 100
-    assert res["carry"][0] == 60          ***REMOVED*** 60 не использовано
-    assert res["limit"][1] == 160         ***REMOVED*** февраль получил перенос
+    assert res["carry"][0] == 60          # 60 не использовано
+    assert res["limit"][1] == 160         # февраль получил перенос
 
 
 def test_перенос_накапливается_за_несколько_месяцев():
@@ -68,10 +68,10 @@ def test_без_флага_переноса_лимит_месяца_не_рас�
 
 
 def test_превышение_лимита_месяца_не_уходит_в_минус_переноса():
-    ***REMOVED*** Arrange — в январе потратили больше лимита
+    # Arrange — в январе потратили больше лимита
     res = calc.monthly_limits(months(100, 100), months(150, 0), carryover=True)
 
-    ***REMOVED*** Assert — перенос не отрицательный, зафиксировано превышение
+    # Assert — перенос не отрицательный, зафиксировано превышение
     assert res["carry"][0] == 0
     assert res["over"][0] == 50
     assert res["limit"][1] == 100
@@ -80,10 +80,10 @@ def test_превышение_лимита_месяца_не_уходит_в_м�
 def test_перенос_обнуляется_в_конце_года():
     res = calc.monthly_limits(months(*([100] * 12)), months(), carryover=True)
     assert res["carry"][11] == 1200
-    assert calc.year_end_carry(res) == 0    ***REMOVED*** в новый год остаток не переходит
+    assert calc.year_end_carry(res) == 0    # в новый год остаток не переходит
 
 
-***REMOVED*** ---------- статусы ----------
+# ---------- статусы ----------
 
 def test_статус_перерасход_когда_факт_больше_бюджета():
     t = calc.totals(300_000.0, months(400_000), months())
@@ -105,7 +105,7 @@ def test_статус_в_графике():
     assert calc.status(t, pace=0.6)[0] == "good"
 
 
-***REMOVED*** ---------- вспомогательное ----------
+# ---------- вспомогательное ----------
 
 def test_ожидаемый_темп_освоения_по_отчётной_дате():
     assert calc.pace(closed_through=6, day_share=0.5) == pytest.approx(6.5 / 12)

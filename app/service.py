@@ -9,7 +9,7 @@ from app import calc, db, repo
 from app.importers import directorate, fact as fact_importer, operplan
 
 
-***REMOVED*** ---------- параметры периода ----------
+# ---------- параметры периода ----------
 
 def settings() -> dict:
     year = int(db.get_setting("year", "2026"))
@@ -37,7 +37,7 @@ def settings() -> dict:
     }
 
 
-***REMOVED*** ---------- сборка представлений ----------
+# ---------- сборка представлений ----------
 
 def _row_view(row: dict, plan_m: list[float], fact_m: list[float], claim_m: list[float]) -> dict:
     t = calc.totals(row["plan_year"], fact_m, claim_m)
@@ -209,7 +209,7 @@ def heatmap(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> di
     return {"settings": cfg, "rows": rows}
 
 
-***REMOVED*** ---------- проверка лимита ----------
+# ---------- проверка лимита ----------
 
 def limit_check(row_id: int, amount: float) -> dict:
     """Свободный лимит строки и не превышает ли его новая сумма.
@@ -238,7 +238,7 @@ def limit_check(row_id: int, amount: float) -> dict:
     }
 
 
-***REMOVED*** ---------- перенос лимита ----------
+# ---------- перенос лимита ----------
 
 def transfer_limit(kind: str, amount: float, reason: str, author: str,
                    from_row_id: int, to_row_id: int | None = None,
@@ -292,7 +292,7 @@ def transfer_limit(kind: str, amount: float, reason: str, author: str,
     return {"ok": True, "change": change}
 
 
-***REMOVED*** ---------- сопоставление факта ----------
+# ---------- сопоставление факта ----------
 
 def match_candidates(fact_id: int, limit: int = 8) -> list[dict]:
     """Кандидаты для привязки платежа: по договору, статье и контрагенту."""
@@ -371,7 +371,7 @@ def auto_match(year: int, author: str = "auto") -> dict:
     return {"matched": matched}
 
 
-***REMOVED*** ---------- импорт ----------
+# ---------- импорт ----------
 
 def import_operplan(content: bytes, filename: str, year: int, author: str,
                     set_closed_through: bool = True) -> dict:
@@ -382,7 +382,7 @@ def import_operplan(content: bytes, filename: str, year: int, author: str,
     current_month = cfg["current_month"]
 
     created_rows = created_facts = created_claims = 0
-    row_index: dict[tuple[int, int], int] = {}   ***REMOVED*** (budget_id, row_no) -> row_id
+    row_index: dict[tuple[int, int], int] = {}   # (budget_id, row_no) -> row_id
 
     for row in parsed["rows"]:
         cfo_id = repo.ensure_cfo(row["cfo"])
@@ -404,7 +404,7 @@ def import_operplan(content: bytes, filename: str, year: int, author: str,
                     "approver_comment": row["approver_comment"],
                     "plan_year": row["plan_year"],
                 },
-                months=months,          ***REMOVED*** месяцы листа = план по месяцам
+                months=months,          # месяцы листа = план по месяцам
                 author=author,
                 source="import",
                 row_no=row["row_no"],

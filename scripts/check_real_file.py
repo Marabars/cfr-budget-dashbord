@@ -1,4 +1,4 @@
-***REMOVED*** -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Проверка импортёра на рабочем файле Ликвидность.
 
 Путь передаётся аргументом или переменной окружения OPERPLAN_FILE —
@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.importers import operplan  ***REMOVED*** noqa: E402
+from app.importers import operplan  # noqa: E402
 
 
 def main() -> int:
@@ -50,7 +50,7 @@ def main() -> int:
 
     print(f"\nблоков с расхождением месяцев и оперплана: {bad}")
 
-    ***REMOVED*** проверка формул листа на строках
+    # проверка формул листа на строках
     checked = wrong_remain = wrong_free = 0
     for r in rows:
         if r["is_child"] or not r["plan_year"]:

@@ -79,7 +79,7 @@
   }
 
   function renderLog(items) {
-    var body = document.querySelector("***REMOVED***t-log tbody");
+    var body = document.querySelector("#t-log tbody");
     U.clear(body);
     if (!items.length) {
       body.appendChild(U.empty(6, "Журнал пуст."));

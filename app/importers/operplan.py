@@ -135,10 +135,10 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
         row_no_raw = xlsx.text(cell(row, "row_no"))
         plan_year = xlsx.num(cell(row, "plan_year"))
 
-        ***REMOVED*** строка без номера с пометкой «Из строки N» — фактический платёж по лимиту N
+        # строка без номера с пометкой «Из строки N» — фактический платёж по лимиту N
         is_child = not row_no_raw
         if is_child and not any(months) and not plan_year:
-            continue    ***REMOVED*** техническая пустая строка
+            continue    # техническая пустая строка
 
         out_rows.append({
             "cfo": cfo or (current or {}).get("cfo", ""),

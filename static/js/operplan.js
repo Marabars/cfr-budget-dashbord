@@ -17,6 +17,8 @@
     filters: null,
     fresh: {},           // id строк, заведённых в этой сессии: подсвечены и правятся списками
     editMode: false,     // правка по ячейкам включается карандашом, а не всегда
+    selected: {},        // id отмеченных галочкой строк: их удаляют пачкой
+    lastPick: null,      // последняя отмеченная строка — от неё Shift считает диапазон
     year: null           // год в фокусе: к нему привязаны замок и справочники
   };
 
@@ -25,16 +27,25 @@
   var CLASSIFIERS = ["МРГ", "МРК"];
   var CLASSIFIER_DEFAULT = "МРГ";
 
+  /* «Детализация» и «Комментарий» — две разные колонки, а не одна на выбор
+     (решение пользователя 16.10.2026). Прежде показывалась одна, и что в ней
+     лежит, решал `detail_source` дирекции: своя колонка расшифровок либо наш
+     комментарий к строке. У строк, где заполнено и то и другое, второе не
+     было видно вовсе; там, где своей детализации нет, комментарий печатался
+     под чужой шапкой. Правило разделения: что подпадает под справочник
+     детализации — в неё, остальное — в комментарий. В Excel обе колонки
+     были порознь всегда. */
   var FIELDS = [
     { key: "article", title: "Статья оборотов" },
     { key: "classifier", title: "Классификатор" },
     { key: "counterparty", title: "Контрагент" },
     { key: "contract", title: "Договор" },
-    { key: "detail_text", title: "Детализация" }
+    { key: "detail", title: "Детализация" },
+    { key: "comment", title: "Комментарий" }
   ];
   var MONTH_FIELD = /^m\d+$/;
-  // № + текстовые колонки + ИТОГО + 12 месяцев + прошлый год
-  var COLS = 1 + FIELDS.length + 1 + 12 + 1;
+  // № + текстовые колонки + «Наличие в бюджете» + ИТОГО + 12 месяцев + прошлый год
+  var COLS = 1 + FIELDS.length + 1 + 1 + 12 + 1;
 
   /* ---------- фильтры ---------- */
 
@@ -243,9 +254,18 @@
     U.clear(head);
     head.appendChild(U.th("№"));
     FIELDS.forEach(function (f) { head.appendChild(U.th(f.title, "wrap")); });
+    /* Колонка расхода, а не строки плана: у строк плана в ней прочерк —
+       строка плана и есть бюджет. Заполнена она в разделе факта: у расходов
+       под строкой («в бюджете, за счёт строки N») и у блоков вне бюджета. */
+    head.appendChild(U.th("Наличие в бюджете", "wrap"));
     head.appendChild(U.th("ИТОГО", "num"));
     U.MONTHS_SHORT.forEach(function (name) { head.appendChild(U.th(name, "num month-col")); });
-    head.appendChild(U.th(state.data.base_year_no + " год", "num"));
+    /* Последняя колонка — всегда план базового года: в разделе плана это
+       «сколько строка стоила в прошлом году», в разделе факта — план той же
+       строки (факт при этом лежит в ИТОГО). Прежняя подпись «<год> год» для
+       раздела факта читалась наоборот. В разделе «<год> · база» колонка
+       пуста: строке базового года сравнивать не с чем. */
+    head.appendChild(U.th("План " + state.data.base_year_no, "num"));
   }
 
   /* Итог считается по каждому году отдельно: складывать план 2027 с базой 2026
@@ -261,7 +281,7 @@
       for (var i = 0; i < 12; i++) months[i] += row.months[i] || 0;
     });
     var filtered = rows.length !== allRows;
-    total.appendChild(U.el("td", { colspan: FIELDS.length + 1, class: "total-label",
+    total.appendChild(U.el("td", { colspan: FIELDS.length + 2, class: "total-label",
       text: "ИТОГО " + year + (filtered ? " по фильтру · " + rows.length + " строк"
         : " · " + rows.length + " строк") }));
     total.appendChild(U.el("td", { class: "num total-sum", text: U.fmt(sum) }));
@@ -298,6 +318,8 @@
       tr.classList.add("is-new");
     }
 
+    if (editable && state.selected[row.id]) tr.classList.add("is-picked");
+
     var del = U.el("button", { class: "mini", title: "Удалить строку", text: "✕" });
     del.onclick = function (event) {
       event.stopPropagation();
@@ -316,6 +338,7 @@
        вперемешку. Настоящие номера проставляются, когда план утверждают
        замком, — тогда позиция и номер совпадают. */
     tr.appendChild(U.el("td", {}, [U.el("div", { class: "no-cell" }, [
+      editable ? selectBox(row) : null,
       U.el("span", { text: position || "•" }),
       (row.spends && row.spends.length) ? spendToggle(row) : null,
       editable ? del : null
@@ -329,6 +352,8 @@
           : editableCell(row, f.key, row[f.key] || "", "wrap", editable));
       }
     });
+
+    tr.appendChild(linkCell(row.link));
 
     tr.appendChild(draft ? sumCell(row) : U.el("td", { class: "num n-plan",
       "data-total": row.id, text: U.fmt(row.plan_year) }));
@@ -345,12 +370,190 @@
     return tr;
   }
 
+  /* ---------- выбор строк и удаление пачкой ---------- */
+
+  /* Галочка выбора стоит в колонке «№» рядом с ✕: удаление пачкой — то же
+     удаление, только отмеченных сразу несколько. Появляется вместе с правкой,
+     как и ✕: тому, кто читает таблицу, отмечать нечего. */
+  function selectBox(row) {
+    var box = U.el("input", { type: "checkbox", class: "row-pick",
+      "data-id": String(row.id),
+      title: "Отметить строку. Shift — отметить всё от прошлой отмеченной" });
+    box.checked = !!state.selected[row.id];
+    box.onclick = function (event) {
+      event.stopPropagation();
+      pickRow(row.id, box.checked, event.shiftKey);
+    };
+    return box;
+  }
+
+  /* Отметки хранятся по id, а красятся на месте: полная перерисовка таблицы
+     после каждой галочки стоила бы и прокрутки, и открытых списков. */
+  function setPicked(rowId, on) {
+    if (on) state.selected[rowId] = true;
+    else delete state.selected[rowId];
+  }
+
+  /* Строки с галочками в том порядке, в каком они стоят на экране: по нему
+     Shift и отмечает диапазон. */
+  function pickableIds() {
+    return Array.prototype.map.call(
+      document.querySelectorAll("#t-op tbody input.row-pick"),
+      function (box) { return Number(box.getAttribute("data-id")); });
+  }
+
+  function paintPicks() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll("#t-op tbody input.row-pick"),
+      function (box) {
+        var on = !!state.selected[Number(box.getAttribute("data-id"))];
+        box.checked = on;
+        var tr = box.closest ? box.closest("tr") : null;
+        if (tr) tr.classList.toggle("is-picked", on);
+      });
+  }
+
+  function pickRow(rowId, on, range) {
+    var ids = pickableIds();
+    if (range && state.lastPick !== null) {
+      var from = ids.indexOf(state.lastPick), to = ids.indexOf(rowId);
+      if (from >= 0 && to >= 0) {
+        for (var i = Math.min(from, to); i <= Math.max(from, to); i++) {
+          setPicked(ids[i], on);
+        }
+      }
+    }
+    setPicked(rowId, on);
+    state.lastPick = rowId;
+    paintPicks();
+    renderBulk();
+  }
+
+  /* Отмеченные строки — только те, что сейчас в таблице. Фильтр, убравший
+     строку с экрана, снимает и отметку (см. конец render): иначе «Удалить
+     отмеченные» уносило бы то, чего человек перед собой не видит. */
+  function selectedIds() {
+    return Object.keys(state.selected).map(Number).filter(function (id) {
+      return !!state.rows[id];
+    });
+  }
+
+  function clearPicks() {
+    state.selected = {};
+    state.lastPick = null;
+  }
+
+  /* Кнопки удаления пачкой. «Отмеченные» показываются, только когда есть что
+     удалять. «Очистить всё» живёт рядом с правом править план и карандаша не
+     требует: это отдельное действие с вопросом, а не правка по ячейкам. */
+  function renderBulk() {
+    var sec = state.sections[state.data.plan_year_no];
+    var ids = selectedIds();
+    var del = document.getElementById("op-del-selected");
+    del.hidden = !sectionEditing(sec) || !ids.length;
+    del.textContent = "✕ Удалить отмеченные (" + ids.length + ")";
+    del.title = "Удалить " + ids.length + " " + rowsWord(ids.length)
+      + " плана " + state.data.plan_year_no + " года";
+    var clear = document.getElementById("op-clear-all");
+    clear.hidden = !sectionEditable(sec);
+    clear.title = "Удалить все строки плана " + state.data.plan_year_no + " года";
+  }
+
+  function rowsWord(n) {
+    var tens = n % 100, ones = n % 10;
+    if (tens >= 11 && tens <= 14) return "строк";
+    if (ones === 1) return "строка";
+    if (ones >= 2 && ones <= 4) return "строки";
+    return "строк";
+  }
+
+  function rowsSum(rows) {
+    return rows.reduce(function (acc, row) { return acc + (row.plan_year || 0); }, 0);
+  }
+
+  /* Строки плана, которые сейчас в таблице, — круг для «Очистить всё».
+     Свёрнутый блок в него входит: сворачивание прячет, а не исключает.
+     Фильтр исключает, и вопрос перед удалением говорит об этом прямо. */
+  function planRowsOnScreen() {
+    var sec = state.sections[state.data.plan_year_no];
+    var out = [];
+    if (!sec) return out;
+    sec.blocks.forEach(function (block) {
+      block.rows.forEach(function (row) {
+        if (passes(row, block.cfo_name)) out.push(row);
+      });
+    });
+    return out;
+  }
+
+  /* Удаление пачкой одним запросом: сотня строк по одной уходила бы сотней
+     запросов, и оборванная посередине очистка оставила бы полтаблицы. */
+  function runDelete(rows, question, buttonId) {
+    if (!rows.length) {
+      U.toast("Удалять нечего: подходящих строк нет", "error");
+      return;
+    }
+    if (!window.confirm(question)) return;
+    var button = document.getElementById(buttonId);
+    button.disabled = true;
+    API.deleteRows(rows.map(function (row) { return row.id; }),
+                   state.data.plan_year_no)
+      .then(function (result) {
+        rows.forEach(function (row) {
+          delete state.fresh[row.id];
+          setPicked(row.id, false);
+        });
+        state.lastPick = null;
+        U.toast("Удалено строк: " + result.deleted
+          + (result.missing ? ", уже не было: " + result.missing : ""));
+        return reloadAll();
+      })
+      .catch(function (e) { U.toast(e.message, "error"); })
+      .then(function () { button.disabled = false; });
+  }
+
+  function deleteSelected() {
+    var rows = selectedIds().map(function (id) { return state.rows[id]; });
+    runDelete(rows, "Удалить отмеченные строки — " + rows.length + " "
+      + rowsWord(rows.length) + " на " + U.fmt(rowsSum(rows)) + " \u20bd?",
+      "op-del-selected");
+  }
+
+  /* Вопрос называет бюджет словами («Бюджета 2027 года») и число строк:
+     кнопка стоит в ряду обычных, а уносит таблицу целиком. Под фильтром
+     удаляется только показанное — об этом сказано отдельной строкой, иначе
+     «Очистить всё» читалось бы как «очистить год». */
+  function clearAll() {
+    var year = state.data.plan_year_no;
+    var sec = state.sections[year];
+    if (!sec || !sectionEditable(sec)) return;
+    var rows = planRowsOnScreen();
+    var lines = ["Удалить все записи «Бюджета " + year + " года»?", "",
+      "Под удаление попадает: " + rows.length + " " + rowsWord(rows.length)
+        + " на " + U.fmt(rowsSum(rows)) + " \u20bd."];
+    var hidden = sec.totals.rows_count - rows.length;
+    if (filtering() && hidden > 0) {
+      lines.push("Стоит фильтр: " + hidden + " " + rowsWord(hidden)
+        + " останутся — удалится только то, что видно в таблице.");
+    }
+    var cfo = {};
+    rows.forEach(function (row) { cfo[row.cfo_id] = true; });
+    var count = Object.keys(cfo).length;
+    if (count > 1) lines.push("Дирекций в удалении: " + count + ".");
+    lines.push("", "Отменить удаление нельзя.");
+    runDelete(rows, lines.join("\n"), "op-clear-all");
+  }
+
   /* ---------- расходы под строкой ---------- */
 
   /* Из чего сложился факт строки: контрагент, договор и те же двенадцать
      месяцев. Отдельные платежи сюда не разворачиваются — у дирекции вроде
      Сервисного обслуживания их сотни; в файле дирекции расход тоже сгруппирован
      по контрагенту. Строки раскрываются по клику на значок в колонке №. */
+  /* У расхода с 16.10.2026 два текста, как и у строки плана: детализация и
+     комментарий лежат в базе порознь. Записи, залитые до этого, несут один
+     склеенный текст в детализации и пустой комментарий — разделить их задним
+     числом нечем, лечится перезаливкой факта. */
   function spendNode(spend, parentPosition) {
     var cells = [U.el("td", {}, [U.el("div", { class: "no-cell" }, [
       U.el("span", { class: "dim", text: "↳ " + (parentPosition || "") })])])];
@@ -358,9 +561,11 @@
       var value = "";
       if (f.key === "counterparty") value = spend.counterparty || "—";
       else if (f.key === "contract") value = spend.contract || "—";
-      else if (f.key === "detail_text") value = spend.detail || "";
+      else if (f.key === "detail") value = spend.detail || "";
+      else if (f.key === "comment") value = spend.comment || "";
       cells.push(U.el("td", { class: "wrap dim", text: value }));
     });
+    cells.push(linkCell(spend.link));
     cells.push(U.el("td", { class: "num dim", text: "—" }));
     for (var i = 0; i < 12; i++) {
       var amount = spend.months[i] || 0;
@@ -387,7 +592,7 @@
 
   /* ---------- подсказки при правке ячейки ---------- */
 
-  var SUGGEST = ["article", "counterparty", "contract", "detail_text"];
+  var SUGGEST = ["article", "counterparty", "contract", "detail"];
   var openSuggest = null;
 
   /* Ячейку правят на месте, contenteditable, — но значения те же, что в новой
@@ -428,7 +633,7 @@
 
   var PLACEHOLDER = {
     article: "статья оборотов", counterparty: "контрагент",
-    contract: "договор", detail_text: "на что расход"
+    contract: "договор", detail: "на что расход", comment: "комментарий"
   };
 
   /* Значения списка для ячейки. Договоры сужаются по контрагенту строки, как
@@ -448,11 +653,12 @@
         return acc.concat(byCp[key]);
       }, []);
     }
-    if (field === "detail_text") {
+    if (field === "detail") {
       /* Детализация подсказывает только там, где колонка своя (ИТ): у остальных
-         дирекций в ней лежит комментарий к строке, и прошлые фразы в нём не
-         повторяются. Галочка «все» список не расширяет — чужие расшифровки
-         подсказкой не работают. */
+         дирекций своего справочника расшифровок нет. Галочка «все» список не
+         расширяет — чужие расшифровки подсказкой не работают. Комментарий
+         списка не имеет вовсе: это свободный текст, и прошлые фразы в нём
+         не повторяются. */
       if (row.detail_source !== "detail") return null;
       var details = refs.own.details || [];
       return details.length ? details : null;
@@ -464,11 +670,7 @@
     var value = (text || "").replace(/^\s+|\s+$/g, "");
     if (value === (row[field] || "")) return;
     var payload = {};
-    if (field === "detail_text") {
-      payload[row.detail_source === "detail" ? "detail" : "comment"] = value;
-    } else {
-      payload[field] = value;
-    }
+    payload[field] = value;
     td.classList.add("saving");
     API.patchRow(row.id, payload).then(function (result) {
       td.classList.remove("saving");
@@ -603,7 +805,7 @@
   function paintMonths(row) {
     for (var i = 0; i < 12; i++) {
       var td = document.querySelector(
-        '***REMOVED***t-op td[data-id="' + row.id + '"][data-f="m' + i + '"]');
+        '#t-op td[data-id="' + row.id + '"][data-f="m' + i + '"]');
       if (td) paint(td, row, "m" + i);
     }
   }
@@ -671,7 +873,14 @@
     if (search) search.focus();
   }
 
-  function addRowFromHeader() {
+  /* Клик, которым меню открыли, гасить его не должен: всплыв до document, он
+     попадает в closeAllFilters(), а тот щадит только попап с
+     pop.anchor === activeElement — у меню якоря нет, оно живёт в body и
+     привязано к кнопке. Без остановки всплытия меню закрывалось в том же
+     клике, в котором открылось, и «+ расход» не делал видимо ничего у всех,
+     кому доступен больше чем один блок. */
+  function addRowFromHeader(event) {
+    if (event) event.stopPropagation();
     var button = document.getElementById("op-add-row");
     if (!state.editMode) setEditMode(true);   // заполнять строку без правки нечем
     var targets = addTargets();
@@ -700,14 +909,31 @@
       state.fresh[id] = true;
       state.collapsed[block.budget_id] = false;
       return load(year).then(function () {
-        var tr = document.querySelector('***REMOVED***t-op tr[data-id="' + id + '"]');
+        var tr = document.querySelector('#t-op tr[data-id="' + id + '"]');
         if (!tr) return;
-        tr.scrollIntoView({ block: "center" });
-        var first = tr.querySelector("input");
-        if (first) first.focus();
+        revealRow(tr);
+        /* Именно поле ввода, а не первый input подряд: в колонке «№» теперь
+           стоит галочка выбора строки, и фокус уходил бы на неё — список
+           статей не раскрывался, печатать было некуда. */
+        var first = tr.querySelector("input.f-in");
+        // preventScroll: фокус сам по себе тоже прокручивает страницу к полю
+        if (first) first.focus({ preventScroll: true });
       });
     }).catch(function (e) { U.toast(e.message, "error"); })
       .then(function () { button.disabled = false; });
+  }
+
+  /* Показать новую строку, не трогая страницу. `scrollIntoView` прокручивает
+     всех предков разом, включая окно: строка заводится сверху блока, и
+     страница прыгала вверх от самой кнопки «+ расход». Двигаем только
+     контейнер таблицы — он для того и со своей прокруткой. */
+  function revealRow(tr) {
+    var box = scroller();
+    if (!box || !tr.getBoundingClientRect) return;
+    var row = tr.getBoundingClientRect();
+    var frame = box.getBoundingClientRect();
+    if (!frame.height) return;                 // таблица не на экране — двигать нечего
+    box.scrollTop += row.top - frame.top - (frame.height - row.height) / 2;
   }
 
   function groupNode(block, shown, sum) {
@@ -772,6 +998,143 @@
     return tr;
   }
 
+  /* ---------- «Наличие в бюджете» ---------- */
+
+  /* Строки плана базового года: по ним подписывается «за счёт строки N» и
+     собирается список выбора. Номер — позиция в блоке, тот же, что в колонке
+     «№». У дирекции с несколькими бюджетами он может повториться, поэтому
+     введённый руками номер принимается только когда он однозначен. */
+  function planIndex() {
+    if (state.planIdx) return state.planIdx;
+    var idx = { byId: {}, byCfo: {} };
+    var base = state.data.base_year_no;
+    Object.keys(state.sections).forEach(function (year) {
+      (state.sections[year].blocks || []).forEach(function (block) {
+        sortRows(block.rows).forEach(function (row, i) {
+          var info = { id: row.id, no: i + 1, article: row.article,
+            counterparty: row.counterparty, budget: block.budget_name,
+            cfo_id: block.cfo_id };
+          /* Подпись «за счёт строки N» нужна строке любого года: расход
+             показывается и в разделе факта, и раскрытием строки плана.
+             А выбирать можно только строки базового года — факт лежит
+             на них. */
+          idx.byId[row.id] = info;
+          if (Number(year) === base) {
+            (idx.byCfo[block.cfo_id] = idx.byCfo[block.cfo_id] || []).push(info);
+          }
+        });
+      });
+    });
+    state.planIdx = idx;
+    return idx;
+  }
+
+  function rowOption(info) {
+    return "№" + info.no + " · " + info.article
+      + (info.counterparty ? " · " + info.counterparty : "");
+  }
+
+  function linkText(link) {
+    if (link.row_id == null) return "Вне бюджета";
+    var info = planIndex().byId[link.row_id];
+    return info ? "В бюджете, за счёт строки " + info.no : "В бюджете";
+  }
+
+  /* Расход опознаётся полями, а не идентификатором: загрузка факта
+     пересоздаёт записи, и прежние id после неё не живут. Те же поля лежат
+     в решении, которое переживает перезаливку. */
+  function spendLink(cfoId, rowId, item) {
+    return { cfo_id: cfoId, row_id: rowId == null ? null : rowId,
+      article: item.article || "", counterparty: item.counterparty || "",
+      contract: item.contract || "", detail: item.detail || "" };
+  }
+
+  function linkCell(link) {
+    if (!link) return U.el("td", { class: "wrap dim", text: "—" });
+    var td = U.el("td", { class: "wrap link-cell" });
+    td.appendChild(U.el("span", { text: linkText(link) }));
+    // менять вправе только финотдел — как и грузить факт
+    if (!state.data.is_fin) return td;
+    var edit = U.el("button", { class: "mini", text: "✎",
+      title: "Изменить наличие в бюджете" });
+    edit.onclick = function (event) {
+      event.stopPropagation();
+      linkEditor(td, link);
+    };
+    td.appendChild(edit);
+    return td;
+  }
+
+  /* Два шага вместо одного попапа: сначала нативный выбор из двух значений,
+     и только у «В бюджете» — поле со списком строк. Нативный select не
+     зависит от всплытия клика, на котором спотыкается меню «+ расход». */
+  function linkEditor(td, link) {
+    U.clear(td);
+    var pick = U.el("select", { class: "cls-pick" });
+    [["in", "В бюджете"], ["out", "Вне бюджета"]].forEach(function (pair) {
+      pick.appendChild(U.el("option", { value: pair[0], text: pair[1] }));
+    });
+    pick.value = link.row_id == null ? "out" : "in";
+    td.appendChild(pick);
+
+    var known = planIndex().byId[link.row_id];
+    var input = U.el("input", { class: "f-in", value: known ? rowOption(known) : "" });
+    input.placeholder = "строка плана или её №";
+    var holder = U.el("div", { class: "link-pick" }, [input]);
+    td.appendChild(holder);
+    var box = U.combo(input, function (value) { saveLink(link, value); }, true);
+    box.setOptions((planIndex().byCfo[link.cfo_id] || []).map(rowOption));
+
+    function sync() { holder.hidden = pick.value === "out"; }
+    sync();
+    pick.addEventListener("change", function () {
+      sync();
+      if (pick.value === "out") saveLink(link, null);
+      else input.focus();
+    });
+    input.addEventListener("change", function () { saveLink(link, input.value); });
+    pick.focus();
+  }
+
+  /* Что имел в виду человек: строку из списка или номер, введённый руками.
+     Номер, встречающийся у дирекции дважды (а так бывает, когда бюджетов
+     несколько), привязкой не считается — просим выбрать из списка. */
+  function resolveRow(link, value) {
+    var rows = planIndex().byCfo[link.cfo_id] || [];
+    var text = String(value == null ? "" : value).replace(/^\s+|\s+$/g, "");
+    if (!text) throw new Error("Укажите строку, за счёт которой идёт расход");
+    var exact = rows.filter(function (info) { return rowOption(info) === text; });
+    if (exact.length === 1) return exact[0].id;
+    var digits = text.replace(/^\s*№?\s*/, "");
+    if (!/^\d+$/.test(digits)) throw new Error("Выберите строку из списка или введите её номер");
+    var found = rows.filter(function (info) { return info.no === Number(digits); });
+    if (!found.length) throw new Error("Строки №" + digits + " у этой дирекции нет");
+    if (found.length > 1) {
+      throw new Error("№" + digits + " есть в нескольких бюджетах дирекции — выберите строку из списка");
+    }
+    return found[0].id;
+  }
+
+  function saveLink(link, value) {
+    var rowId;
+    try {
+      rowId = value == null ? null : resolveRow(link, value);
+    } catch (e) {
+      U.toast(e.message, "error");
+      return;
+    }
+    if (rowId === link.row_id) { render(); return; }
+    API.factLink({
+      year: state.data.base_year_no, cfo_id: link.cfo_id, row_id: rowId,
+      article: link.article, counterparty: link.counterparty,
+      contract: link.contract, detail: link.detail
+    }).then(function () {
+      U.toast(rowId == null ? "Расход отнесён вне бюджета"
+        : "Расход отнесён на строку " + (planIndex().byId[rowId] || {}).no);
+      return reloadAll();
+    }).catch(function (e) { U.toast(e.message, "error"); render(); });
+  }
+
   /* ---------- раздел «<год> · факт» ---------- */
 
   /* Под плановой таблицей базового года идёт такая же, но с фактом: те же
@@ -792,13 +1155,16 @@
     return view;
   }
 
-  /* Расход без строки плана — тем же списком, что и в плитке «Вне бюджета». */
+  /* Расход без строки плана — тем же списком, что и в плитке «Вне бюджета».
+     Детализация и комментарий у него такие же две, как у строки плана. */
   function outsideRowView(item, index) {
     return {
       id: "o" + index, article: item.article, classifier: "",
       counterparty: item.counterparty, contract: item.contract,
-      detail_text: item.detail, months: (item.months || []).slice(),
-      plan_year: item.total, base_plan_year: null, spends: []
+      detail: item.detail || "", comment: item.comment || "",
+      months: (item.months || []).slice(),
+      plan_year: item.total, base_plan_year: null, spends: [],
+      link: spendLink(item.cfo_id, null, item)
     };
   }
 
@@ -822,6 +1188,7 @@
         nodes.push(node);
         if (!state.spendOpen[row.id]) return;
         (row.spends || []).forEach(function (spend) {
+          spend.link = spendLink(block.cfo_id, visible[i].id, spend);
           nodes.push(spendNode(spend, position[visible[i].id]));
         });
       });
@@ -873,16 +1240,26 @@
     return tr;
   }
 
+  /* Полоса прокрутки таблицы: таблица живёт в своём контейнере со своей
+     прокруткой, и двигать надо именно его, а не страницу. */
+  function scroller() {
+    var table = document.getElementById("t-op");
+    return table && table.closest ? table.closest(".scroll") : null;
+  }
+
   function render() {
     if (!state.data) return;
     /* Перерисовка выбрасывает ячейки вместе с их списками: открытый список
        иначе остался бы висеть над таблицей, привязанный к мёртвому полю. */
     U.closePopups();
+    // разметка строк плана пересобирается вместе с таблицей: номера в ней
+    // зависят от того же порядка, что и колонка «№»
+    state.planIdx = null;
     renderKpi();
     renderYearMark();
     renderHead();
 
-    var body = document.querySelector("***REMOVED***t-op tbody");
+    var body = document.querySelector("#t-op tbody");
     U.clear(body);
     state.rows = {};
     state.rowYear = {};
@@ -928,6 +1305,7 @@
              попадать по ячейкам — так же сделано в карточке ЦФО. */
           if (editable || !state.spendOpen[row.id]) return;
           (row.spends || []).forEach(function (spend) {
+            spend.link = spendLink(block.cfo_id, row.id, spend);
             nodes.push(spendNode(spend, position[row.id]));
           });
         });
@@ -973,8 +1351,15 @@
             " · " + U.fmt(sum) + " ₽";
         }).join("   ·   ")
       : "все годы свёрнуты";
-    document.querySelector("***REMOVED***t-op").classList.toggle("editing", state.editing);
+    document.querySelector("#t-op").classList.toggle("editing", state.editing);
     refreshFilterOptions();
+
+    /* Отметка живёт, пока строка на экране: ушла под фильтр или удалена —
+       снимается и отметка, иначе «Удалить отмеченные» уносило бы невидимое. */
+    Object.keys(state.selected).forEach(function (id) {
+      if (!state.rows[id]) delete state.selected[id];
+    });
+    renderBulk();
   }
 
   /* ---------- правка ячеек ---------- */
@@ -999,11 +1384,6 @@
       months[index] = value;
       return { months: months };
     }
-    if (field === "detail_text") {
-      if (text === (row.detail_text || "")) return null;
-      // у ИТ «Детализация» — колонка бюджета, у остальных — наш комментарий
-      return row.detail_source === "detail" ? { detail: text } : { comment: text };
-    }
     if (text === (row[field] || "")) return null;
     if (field === "article" && !text) throw new Error("Статья оборотов не может быть пустой");
     var payload = {};
@@ -1017,9 +1397,6 @@
       .forEach(function (key) {
         if (key in saved) row[key] = saved[key];
       });
-    if (field === "detail_text") {
-      row.detail_text = row.detail_source === "detail" ? saved.detail : saved.comment;
-    }
     row.plan_year = Number(saved.plan_year);
   }
 
@@ -1027,7 +1404,7 @@
      после правки ячейки выбивала бы фокус из соседней. */
   function repaintTotal(year) {
     var sec = state.sections[year];
-    var old = document.querySelector('***REMOVED***t-op tbody tr.total-row[data-year="' + year + '"]');
+    var old = document.querySelector('#t-op tbody tr.total-row[data-year="' + year + '"]');
     if (!sec || !old || !old.parentNode) return;
     var rows = [];
     sec.blocks.forEach(function (block) {
@@ -1082,6 +1459,9 @@
 
   function setEditMode(on) {
     state.editMode = !!on;
+    // галочки живут вместе с правкой: закрыли ячейки — снимаем и отметки,
+    // иначе невидимый выбор дожидался бы следующего включения карандаша
+    if (!state.editMode) clearPicks();
     renderLock();
     render();
   }
@@ -1175,7 +1555,7 @@
 
   function renderMissing() {
     var data = state.missing;
-    var body = document.querySelector("***REMOVED***t-op-missing tbody");
+    var body = document.querySelector("#t-op-missing tbody");
     U.clear(body);
     document.getElementById("op-missing-sub").textContent = data.count
       ? data.count + " строк на " + U.fmt(data.total) + " ₽ были в " + data.base_year +
@@ -1186,7 +1566,7 @@
     if (state.data && state.data.kpi) renderSummary();
 
     if (!data.count) {
-      body.appendChild(U.empty(7, "Ничего не потеряно."));
+      body.appendChild(U.empty(8, "Ничего не потеряно."));
       return;
     }
     data.items.forEach(function (item) {
@@ -1202,7 +1582,8 @@
         U.el("td", { class: "wrap", text: item.article }),
         U.el("td", { class: "wrap", text: item.counterparty || "—" }),
         U.el("td", { class: "wrap", text: item.contract || "—" }),
-        U.el("td", { class: "wrap" }, [U.el("div", { class: "clamp", text: item.detail_text || "—" })]),
+        U.el("td", { class: "wrap" }, [U.el("div", { class: "clamp", text: item.detail || "—" })]),
+        U.el("td", { class: "wrap" }, [U.el("div", { class: "clamp", text: item.comment || "—" })]),
         U.tdn(item.plan_year),
         U.el("td", {}, [state.data.can_edit ? add : U.el("span", { class: "dim", text: "—" })])
       ]));
@@ -1307,7 +1688,7 @@
 
   function checkedCfo() {
     return Array.prototype.filter
-      .call(document.querySelectorAll("***REMOVED***op-import-cfo input[type=checkbox]"),
+      .call(document.querySelectorAll("#op-import-cfo input[type=checkbox]"),
         function (box) { return box.checked; })
       .map(function (box) { return Number(box.value); });
   }
@@ -1344,7 +1725,7 @@
 
   function setAllCfo(value) {
     Array.prototype.forEach.call(
-      document.querySelectorAll("***REMOVED***op-import-cfo input[type=checkbox]"),
+      document.querySelectorAll("#op-import-cfo input[type=checkbox]"),
       function (box) { box.checked = value; });
     document.getElementById("op-import-preview").hidden = true;
     renderImportCfoHint();
@@ -1596,6 +1977,8 @@
           .catch(function (e) { U.toast(e.message, "error"); });
       };
       document.getElementById("op-add-row").onclick = addRowFromHeader;
+      document.getElementById("op-del-selected").onclick = deleteSelected;
+      document.getElementById("op-clear-all").onclick = clearAll;
       document.getElementById("op-edit-mode").onclick = function () {
         setEditMode(!state.editMode);
       };

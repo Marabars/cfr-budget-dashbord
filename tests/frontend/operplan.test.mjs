@@ -95,10 +95,13 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
   let added = null;                       // строка, заведённая кнопкой «+ расход»
   const calls = [];
   const isFin = opts.isFin !== false;
+  // удалённые пачкой строки: сервер их больше не отдаёт, и таблица пустеет
+  const dropped = new Set();
 
   const view = (year) => {
-    const rows = year === 2027
-      ? [FILLED, ...extra, ...(added ? [added] : [])] : [BASE];
+    const rows = (year === 2027
+      ? [FILLED, ...extra, ...(added ? [added] : [])] : [BASE])
+      .filter((r) => !dropped.has(r.id));
     const total = rows.reduce((acc, r) => acc + r.plan_year, 0);
     return {
       year, plan_year_no: 2027, base_year_no: 2026, years: [2026, 2027],
@@ -147,9 +150,23 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
       added = null;
       return Promise.resolve({ ok: true });
     },
+    /* Удаление пачкой: отмеченные галочками и «Очистить всё». Один запрос
+       на весь список, поэтому и в журнале вызовов он один. */
+    deleteRows: (ids, year) => {
+      calls.push({ kind: "deleteRows", ids: Array.from(ids), year });
+      ids.forEach((id) => {
+        dropped.add(id);
+        if (added && added.id === id) added = null;
+      });
+      return Promise.resolve({ deleted: ids.length, missing: 0, total: 0, year });
+    },
     operplanRenumber: (year) => {
       calls.push({ kind: "renumber", year });
       return Promise.resolve({ year, renumbered: 3 });
+    },
+    factLink: (payload) => {
+      calls.push({ kind: "factLink", payload });
+      return Promise.resolve({ ok: true, moved: 1 });
     },
     download: (name, cfoId, params) => {
       calls.push({ kind: "download", name, params });
@@ -181,6 +198,11 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
     runScripts: "outside-only", pretendToBeVisual: true,
   });
   const { window } = dom;
+  /* Вопрос перед удалением: что спросили — копится в asked, что ответить —
+     задаётся answer(). В jsdom своего confirm нет вовсе. */
+  const asked = [];
+  let answer = true;
+  window.confirm = (text) => { asked.push(String(text)); return answer; };
   /* Настоящий css нужен не для красоты: позицию списка считает JS по координатам
      окна, и без position: fixed из стилей она применялась бы относительно ячейки —
      список уезжал бы за пределы видимой области. Проверяем это ниже. */
@@ -198,7 +220,8 @@ async function mount(cfoList = [{ id: 1, name: IT }, { id: 2, name: HR }], extra
   await settle(window);
 
   return {
-    window, calls,
+    window, calls, asked,
+    answer: (value) => { answer = value; },
     $: (sel) => window.document.querySelector(sel),
     $$: (sel) => Array.from(window.document.querySelectorAll(sel)),
     click: (node) => node.dispatchEvent(new window.MouseEvent("click", { bubbles: true })),
@@ -240,54 +263,54 @@ describe("вкладка «Бюджет»: таблица", () => {
   before(async () => { t = await mount(); });
 
   it("рисует блок с строками и заголовок дирекции без них", () => {
-    assert.equal(t.$$("***REMOVED***t-op tr.group").length, 2);
-    assert.equal(t.$$("***REMOVED***t-op tr.group.is-empty").length, 1,
+    assert.equal(t.$$("#t-op tr.group").length, 2);
+    assert.equal(t.$$("#t-op tr.group.is-empty").length, 1,
       "у ДУП строк нет — должен быть заголовок-заготовка");
   });
 
   it("держит «+ расход» в шапке карточки, а не в заголовках блоков", () => {
-    assert.equal(t.$$("***REMOVED***t-op tr.group .add-row").length, 0);
-    const button = t.$("***REMOVED***op-add-row");
+    assert.equal(t.$$("#t-op tr.group .add-row").length, 0);
+    const button = t.$("#op-add-row");
     assert.ok(button, "кнопка в шапке таблицы");
     assert.equal(button.previousElementSibling.id, "op-save",
       "порядок в шапке: «Свернуть все», карандаш, «Сохранить», «+ расход»");
   });
 
   it("по умолчанию только читается: ячейки закрыты", () => {
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="10"]');
+    const row = t.$('#t-op tbody tr[data-id="10"]');
     assert.ok(row, "строка плана нарисована");
     assert.equal(row.querySelectorAll("td[contenteditable]").length, 0,
       "любой клик по ячейке не должен начинать правку");
-    assert.equal(t.$("***REMOVED***op-save").hidden, true, "сохранять нечего");
-    assert.equal(t.$("***REMOVED***op-edit-note"), null, "плашки-инструкции на вкладке нет");
+    assert.equal(t.$("#op-save").hidden, true, "сохранять нечего");
+    assert.equal(t.$("#op-edit-note"), null, "плашки-инструкции на вкладке нет");
   });
 
   it("даёт карандаш, который открывает правку", () => {
-    const pencil = t.$("***REMOVED***op-edit-mode");
+    const pencil = t.$("#op-edit-mode");
     assert.equal(pencil.hidden, false);
     assert.equal(pencil.textContent, "✎", "правка закрыта — карандаш целый");
 
     t.click(pencil);
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="10"]');
+    const row = t.$('#t-op tbody tr[data-id="10"]');
     assert.ok(row.querySelector("td[contenteditable]"), "ячейки открылись");
-    assert.equal(t.$("***REMOVED***op-save").hidden, false, "появилась кнопка сохранения");
-    assert.equal(t.$("***REMOVED***op-edit-mode").textContent, "✎̸", "карандаш перечёркнут");
+    assert.equal(t.$("#op-save").hidden, false, "появилась кнопка сохранения");
+    assert.equal(t.$("#op-edit-mode").textContent, "✎̸", "карандаш перечёркнут");
   });
 
   it("«Сохранить» закрепляет нумерацию и закрывает правку", async () => {
-    assert.equal(t.$("***REMOVED***op-save").hidden, false, "мы всё ещё в правке");
-    t.click(t.$("***REMOVED***op-save"));
+    assert.equal(t.$("#op-save").hidden, false, "мы всё ещё в правке");
+    t.click(t.$("#op-save"));
     await settle(t.window, 150);
     const renumber = t.calls.find((c) => c.kind === "renumber");
     assert.ok(renumber, "номера строк проставляются по кнопке, а не замком");
     assert.equal(renumber.year, 2027, "нумеруется планируемый год");
-    assert.equal(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[contenteditable]'), null,
+    assert.equal(t.$('#t-op tbody tr[data-id="10"] td[contenteditable]'), null,
       "ячейки снова закрыты");
-    assert.equal(t.$("***REMOVED***op-save").hidden, true);
+    assert.equal(t.$("#op-save").hidden, true);
   });
 
   it("замок финотдела — отдельная кнопка с висячим замком", () => {
-    const lock = t.$("***REMOVED***op-lock");
+    const lock = t.$("#op-lock");
     assert.equal(lock.hidden, false, "финотдел замок видит");
     assert.ok(lock.classList.contains("icon"));
     assert.equal(lock.textContent, "🔓", "план открыт");
@@ -312,14 +335,14 @@ describe("вкладка «Бюджет»: порядок строк", () => {
   });
 
   it("собирает статьи вместе и сортирует их по алфавиту", () => {
-    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]")
+    const shown = t.$$("#t-op tbody tr[data-id]")
       .map((tr) => Number(tr.getAttribute("data-id")));
     // 10 и 32, 33 — «4411_Оборудование» (Астра, Барс, Вектор), затем 31 — «4430_Разработка»
     assert.deepEqual(shown, [10, 32, 33, 31]);
   });
 
   it("нумерует строки по порядку показа, а не по номеру из файла", () => {
-    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => ({
+    const shown = t.$$("#t-op tbody tr[data-id]").map((tr) => ({
       id: Number(tr.getAttribute("data-id")),
       no: tr.querySelector(".no-cell span").textContent,
     }));
@@ -330,7 +353,7 @@ describe("вкладка «Бюджет»: порядок строк", () => {
   });
 
   it("не меняет нумерацию от фильтра", () => {
-    const chip = t.$$("***REMOVED***op-filters .fwrap")[1];        // фильтр «Статья оборотов»
+    const chip = t.$$("#op-filters .fwrap")[1];        // фильтр «Статья оборотов»
     t.click(chip.querySelector(".fbtn"));
     const option = Array.from(chip.querySelectorAll(".fopt"))
       .find((label) => label.textContent.indexOf("4430_Разработка") >= 0);
@@ -338,7 +361,7 @@ describe("вкладка «Бюджет»: порядок строк", () => {
     box.checked = true;
     t.fire(box, "change");
 
-    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => ({
+    const shown = t.$$("#t-op tbody tr[data-id]").map((tr) => ({
       id: Number(tr.getAttribute("data-id")),
       no: tr.querySelector(".no-cell span").textContent,
     }));
@@ -349,9 +372,9 @@ describe("вкладка «Бюджет»: порядок строк", () => {
   });
 
   it("держит незаполненную строку сверху блока", async () => {
-    t.click(t.$("***REMOVED***op-add-row"));
+    t.click(t.$("#op-add-row"));
     await settle(t.window, 60);
-    const first = t.$("***REMOVED***t-op tbody tr[data-id]");
+    const first = t.$("#t-op tbody tr[data-id]");
     assert.equal(first.getAttribute("data-id"), "99",
       "новую строку ещё заполняют — по алфавиту ей уезжать некуда");
     assert.ok(first.classList.contains("is-new"));
@@ -362,14 +385,14 @@ describe("вкладка «Бюджет»: прошлый год", () => {
   let t;
   before(async () => {
     t = await mount();
-    t.click(t.$("***REMOVED***op-edit-mode"));                  // правка включена
-    const base = t.$$("***REMOVED***t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
+    t.click(t.$("#op-edit-mode"));                  // правка включена
+    const base = t.$$("#t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
     t.click(base);                                  // раскрываем раздел базы
     await settle(t.window, 40);
   });
 
   it("показывает строки базы, но править их не даёт", () => {
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="20"]');
+    const row = t.$('#t-op tbody tr[data-id="20"]');
     assert.ok(row, "строка 2026 года нарисована");
     assert.ok(row.classList.contains("y-past"), "и помечена как прошлый год");
     assert.equal(row.querySelectorAll("td[contenteditable]").length, 0,
@@ -378,7 +401,7 @@ describe("вкладка «Бюджет»: прошлый год", () => {
   });
 
   it("не предлагает удалить строку прошлого года", () => {
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="20"]');
+    const row = t.$('#t-op tbody tr[data-id="20"]');
     assert.equal(row.querySelector("button.mini"), null, "крестика быть не должно");
   });
 });
@@ -386,31 +409,54 @@ describe("вкладка «Бюджет»: прошлый год", () => {
 describe("вкладка «Бюджет»: выбор дирекции для новой строки", () => {
   it("с одной доступной дирекцией заводит строку сразу, без вопросов", async () => {
     const t = await mount([{ id: 1, name: IT }]);
-    assert.equal(t.$("***REMOVED***op-save").hidden, true, "правка ещё закрыта");
-    t.click(t.$("***REMOVED***op-add-row"));
+    assert.equal(t.$("#op-save").hidden, true, "правка ещё закрыта");
+    t.click(t.$("#op-add-row"));
     await settle(t.window, 60);
-    assert.equal(t.$("***REMOVED***op-add-menu"), null, "спрашивать нечего — меню не открывалось");
+    assert.equal(t.$("#op-add-menu"), null, "спрашивать нечего — меню не открывалось");
     const created = t.calls.find((c) => c.kind === "create");
     assert.ok(created, "строка заведена");
     assert.equal(created.payload.cfo_id, 1);
-    assert.equal(t.$("***REMOVED***op-save").hidden, false, "кнопка сама включила правку");
+    assert.equal(t.$("#op-save").hidden, false, "кнопка сама включила правку");
     // курсор уезжает в статью, и её список сразу раскрыт — печатать можно не целясь
     assert.ok(t.$(".fpop-fixed:not([hidden]) .copt"), "список статей раскрыт сразу");
   });
 
   it("с несколькими — предлагает список тех же блоков, что в таблице", async () => {
     const t = await mount();
-    t.click(t.$("***REMOVED***op-add-row"));
+    t.click(t.$("#op-add-row"));
     await settle(t.window, 30);
-    const shown = t.$$("***REMOVED***op-add-menu .copt").map((n) => n.textContent);
+    const shown = t.$$("#op-add-menu .copt").map((n) => n.textContent);
     assert.deepEqual(shown, [HR, IT], "по алфавиту: «Вторая» раньше «Первой»");
     assert.ok(!t.calls.length, "до выбора дирекции ничего не создаём");
+  });
+
+  /* Меню создаётся в body и остаётся там скрытым, поэтому проверки по .copt
+     проходили и тогда, когда на экране не появлялось ничего: клик, открывший
+     меню, всплывал до document и гасил его в тот же миг. Скрытость проверяем
+     по node.hidden — jsdom не считает `!important` в каскаде. */
+  it("меню остаётся открытым после клика, которым его открыли", async () => {
+    const t = await mount();
+    t.click(t.$("#op-add-row"));
+    await settle(t.window, 30);
+    const menu = t.$("#op-add-menu");
+    assert.ok(menu, "меню создано");
+    assert.equal(menu.hidden, false, "и оно видимо, а не погашено своим же кликом");
+  });
+
+  it("клик мимо меню его закрывает", async () => {
+    const t = await mount();
+    t.click(t.$("#op-add-row"));
+    await settle(t.window, 30);
+    t.click(t.window.document.body);
+    await settle(t.window, 30);
+    const menu = t.$("#op-add-menu");
+    assert.ok(!menu || menu.hidden, "чужой клик меню гасит как прежде");
   });
 
   it("фильтр по ЦФО снимает вопрос", async () => {
     const t = await mount();
     // фильтр «ЦФО» — первый чип в шапке; отмечаем в нём дирекцию, как это делают мышью
-    const chip = t.$$("***REMOVED***op-filters .fwrap")[0];
+    const chip = t.$$("#op-filters .fwrap")[0];
     t.click(chip.querySelector(".fbtn"));
     const option = Array.from(chip.querySelectorAll(".fopt"))
       .find((label) => label.textContent.indexOf(IT) >= 0);
@@ -420,7 +466,7 @@ describe("вкладка «Бюджет»: выбор дирекции для н
     t.fire(box, "change");
     await settle(t.window, 30);
 
-    t.click(t.$("***REMOVED***op-add-row"));
+    t.click(t.$("#op-add-row"));
     await settle(t.window, 60);
     const created = t.calls.find((c) => c.kind === "create");
     assert.ok(created, "дирекция понятна из фильтра — список не нужен");
@@ -432,9 +478,9 @@ describe("вкладка «Бюджет»: новая строка", () => {
   let t;
   before(async () => {
     t = await mount();
-    t.click(t.$("***REMOVED***op-add-row"));
+    t.click(t.$("#op-add-row"));
     await settle(t.window, 30);
-    const hr = t.$$("***REMOVED***op-add-menu .copt").find((n) => n.textContent === HR);
+    const hr = t.$$("#op-add-menu .copt").find((n) => n.textContent === HR);
     hr.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
     await settle(t.window, 60);
   });
@@ -449,23 +495,23 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("подсвечивает её и даёт списки в ячейках", () => {
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="99"]');
+    const row = t.$('#t-op tbody tr[data-id="99"]');
     assert.ok(row, "новая строка нарисована");
     assert.ok(row.classList.contains("is-new"), "строка подсвечена");
-    assert.equal(row.querySelectorAll("td.cell-pick input").length, 4,
-      "статья, контрагент, договор и детализация");
+    assert.equal(row.querySelectorAll("td.cell-pick input").length, 5,
+      "статья, контрагент, договор, детализация и комментарий");
     assert.equal(row.querySelectorAll("td.cell-pick .combo-caret").length, 3,
-      "строку заводили в ДУП: там детализация — комментарий, списка нет");
+      "строку заводили в ДУП: своей детализации у неё нет, а у комментария списка нет ни у кого");
   });
 
   it("предлагает раскладку суммы на 14 вариантов", () => {
-    const spread = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-sum .spread-in');
+    const spread = t.$('#t-op tbody tr[data-id="99"] td.cell-sum .spread-in');
     assert.ok(spread, "выбор раскладки стоит в колонке ИТОГО");
     assert.equal(spread.options.length, MONTHS + 2, "равномерно, не раскладывать и 12 месяцев");
   });
 
   it("раскрывает список статей по координатам окна, а не внутри ячейки", () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
     const pop = t.$(".fpop-fixed:not([hidden])");
     assert.ok(pop, "внутри .scroll абсолютный список обрезался бы контейнером");
@@ -477,7 +523,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("держит список вне таблицы, иначе его накрывают закреплённые колонки", () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
     const pop = t.$(".fpop-fixed:not([hidden])");
     assert.ok(pop, "список раскрыт");
@@ -485,22 +531,22 @@ describe("вкладка «Бюджет»: новая строка", () => {
        контекст наложения, и список внутри такой ячейки накрывают закреплённые
        ячейки строк ниже — видна полоска, клик по ней попадает в чужую ячейку. */
     assert.equal(pop.parentNode, t.window.document.body, "список должен лежать в body");
-    assert.ok(!t.$("***REMOVED***t-op").contains(pop), "и не внутри таблицы");
+    assert.ok(!t.$("#t-op").contains(pop), "и не внутри таблицы");
   });
 
   it("выбрасывает списки от ячеек, которых больше нет", () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
     assert.ok(t.$$(".fpop-fixed").length > 0, "список создан");
-    t.click(t.$("***REMOVED***op-edit-mode"));           // правка закрылась — строку перерисовали
-    t.click(t.$("***REMOVED***op-edit-mode"));           // и открылась: ещё одна перерисовка
+    t.click(t.$("#op-edit-mode"));           // правка закрылась — строку перерисовали
+    t.click(t.$("#op-edit-mode"));           // и открылась: ещё одна перерисовка
     const orphans = t.$$(".fpop-fixed").filter(
       (pop) => pop.anchor && !t.window.document.contains(pop.anchor));
     assert.deepEqual(orphans, [], "списки мёртвых ячеек в body копиться не должны");
   });
 
   it("не захлопывает список при прокрутке таблицы", () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
     assert.ok(t.$(".fpop-fixed:not([hidden])"), "список раскрыт");
     /* Клик по полю у нижнего края сам заставляет браузер подкрутить таблицу.
@@ -516,7 +562,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("закрывает список, когда поле ушло из окна", () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
     assert.ok(t.$(".fpop-fixed:not([hidden])"));
     // уводим поле далеко выше окна: висеть списку в пустоте незачем
@@ -528,7 +574,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("снова раскрывает список, когда возвращаются в ту же ячейку", () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(article);
     assert.ok(t.$(".fpop-fixed:not([hidden])"), "список раскрыт");
 
@@ -544,7 +590,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("убирает чужой список, когда фокус уходит в ячейку без списка", () => {
-    const inputs = t.$$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const inputs = t.$$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     t.focus(inputs[2]);                                  // договор — список есть
     assert.ok(t.$(".fpop-fixed:not([hidden])"), "список договоров раскрыт");
     t.focus(inputs[3]);                   // детализация ДУП — справочника нет
@@ -553,7 +599,7 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("сохраняет выбранную статью", async () => {
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     article.value = "4110_Соцрасходы";
     t.fire(article, "change");
     await settle(t.window);
@@ -561,15 +607,15 @@ describe("вкладка «Бюджет»: новая строка", () => {
   });
 
   it("галочкой «все статьи» показывает справочник по всем ЦФО", async () => {
-    t.$("***REMOVED***op-a-all").checked = true;
-    t.fire(t.$("***REMOVED***op-a-all"), "change");      // перерисовка: списки собираются заново
+    t.$("#op-a-all").checked = true;
+    t.fire(t.$("#op-a-all"), "change");      // перерисовка: списки собираются заново
     await settle(t.window);
-    const article = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-pick input');
+    const article = t.$('#t-op tbody tr[data-id="99"] td.cell-pick input');
     article.dispatchEvent(new t.window.FocusEvent("focus"));
     const shown = Array.from(t.$(".fpop-fixed:not([hidden])").querySelectorAll(".copt"))
       .map((n) => n.textContent);
     assert.deepEqual(shown, REFS.all.articles);
-    t.$("***REMOVED***op-a-all").checked = false;
+    t.$("#op-a-all").checked = false;
   });
 });
 
@@ -578,8 +624,8 @@ describe("вкладка «Бюджет»: подсказки при правк�
 
   before(async () => {
     t = await mount(undefined, [HR_ROW]);
-    t.click(t.$("***REMOVED***op-edit-mode"));
-    cell = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
+    t.click(t.$("#op-edit-mode"));
+    cell = t.$('#t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
   });
 
   it("предлагает значения своего ЦФО прямо в ячейке", () => {
@@ -592,7 +638,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
 
   it("не гаснет от клика, которым его открыли", () => {
     for (const field of ["article", "counterparty", "contract"]) {
-      const target = t.$(`***REMOVED***t-op tbody tr[data-id="10"] td[data-f="${field}"]`);
+      const target = t.$(`#t-op tbody tr[data-id="10"] td[data-f="${field}"]`);
       t.clickCell(target);
       const pop = t.$(".cell-suggest:not([hidden])");
       assert.ok(pop, `список у «${field}» должен остаться открытым после клика`);
@@ -601,8 +647,8 @@ describe("вкладка «Бюджет»: подсказки при правк�
   });
 
   it("переносится на другую ячейку, а не множится", () => {
-    t.clickCell(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="article"]'));
-    t.clickCell(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="contract"]'));
+    t.clickCell(t.$('#t-op tbody tr[data-id="10"] td[data-f="article"]'));
+    t.clickCell(t.$('#t-op tbody tr[data-id="10"] td[data-f="contract"]'));
     assert.equal(t.$$(".cell-suggest:not([hidden])").length, 1, "подсказка одна");
     const shown = t.$$(".cell-suggest .copt").map((n) => n.textContent);
     assert.deepEqual(shown, REFS.by_cfo[1].contracts["Астра ООО"],
@@ -610,7 +656,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
   });
 
   it("закрывается принудительно при перерисовке таблицы", () => {
-    t.clickCell(t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]'));
+    t.clickCell(t.$('#t-op tbody tr[data-id="10"] td[data-f="counterparty"]'));
     assert.ok(t.$(".cell-suggest:not([hidden])"), "список открыт");
     t.window.U.closePopups();
     assert.equal(t.$(".cell-suggest:not([hidden])"), null,
@@ -618,7 +664,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
   });
 
   it("сужает список по набранному тексту", () => {
-    cell = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
+    cell = t.$('#t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
     t.clickCell(cell);
     cell.textContent = "Софт";
     cell.dispatchEvent(new t.window.Event("input", { bubbles: true }));
@@ -627,7 +673,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
   });
 
   it("по выбору подставляет значение и сохраняет ячейку", async () => {
-    cell = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
+    cell = t.$('#t-op tbody tr[data-id="10"] td[data-f="counterparty"]');
     t.clickCell(cell);
     const option = t.$$(".cell-suggest .copt").find((n) => n.textContent === "Астра ООО");
     option.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
@@ -638,7 +684,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
   it("подсказывает детализацию там, где колонка своя", () => {
     /* У ИТ «Детализация» — колонка бюджета, и писать в неё надо теми же словами,
        что уже заведены: иначе одна расшифровка расходится на три написания. */
-    const detail = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="detail_text"]');
+    const detail = t.$('#t-op tbody tr[data-id="10"] td[data-f="detail"]');
     t.clickCell(detail);
     const pop = t.$(".cell-suggest:not([hidden])");
     assert.ok(pop, "список подставлен к ячейке");
@@ -647,7 +693,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
   });
 
   it("по выбору детализации сохраняет её в поле бюджета, а не в комментарий", async () => {
-    const detail = t.$('***REMOVED***t-op tbody tr[data-id="10"] td[data-f="detail_text"]');
+    const detail = t.$('#t-op tbody tr[data-id="10"] td[data-f="detail"]');
     t.clickCell(detail);
     const option = t.$$(".cell-suggest .copt").find((n) => n.textContent === "Платформа");
     option.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
@@ -659,7 +705,7 @@ describe("вкладка «Бюджет»: подсказки при правк�
 
   it("в ячейке без справочника списка не показывает", () => {
     // у ДУП в этой колонке комментарий к строке — прошлые фразы в нём не повторяются
-    const detail = t.$('***REMOVED***t-op tbody tr[data-id="11"] td[data-f="detail_text"]');
+    const detail = t.$('#t-op tbody tr[data-id="11"] td[data-f="detail"]');
     t.focus(detail);
     assert.equal(t.$(".cell-suggest:not([hidden])"), null,
       "детализация ДУП — свободный текст");
@@ -669,9 +715,9 @@ describe("вкладка «Бюджет»: подсказки при правк�
 describe("вкладка «Бюджет»: детализация в новой строке", () => {
   it("даёт список в строке ИТ и не даёт в строке ДУП", async () => {
     const it = await mount([{ id: 1, name: IT }]);
-    it.click(it.$("***REMOVED***op-add-row"));
+    it.click(it.$("#op-add-row"));
     await settle(it.window, 60);
-    const row = it.$('***REMOVED***t-op tbody tr[data-id="99"]');
+    const row = it.$('#t-op tbody tr[data-id="99"]');
     assert.equal(row.querySelectorAll("td.cell-pick .combo-caret").length, 4,
       "статья, контрагент, договор и детализация");
     /* Клик, а не голый фокус: после «+ расход» курсор стоит в статье с раскрытым
@@ -690,10 +736,10 @@ describe("вкладка «Бюджет»: сумма за год", () => {
 
   before(async () => {
     t = await mount([{ id: 1, name: IT }]);
-    t.click(t.$("***REMOVED***op-add-row"));
+    t.click(t.$("#op-add-row"));
     await settle(t.window, 60);
-    sum = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-sum .sum-in');
-    spread = t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-sum .spread-in');
+    sum = t.$('#t-op tbody tr[data-id="99"] td.cell-sum .sum-in');
+    spread = t.$('#t-op tbody tr[data-id="99"] td.cell-sum .spread-in');
   });
 
   it("раскладывает годовую сумму равномерно", async () => {
@@ -707,9 +753,9 @@ describe("вкладка «Бюджет»: сумма за год", () => {
   });
 
   it("перерисовывает месяцы на месте, не теряя ввод", () => {
-    const january = t.$('***REMOVED***t-op td[data-id="99"][data-f="m0"]');
+    const january = t.$('#t-op td[data-id="99"][data-f="m0"]');
     assert.match(january.textContent, /^10\s?000/);
-    assert.ok(t.$('***REMOVED***t-op tbody tr[data-id="99"] td.cell-sum .sum-in'),
+    assert.ok(t.$('#t-op tbody tr[data-id="99"] td.cell-sum .sum-in'),
       "поле суммы осталось полем, а не превратилось в текст");
   });
 
@@ -738,7 +784,7 @@ describe("вкладка «Бюджет»: сумма за год", () => {
     t.fire(spread, "change");
     // правим два месяца прямо в таблице, как это делают мышью и клавиатурой
     for (const [index, value] of [[0, "5 000"], [3, "7 500"]]) {
-      const cell = t.$(`***REMOVED***t-op td[data-id="99"][data-f="m${index}"]`);
+      const cell = t.$(`#t-op td[data-id="99"][data-f="m${index}"]`);
       cell.textContent = value;
       cell.dispatchEvent(new t.window.FocusEvent("focusout", { bubbles: true }));
       await settle(t.window);
@@ -769,14 +815,14 @@ describe("вкладка «Бюджет»: классификатор", () => {
 
   it("стоит третьей колонкой — как в выгрузке Excel", async () => {
     const t = await mount();
-    const head = t.$$("***REMOVED***op-head th").map((th) => th.textContent);
+    const head = t.$$("#op-head th").map((th) => th.textContent);
     assert.deepEqual(head.slice(0, 4),
       ["№", "Статья оборотов", "Классификатор", "Контрагент"]);
   });
 
   it("вне правки показывает значение текстом, без списка", async () => {
     const t = await mount();
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="10"]');
+    const row = t.$('#t-op tbody tr[data-id="10"]');
     const cell = cellOf(t, row);
     assert.equal(cell.textContent, "МРК");
     assert.equal(cell.querySelector("select"), null, "читать — значит не править");
@@ -784,8 +830,8 @@ describe("вкладка «Бюджет»: классификатор", () => {
 
   it("в правке становится списком ровно из двух значений", async () => {
     const t = await mount();
-    t.click(t.$("***REMOVED***op-edit-mode"));
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="10"]');
+    t.click(t.$("#op-edit-mode"));
+    const row = t.$('#t-op tbody tr[data-id="10"]');
     const select = cellOf(t, row).querySelector("select");
     assert.ok(select, "в правке — список");
     assert.deepEqual(Array.from(select.options).map((o) => o.value), ["МРГ", "МРК"],
@@ -796,18 +842,18 @@ describe("вкладка «Бюджет»: классификатор", () => {
   it("строка, пришедшая без классификатора, читается как МРГ", async () => {
     // у строки прошлого года поля нет вовсе — так выглядят строки до миграции
     const t = await mount();
-    const base = t.$$("***REMOVED***t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
+    const base = t.$$("#t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
     t.click(base);
     await settle(t.window, 40);
-    const row = t.$('***REMOVED***t-op tbody tr[data-id="20"]');
+    const row = t.$('#t-op tbody tr[data-id="20"]');
     assert.ok(row, "строка базы нарисована");
     assert.equal(cellOf(t, row).textContent, "МРГ");
   });
 
   it("смена значения уходит на сервер", async () => {
     const t = await mount();
-    t.click(t.$("***REMOVED***op-edit-mode"));
-    const select = cellOf(t, t.$('***REMOVED***t-op tbody tr[data-id="10"]')).querySelector("select");
+    t.click(t.$("#op-edit-mode"));
+    const select = cellOf(t, t.$('#t-op tbody tr[data-id="10"]')).querySelector("select");
     select.value = "МРГ";
     t.fire(select, "change");
     await settle(t.window);
@@ -818,11 +864,11 @@ describe("вкладка «Бюджет»: классификатор", () => {
 
   it("у прошлого года правке не подлежит", async () => {
     const t = await mount();
-    t.click(t.$("***REMOVED***op-edit-mode"));
-    const base = t.$$("***REMOVED***t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
+    t.click(t.$("#op-edit-mode"));
+    const base = t.$$("#t-op tr.year-row").find((tr) => tr.textContent.indexOf("2026") >= 0);
     t.click(base);
     await settle(t.window, 40);
-    const past = t.$('***REMOVED***t-op tbody tr[data-id="20"]');
+    const past = t.$('#t-op tbody tr[data-id="20"]');
     assert.ok(past, "строка базы нарисована");
     assert.equal(cellOf(t, past).querySelector("select"), null,
       "базовый год — справка, править его нельзя");
@@ -832,12 +878,12 @@ describe("вкладка «Бюджет»: классификатор", () => {
     const other = { ...FILLED, id: 11, article: "4430_Разработка",
       counterparty: "Софт ООО", classifier: "МРГ" };
     const t = await mount(undefined, [other]);
-    assert.equal(t.$$("***REMOVED***t-op tbody tr[data-id]").length, 2, "до фильтра видны обе строки");
-    const titles = t.$$("***REMOVED***op-filters .fwrap .fbtn").map((b) => b.textContent);
+    assert.equal(t.$$("#t-op tbody tr[data-id]").length, 2, "до фильтра видны обе строки");
+    const titles = t.$$("#op-filters .fwrap .fbtn").map((b) => b.textContent);
     assert.ok(titles.some((title) => title.indexOf("Классификатор") >= 0),
       "у колонки должен быть свой фильтр");
 
-    const chip = t.$$("***REMOVED***op-filters .fwrap")[2];      // ЦФО, Статья, Классификатор
+    const chip = t.$$("#op-filters .fwrap")[2];      // ЦФО, Статья, Классификатор
     t.click(chip.querySelector(".fbtn"));
     const values = Array.from(chip.querySelectorAll(".fopt")).map((l) => l.textContent.trim());
     assert.ok(values.indexOf("МРК") >= 0, "в списке есть значение из строк");
@@ -847,7 +893,7 @@ describe("вкладка «Бюджет»: классификатор", () => {
     box.checked = true;
     t.fire(box, "change");
     await settle(t.window, 30);
-    const shown = t.$$("***REMOVED***t-op tbody tr[data-id]").map((tr) => tr.getAttribute("data-id"));
+    const shown = t.$$("#t-op tbody tr[data-id]").map((tr) => tr.getAttribute("data-id"));
     assert.deepEqual(shown, ["10"], "остаётся только строка с МРК");
   });
 });
@@ -860,8 +906,8 @@ describe("вкладка «Бюджет»: выгрузка", () => {
     const t = await mount();
     const before = t.window.location.href;
 
-    t.click(t.$("***REMOVED***op-template"));
-    t.click(t.$("***REMOVED***op-export"));
+    t.click(t.$("#op-template"));
+    t.click(t.$("#op-export"));
     await settle(t.window);
 
     const downloads = t.calls.filter((c) => c.kind === "download");
@@ -879,15 +925,15 @@ describe("вкладка «Бюджет»: факт", () => {
      (как и давно скрытой .alert) равным flex. */
   it("финотделу оставляет выбор между бюджетом и фактом", async () => {
     const t = await mount();
-    assert.equal(t.$("***REMOVED***op-imp-fact").hidden, false);
-    assert.equal(t.$("***REMOVED***op-imp-fact-note").hidden, false);
+    assert.equal(t.$("#op-imp-fact").hidden, false);
+    assert.equal(t.$("#op-imp-fact-note").hidden, false);
   });
 
   it("руководителю ЦФО выбора «факт года» не даёт", async () => {
     const t = await mount([{ id: 1, name: IT }], [], { isFin: false });
-    assert.equal(t.$("***REMOVED***op-imp-fact").hidden, true);
-    assert.equal(t.$("***REMOVED***op-imp-fact-note").hidden, true);
-    assert.equal(t.$("***REMOVED***op-imp-plan").hidden, false, "бюджет он грузит как раньше");
+    assert.equal(t.$("#op-imp-fact").hidden, true);
+    assert.equal(t.$("#op-imp-fact-note").hidden, true);
+    assert.equal(t.$("#op-imp-plan").hidden, false, "бюджет он грузит как раньше");
     assert.equal(t.$('input[name="op-imp-kind"][value="plan"]').checked, true,
       "остаться выбранным должен бюджет, иначе загрузка уйдёт фактом и получит 403");
   });
@@ -895,7 +941,7 @@ describe("вкладка «Бюджет»: факт", () => {
   it("выгружает факт за базовый год — и руководителю тоже", async () => {
     const t = await mount([{ id: 1, name: IT }], [], { isFin: false });
     const before = t.window.location.href;
-    const button = t.$("***REMOVED***op-export-fact");
+    const button = t.$("#op-export-fact");
     assert.equal(button.hidden, false, "выгрузка факта доступна дирекции");
     assert.equal(button.textContent, "⭳ Выгрузить факт 2026");
 
@@ -965,7 +1011,7 @@ describe("вкладка «Бюджет»: расходы и вне бюджет
     const t = await mount([{ id: 1, name: IT }], [], {
       kpi: { outside_total: 6146625, outside_rows: 1, outside_cfo: 1, outside_pct: 0.02 },
     });
-    const tiles = t.$$("***REMOVED***op-kpis .kpi");
+    const tiles = t.$$("#op-kpis .kpi");
     assert.equal(tiles.length, 4, "плиток стало четыре");
     const outside = tiles[3];
     assert.match(outside.querySelector(".lbl").textContent, /Вне бюджета 2026/);
@@ -999,7 +1045,7 @@ describe("вкладка «Бюджет»: расходы и вне бюджет
 
   it("без перерасхода плитка не кричит", async () => {
     const t = await mount([{ id: 1, name: IT }]);
-    const outside = t.$$("***REMOVED***op-kpis .kpi")[3];
+    const outside = t.$$("#op-kpis .kpi")[3];
     assert.equal(outside.classList.contains("k-crit"), false);
     assert.match(outside.querySelector(".sub").textContent, /расхода без строки бюджета нет/);
   });
@@ -1013,7 +1059,7 @@ describe("вкладка «Бюджет»: расходы и вне бюджет
         outside_pct: 0.06,
       },
     });
-    const tile = t.$$("***REMOVED***op-kpis .kpi")[2];
+    const tile = t.$$("#op-kpis .kpi")[2];
     assert.match(tile.querySelector(".lbl").textContent, /^Факт 2026$/);
     assert.match(tile.querySelector(".val").textContent, /16,0 млн/);
     assert.match(tile.querySelector(".batt-note").textContent, /включая вне бюджета/);
@@ -1030,29 +1076,29 @@ describe("вкладка «Бюджет»: предпросмотр загруз
   };
   const putFiles = (t, names) => {
     // диалог выбора в jsdom не открыть, подкладываем список напрямую
-    Object.defineProperty(t.$("***REMOVED***op-import-file"), "files",
+    Object.defineProperty(t.$("#op-import-file"), "files",
       { value: names.map((name) => ({ name })), configurable: true });
   };
-  const boxes = (t) => t.$$("***REMOVED***op-import-cfo input[type=checkbox]");
+  const boxes = (t) => t.$$("#op-import-cfo input[type=checkbox]");
 
   it("галочки дирекций показываются только у факта", async () => {
     const t = await mount();
-    assert.equal(t.$("***REMOVED***op-import-cfo-wrap").hidden, true, "у бюджета выбора нет");
+    assert.equal(t.$("#op-import-cfo-wrap").hidden, true, "у бюджета выбора нет");
     pickFact(t);
-    assert.equal(t.$("***REMOVED***op-import-cfo-wrap").hidden, false);
-    const names = t.$$("***REMOVED***op-import-cfo label span").map((n) => n.textContent);
+    assert.equal(t.$("#op-import-cfo-wrap").hidden, false);
+    const names = t.$$("#op-import-cfo label span").map((n) => n.textContent);
     assert.deepEqual(names, [IT, HR], "перечислены все доступные дирекции");
     assert.ok(boxes(t).every((b) => !b.checked), "по умолчанию не отмечено ничего");
-    assert.match(t.$("***REMOVED***op-cfo-hint").textContent, /круг возьмётся из файлов/);
+    assert.match(t.$("#op-cfo-hint").textContent, /круг возьмётся из файлов/);
   });
 
   it("«все» и «ни одной» переключают отметки разом", async () => {
     const t = await mount();
     pickFact(t);
-    t.click(t.$("***REMOVED***op-cfo-all"));
+    t.click(t.$("#op-cfo-all"));
     assert.ok(boxes(t).every((b) => b.checked));
-    assert.match(t.$("***REMOVED***op-cfo-hint").textContent, /отмечено 2/);
-    t.click(t.$("***REMOVED***op-cfo-none"));
+    assert.match(t.$("#op-cfo-hint").textContent, /отмечено 2/);
+    t.click(t.$("#op-cfo-none"));
     assert.ok(boxes(t).every((b) => !b.checked));
   });
 
@@ -1062,7 +1108,7 @@ describe("вкладка «Бюджет»: предпросмотр загруз
     boxes(t)[1].checked = true;          // только вторая дирекция
     putFiles(t, ["ИТ.xlsx", "персонал.xlsx"]);
 
-    t.click(t.$("***REMOVED***op-import-check"));
+    t.click(t.$("#op-import-check"));
     await settle(t.window);
 
     const previews = t.calls.filter((c) => c.kind === "preview");
@@ -1076,15 +1122,15 @@ describe("вкладка «Бюджет»: предпросмотр загруз
     assert.equal(previews[0].year, 2026, "факт грузится за базовый год");
     assert.equal(t.calls.filter((c) => c.kind === "import").length, 0,
       "проверка ничего не записывает");
-    assert.equal(t.$("***REMOVED***op-import-preview").hidden, false);
+    assert.equal(t.$("#op-import-preview").hidden, false);
   });
 
   it("загрузка отправляет пачку файлов и отметки", async () => {
     const t = await mount();
     pickFact(t);
-    t.click(t.$("***REMOVED***op-cfo-all"));
+    t.click(t.$("#op-cfo-all"));
     putFiles(t, ["а.xlsx", "б.xlsx", "в.xlsx"]);
-    t.click(t.$("***REMOVED***op-import-run"));
+    t.click(t.$("#op-import-run"));
     await settle(t.window);
 
     const imports = t.calls.filter((c) => c.kind === "import");
@@ -1096,10 +1142,10 @@ describe("вкладка «Бюджет»: предпросмотр загруз
   it("бюджет пачкой не отправляет", async () => {
     const t = await mount();
     putFiles(t, ["а.xlsx", "б.xlsx"]);        // вид загрузки остался «бюджет»
-    t.click(t.$("***REMOVED***op-import-run"));
+    t.click(t.$("#op-import-run"));
     await settle(t.window);
     assert.equal(t.calls.filter((c) => c.kind === "import").length, 0);
-    assert.match(t.$("***REMOVED***op-import-note").textContent, /по одному файлу/);
+    assert.match(t.$("#op-import-note").textContent, /по одному файлу/);
   });
 
   it("предпросмотр называет числа, по которым видно промах", async () => {
@@ -1122,10 +1168,10 @@ describe("вкладка «Бюджет»: предпросмотр загруз
     });
     pickFact(t);
     putFiles(t, ["ИТ.xlsx"]);
-    t.click(t.$("***REMOVED***op-import-check"));
+    t.click(t.$("#op-import-check"));
     await settle(t.window);
 
-    const text = t.$("***REMOVED***op-import-preview").textContent;
+    const text = t.$("#op-import-preview").textContent;
     assert.match(text, /ИТ\.xlsx/, "файл назван поимённо");
     /* Замена показывается по каждой дирекции отдельно и с датой прошлой
        загрузки: иначе старый общий файл молча затирает свежую отдельную. */
@@ -1141,14 +1187,348 @@ describe("вкладка «Бюджет»: предпросмотр загруз
     const t = await mount();
     pickFact(t);
     putFiles(t, ["план-факт.xlsx"]);
-    t.click(t.$("***REMOVED***op-import-check"));
+    t.click(t.$("#op-import-check"));
     await settle(t.window);
-    assert.equal(t.$("***REMOVED***op-import-preview").hidden, false);
+    assert.equal(t.$("#op-import-preview").hidden, false);
 
     const box = boxes(t)[0];
     box.checked = true;
     t.fire(box, "change");
-    assert.equal(t.$("***REMOVED***op-import-preview").hidden, true,
+    assert.equal(t.$("#op-import-preview").hidden, true,
       "предпросмотр относился к прежнему кругу");
+  });
+});
+
+/* Детализация и комментарий — две колонки, а не одна на выбор. Прежде
+   показывалась одна, и что в ней лежит, решал `detail_source` дирекции:
+   у ИТ детализация, у остальных комментарий. Увидеть их рядом было нельзя
+   вовсе, а комментарий печатался под шапкой «Детализация». */
+describe("вкладка «Бюджет»: детализация и комментарий", () => {
+  const IT_BOTH = {
+    ...FILLED, id: 12, detail: "Платформа", comment: "Куплено сверх плана",
+  };
+  let t;
+  before(async () => { t = await mount(undefined, [HR_ROW, IT_BOTH]); });
+
+  it("держит их разными колонками, а последнюю подписывает планом базового года", () => {
+    const head = t.$$("#op-head th").map((n) => n.textContent);
+    assert.deepEqual(head.slice(0, 7),
+      ["№", "Статья оборотов", "Классификатор", "Контрагент", "Договор",
+        "Детализация", "Комментарий"]);
+    assert.equal(head[head.length - 1], "План 2026",
+      "в разделе факта в этой колонке план строки, а не факт — подпись должна это говорить");
+  });
+
+  it("у дирекции со своей детализацией показывает и то и другое", () => {
+    const row = t.$('#t-op tbody tr[data-id="12"]');
+    assert.equal(row.querySelector('td[data-f="detail"]').textContent, "Платформа");
+    assert.equal(row.querySelector('td[data-f="comment"]').textContent, "Куплено сверх плана",
+      "прежде комментарий у ИТ не был виден нигде");
+  });
+
+  it("у остальных комментарий стоит в своей колонке, а не в «Детализации»", () => {
+    const row = t.$('#t-op tbody tr[data-id="11"]');
+    assert.equal(row.querySelector('td[data-f="detail"]').textContent, "",
+      "своей детализации у этой дирекции нет");
+    assert.equal(row.querySelector('td[data-f="comment"]').textContent, "Английский");
+  });
+
+  it("правку комментария шлёт в поле комментария", async () => {
+    t.click(t.$("#op-edit-mode"));
+    const cell = t.$('#t-op tbody tr[data-id="11"] td[data-f="comment"]');
+    t.clickCell(cell);
+    cell.textContent = "Английский для отдела";
+    cell.dispatchEvent(new t.window.FocusEvent("focusout", { bubbles: true }));
+    await settle(t.window);
+    assert.equal(t.lastPatch("comment").payload.comment, "Английский для отдела");
+    assert.equal(t.lastPatch("detail"), undefined, "детализацию правка не трогает");
+  });
+});
+
+/* «Наличие в бюджете»: расход либо идёт за счёт строки плана, либо не идёт
+   вовсе. Колонка расхода, а не строки плана — у строк плана в ней прочерк. */
+describe("вкладка «Бюджет»: наличие в бюджете", () => {
+  const SPENT = {
+    ...FILLED, id: 30, plan_year: 1000000,
+    spends: [{ article: "4411_Оборудование", counterparty: "Альфа ООО",
+               contract: "Договор №б/н", detail: "курьер", comment: "",
+               months: [450000, ...Array(MONTHS - 1).fill(0)], total: 450000 }],
+  };
+  const OUTSIDE = {
+    cfo_id: 1, cfo_name: IT, article: "4999_Непредвиденное", counterparty: "Омега ООО",
+    contract: "", detail: "вне плана", detail_source: "detail", out_of_budget: 1,
+    months: [7000, ...Array(MONTHS - 1).fill(0)], total: 7000,
+  };
+  const openFact = async (t) => {
+    t.click(t.$$("tr.year-row").find((tr) => /факт/.test(tr.textContent)));
+    await settle(t.window);
+  };
+  const colIndex = (t) => t.$$("#op-head th").findIndex(
+    (n) => n.textContent === "Наличие в бюджете");
+
+  it("стоит отдельной колонкой, а у строки плана в ней прочерк", async () => {
+    const t = await mount([{ id: 1, name: IT }], [SPENT]);
+    const i = colIndex(t);
+    assert.ok(i > 0, "колонка есть в шапке");
+    const row = t.$('#t-op tbody tr[data-id="30"]');
+    assert.equal(row.children[i].textContent, "—", "строка плана и есть бюджет");
+  });
+
+  it("у расхода под строкой пишет, за счёт какой строки он идёт", async () => {
+    const t = await mount([{ id: 1, name: IT }], [SPENT]);
+    t.click(t.$('tr[data-id="30"] .no-cell button[title^="Расходы"]'));
+    await settle(t.window);
+    const cell = t.$("tr.spend-row").children[colIndex(t)];
+    assert.match(cell.textContent, /^В бюджете, за счёт строки \d+/);
+  });
+
+  it("у расхода без строки плана пишет «Вне бюджета»", async () => {
+    const t = await mount([{ id: 1, name: IT }], [], { outside: [OUTSIDE] });
+    await openFact(t);
+    const row = t.$$("#t-op tbody tr").find((tr) => /Омега/.test(tr.textContent));
+    assert.ok(row, "расход показан строкой в блоке «ВНЕ БЮДЖЕТА»");
+    assert.match(row.children[colIndex(t)].textContent, /^Вне бюджета/);
+  });
+
+  it("менять даёт финотделу и не даёт руководителю", async () => {
+    const fin = await mount([{ id: 1, name: IT }], [], { outside: [OUTSIDE] });
+    await openFact(fin);
+    const row = (t) => t.$$("#t-op tbody tr").find((tr) => /Омега/.test(tr.textContent));
+    assert.ok(row(fin).children[colIndex(fin)].querySelector("button"),
+      "финотделу есть чем переставить расход");
+
+    const cfo = await mount([{ id: 1, name: IT }], [], { outside: [OUTSIDE], isFin: false });
+    await openFact(cfo);
+    assert.equal(row(cfo).children[colIndex(cfo)].querySelector("button"), null,
+      "руководителю привязку менять нельзя — решение 16.10.2026");
+  });
+
+  it("по выбору строки шлёт расход на сервер полями, а не идентификатором", async () => {
+    const t = await mount([{ id: 1, name: IT }], [], { outside: [OUTSIDE] });
+    await openFact(t);
+    const cell = t.$$("#t-op tbody tr")
+      .find((tr) => /Омега/.test(tr.textContent)).children[colIndex(t)];
+    t.click(cell.querySelector("button"));
+    const pick = cell.querySelector("select");
+    assert.equal(pick.value, "out", "расход сейчас вне бюджета");
+    pick.value = "in";
+    t.fire(pick, "change");                 // поле со списком показывается только у «В бюджете»
+    const input = cell.querySelector("input.f-in");
+    assert.ok(input, "у «В бюджете» есть поле выбора строки");
+    t.focus(input);
+    const option = t.$$(".copt").find((n) => /4411_Оборудование/.test(n.textContent));
+    assert.ok(option, "в списке строки плана этой дирекции");
+    option.dispatchEvent(new t.window.MouseEvent("mousedown", { bubbles: true }));
+    await settle(t.window);
+
+    const sent = t.calls.filter((c) => c.kind === "factLink").pop();
+    assert.ok(sent, "запрос ушёл");
+    assert.equal(sent.payload.cfo_id, 1);
+    assert.equal(sent.payload.article, "4999_Непредвиденное");
+    assert.equal(sent.payload.counterparty, "Омега ООО");
+    assert.equal(sent.payload.row_id, 20, "строка базового года, выбранная в списке");
+    assert.equal(sent.payload.year, 2026);
+  });
+});
+
+/* ---------- удаление пачкой ---------- */
+
+/* Удалять строки по одной стало дорого: в плане их сотни. Отсюда две кнопки —
+   «Удалить отмеченные» по галочкам в колонке «№» и «Очистить всё» на весь
+   бюджет года. Обе спрашивают, обе уходят на сервер одним запросом. */
+describe("вкладка «Бюджет»: удаление пачкой", () => {
+  const more = [
+    { ...FILLED, id: 41, row_no: 41, article: "4412_Связь", counterparty: "Бета ООО",
+      plan_year: 60000, months: [60000, ...Array(MONTHS - 1).fill(0)] },
+    { ...FILLED, id: 42, row_no: 42, article: "4413_Софт", counterparty: "Гамма ООО",
+      plan_year: 30000, months: [30000, ...Array(MONTHS - 1).fill(0)] },
+  ];
+  // порядок на экране по статьям: 10 (4411), 41 (4412), 42 (4413)
+
+  const picks = (t) => t.$$("#t-op tbody input.row-pick");
+  const pick = (t, id) => t.$(`#t-op tbody tr[data-id="${id}"] input.row-pick`);
+  /* Клик по галочке: переключает её сам браузер (jsdom это умеет), и
+     обработчик читает уже новое состояние. Руками checked не трогаем —
+     вышло бы два переключения на один клик. */
+  const tick = (t, id, shift = false) => {
+    const box = pick(t, id);
+    box.dispatchEvent(new t.window.MouseEvent("click",
+      { bubbles: true, cancelable: true, shiftKey: shift }));
+    return box;
+  };
+
+  const ready = async () => {
+    const t = await mount([{ id: 1, name: IT }], more);
+    t.click(t.$("#op-edit-mode"));                 // галочки живут вместе с правкой
+    return t;
+  };
+
+  it("без правки галочек не показывает, а «Очистить всё» держит наготове", async () => {
+    const t = await mount([{ id: 1, name: IT }], more);
+    assert.equal(picks(t).length, 0, "таблица читается — отмечать нечего");
+    assert.equal(t.$("#op-del-selected").hidden, true);
+    assert.equal(t.$("#op-clear-all").hidden, false,
+      "очистка года — отдельное действие с вопросом, карандаша не требует");
+  });
+
+  it("в правке ставит галочку каждой строке плана и ни одной — базе", async () => {
+    const t = await ready();
+    assert.equal(picks(t).length, 3, "три строки плана");
+    const base = t.$$("#t-op tr.year-row").find((tr) => /2026/.test(tr.textContent));
+    t.click(base);
+    await settle(t.window, 40);
+    assert.equal(t.$('#t-op tbody tr[data-id="20"] input.row-pick'), null,
+      "прошлый год правке не подлежит — и удалению тоже");
+  });
+
+  it("считает отмеченные в подписи кнопки", async () => {
+    const t = await ready();
+    assert.equal(t.$("#op-del-selected").hidden, true, "пока ничего не отмечено");
+    tick(t, 10);
+    assert.equal(t.$("#op-del-selected").hidden, false);
+    assert.match(t.$("#op-del-selected").textContent, /\(1\)/);
+    tick(t, 42);
+    assert.match(t.$("#op-del-selected").textContent, /\(2\)/);
+    assert.ok(t.$('#t-op tbody tr[data-id="42"]').classList.contains("is-picked"),
+      "отмеченная строка подкрашена");
+    tick(t, 42);
+    assert.match(t.$("#op-del-selected").textContent, /\(1\)/, "галочка снимается");
+  });
+
+  it("по Shift отмечает всё между прошлой галочкой и нынешней", async () => {
+    const t = await ready();
+    tick(t, 10);
+    tick(t, 42, true);
+    assert.match(t.$("#op-del-selected").textContent, /\(3\)/,
+      "строка 41 стоит между ними на экране и тоже отмечена");
+    assert.equal(pick(t, 41).checked, true);
+  });
+
+  it("шлёт отмеченные одним запросом и называет их в вопросе", async () => {
+    const t = await ready();
+    tick(t, 10);
+    tick(t, 42);
+    t.click(t.$("#op-del-selected"));
+    await settle(t.window, 80);
+
+    const sent = t.calls.filter((c) => c.kind === "deleteRows");
+    assert.equal(sent.length, 1, "один запрос, а не по строке на каждую");
+    assert.deepEqual(sent[0].ids.sort((a, b) => a - b), [10, 42]);
+    assert.equal(sent[0].year, 2027, "удаляется планируемый год");
+    assert.match(t.asked.at(-1), /Удалить отмеченные строки — 2 строки/);
+    assert.equal(t.$('#t-op tbody tr[data-id="10"]'), null, "строки ушли из таблицы");
+    assert.equal(t.$("#op-del-selected").hidden, true, "отмечать больше нечего");
+  });
+
+  it("отказ в вопросе не удаляет ничего", async () => {
+    const t = await ready();
+    tick(t, 41);
+    t.answer(false);
+    t.click(t.$("#op-del-selected"));
+    await settle(t.window, 60);
+    assert.equal(t.calls.filter((c) => c.kind === "deleteRows").length, 0);
+    assert.ok(t.$('#t-op tbody tr[data-id="41"]'), "строка на месте");
+    t.answer(true);
+  });
+
+  it("«Очистить всё» называет бюджет года и уносит все строки", async () => {
+    const t = await ready();
+    t.click(t.$("#op-clear-all"));
+    await settle(t.window, 80);
+
+    assert.match(t.asked.at(-1), /Удалить все записи «Бюджета 2027 года»\?/);
+    assert.match(t.asked.at(-1), /Под удаление попадает: 3 строки/);
+    const sent = t.calls.filter((c) => c.kind === "deleteRows");
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].ids.sort((a, b) => a - b), [10, 41, 42]);
+    assert.equal(t.$("#t-op tbody tr[data-id]"), null, "план пуст");
+  });
+
+  it("под фильтром очищает только показанное и предупреждает об этом", async () => {
+    const t = await ready();
+    const chip = t.$$("#op-filters .fwrap")[1];          // фильтр «Статья оборотов»
+    t.click(chip.querySelector(".fbtn"));
+    const option = Array.from(chip.querySelectorAll(".fopt"))
+      .find((label) => label.textContent.indexOf("4413_Софт") >= 0);
+    const box = option.querySelector("input");
+    box.checked = true;
+    t.fire(box, "change");
+
+    t.click(t.$("#op-clear-all"));
+    await settle(t.window, 80);
+    assert.match(t.asked.at(-1), /Под удаление попадает: 1 строка/);
+    assert.match(t.asked.at(-1), /Стоит фильтр: 2 строки останутся/);
+    const sent = t.calls.filter((c) => c.kind === "deleteRows").pop();
+    assert.deepEqual(sent.ids, [42], "скрытые фильтром строки удалять не просили");
+  });
+
+  it("снимает отметки со строк, ушедших под фильтр, и не возвращает их", async () => {
+    const t = await ready();
+    tick(t, 10);
+    const chip = t.$$("#op-filters .fwrap")[1];
+    t.click(chip.querySelector(".fbtn"));
+    const box = Array.from(chip.querySelectorAll(".fopt"))
+      .find((label) => label.textContent.indexOf("4413_Софт") >= 0)
+      .querySelector("input");
+    box.checked = true;
+    t.fire(box, "change");
+    assert.equal(t.$("#op-del-selected").hidden, true,
+      "отмеченной строки на экране нет — и кнопка не предлагает её удалить");
+
+    box.checked = false;
+    t.fire(box, "change");
+    /* Главное здесь — вторая половина: отметка должна сняться насовсем, а не
+       ждать невидимкой. Иначе фильтр прятал бы выбор, а снятый фильтр
+       возвращал бы его — и «Удалить отмеченные» уносило бы забытое. */
+    assert.equal(pick(t, 10).checked, false, "забытая отметка не воскресает");
+    assert.equal(t.$("#op-del-selected").hidden, true);
+  });
+
+  it("выключенный карандаш снимает отметки", async () => {
+    const t = await ready();
+    tick(t, 10);
+    t.click(t.$("#op-edit-mode"));                 // правка закрыта
+    await settle(t.window, 40);
+    assert.equal(t.$("#op-del-selected").hidden, true);
+    t.click(t.$("#op-edit-mode"));                 // и обратно
+    await settle(t.window, 40);
+    assert.equal(pick(t, 10).checked, false, "отметки не ждут следующего раза");
+  });
+});
+
+/* ---------- страница не прыгает ---------- */
+
+describe("вкладка «Бюджет»: новая строка не дёргает страницу", () => {
+  /* Строку заводят кнопкой «+ расход», и она встаёт сверху блока. Прежде её
+     показывали через scrollIntoView, а тот прокручивает всех предков разом,
+     включая окно: человек работал внизу длинной таблицы, а страница уезжала
+     вверх. Двигать надо только контейнер таблицы — он для того и со своей
+     прокруткой. Замерено в живом Chrome: scrollY 433 → 241. */
+  async function addRow() {
+    const t = await mount([{ id: 1, name: IT }]);
+    const calls = { intoView: 0, focus: [] };
+    t.window.Element.prototype.scrollIntoView = function () { calls.intoView += 1; };
+    const realFocus = t.window.HTMLElement.prototype.focus;
+    t.window.HTMLElement.prototype.focus = function (opts) {
+      if (this.classList && this.classList.contains("f-in")) calls.focus.push(opts);
+      return realFocus.call(this, opts);
+    };
+    t.click(t.$("#op-add-row"));
+    await settle(t.window, 120);
+    return { t, calls };
+  }
+
+  it("не зовёт scrollIntoView, который тянет за собой окно", async () => {
+    const { t, calls } = await addRow();
+    assert.ok(t.$('#t-op tbody tr[data-id="99"]'), "строка заведена");
+    assert.equal(calls.intoView, 0,
+      "прокручиваем контейнер таблицы, а не всех предков вместе со страницей");
+  });
+
+  it("ставит курсор в статью, не прокручивая к ней страницу", async () => {
+    const { calls } = await addRow();
+    assert.equal(calls.focus.length, 1, "курсор уходит в поле статьи");
+    assert.equal(calls.focus[0] && calls.focus[0].preventScroll, true,
+      "фокус сам по себе тоже прокручивает — просим браузер этого не делать");
   });
 });

@@ -57,7 +57,7 @@ def _ids_text(ids) -> str:
     return ",".join(str(int(i)) for i in ids)
 
 
-***REMOVED*** ---------- вход ----------
+# ---------- вход ----------
 
 @router.get("/auth/state")
 def state(request: Request) -> dict:
@@ -134,7 +134,7 @@ def change_password(payload: PasswordChangeIn, response: Response,
     return {"ok": True}
 
 
-***REMOVED*** ---------- учётные записи ----------
+# ---------- учётные записи ----------
 
 @router.get("/users")
 def list_users(u: auth.User = Depends(user)) -> list[dict]:
@@ -183,7 +183,7 @@ def update_user(login: str, payload: UserPatch, u: auth.User = Depends(user)) ->
         (payload.name.strip() if payload.name else row["name"], role, cfo_ids, active, login),
     )
     if not active or role != row["role"] or cfo_ids != row["cfo_ids"]:
-        auth.drop_sessions_of(login)         ***REMOVED*** права изменились — пусть зайдёт заново
+        auth.drop_sessions_of(login)         # права изменились — пусть зайдёт заново
     db.log(u.name, "Изменена учётная запись", login, "роль " + role)
     return _public(db.query_one("SELECT * FROM app_user WHERE login = ?", (login,)))
 

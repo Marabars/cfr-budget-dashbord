@@ -20,7 +20,7 @@
 
   function renderMapping(info) {
     var card = document.getElementById("mapping-card");
-    var body = document.querySelector("***REMOVED***t-map tbody");
+    var body = document.querySelector("#t-map tbody");
     U.clear(body);
     card.hidden = false;
 
@@ -160,7 +160,7 @@
   }
 
   function renderImports(items) {
-    var body = document.querySelector("***REMOVED***t-imports tbody");
+    var body = document.querySelector("#t-imports tbody");
     U.clear(body);
     if (!items.length) {
       body.appendChild(U.empty(6, "Загрузок ещё не было."));

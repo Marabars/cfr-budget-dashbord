@@ -4,70 +4,70 @@
 
 :root {
   color-scheme: light;
-  --plane: ***REMOVED***F2F1F6;          /* фон страницы */
-  --surface: ***REMOVED***FFFFFF;        /* карточки и таблицы */
-  --raised: ***REMOVED***F7F6FB;         /* поля, вторичные кнопки */
-  --ink: ***REMOVED***14121C;            /* основной текст — почти чёрный */
-  --ink2: ***REMOVED***35314A;
-  --muted: ***REMOVED***5E5878;
-  --faint: ***REMOVED***9A95B5;
-  --border: ***REMOVED***DCD8EA;
-  --grid: ***REMOVED***EDEAF6;
-  --axis: ***REMOVED***BFB9D8;           /* border-hi */
+  --plane: #F2F1F6;          /* фон страницы */
+  --surface: #FFFFFF;        /* карточки и таблицы */
+  --raised: #F7F6FB;         /* поля, вторичные кнопки */
+  --ink: #14121C;            /* основной текст — почти чёрный */
+  --ink2: #35314A;
+  --muted: #5E5878;
+  --faint: #9A95B5;
+  --border: #DCD8EA;
+  --grid: #EDEAF6;
+  --axis: #BFB9D8;           /* border-hi */
   --hover: rgba(20, 18, 28, .045);
-  --accent: ***REMOVED***6A3FD8;
-  --accent-2: ***REMOVED***7549E8;
+  --accent: #6A3FD8;
+  --accent-2: #7549E8;
   --accent-soft: rgba(117, 73, 232, .12);
-  --good: ***REMOVED***1F9E90;
-  --good-ink: ***REMOVED***167C71;
-  --warning: ***REMOVED***9A6C46;
-  --serious: ***REMOVED***C4703A;
-  --critical: ***REMOVED***C62828;
+  --good: #1F9E90;
+  --good-ink: #167C71;
+  --warning: #9A6C46;
+  --serious: #C4703A;
+  --critical: #C62828;
   --crit-bg: rgba(198, 40, 40, .10);
-  --hm-0: ***REMOVED***ECE9F5;
-  --hm-b1: ***REMOVED***D6F0EC; --hm-b2: ***REMOVED***A5DDD5; --hm-b3: ***REMOVED***5FB3A8; --hm-b4: ***REMOVED***1F8478;
-  --hm-r1: ***REMOVED***FBDCDC; --hm-r2: ***REMOVED***F0AEAE; --hm-r3: ***REMOVED***DC7070; --hm-r4: ***REMOVED***B32F2F;
-  --hm-ink-3: ***REMOVED***FFFFFF; --hm-ink-4: ***REMOVED***FFFFFF;
-  /* год в работе — светло-оранжевый из тёплой ветки палитры (--serious ***REMOVED***C4703A),
+  --hm-0: #ECE9F5;
+  --hm-b1: #D6F0EC; --hm-b2: #A5DDD5; --hm-b3: #5FB3A8; --hm-b4: #1F8478;
+  --hm-r1: #FBDCDC; --hm-r2: #F0AEAE; --hm-r3: #DC7070; --hm-r4: #B32F2F;
+  --hm-ink-3: #FFFFFF; --hm-ink-4: #FFFFFF;
+  /* год в работе — светло-оранжевый из тёплой ветки палитры (--serious #C4703A),
      прошлый год — нейтральный серый: он только справка */
-  --year-active: ***REMOVED***FDF0E4;
-  --year-active-line: ***REMOVED***C4703A;
-  --year-past: ***REMOVED***ECECEF;
-  --year-past-line: ***REMOVED***9A97A6;
+  --year-active: #FDF0E4;
+  --year-active-line: #C4703A;
+  --year-past: #ECECEF;
+  --year-past-line: #9A97A6;
   --shadow: rgba(23, 20, 43, .18);
   --r-sm: 5px; --r: 8px; --r-lg: 12px;
 }
 /* тёмная тема — по явному переключателю */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --plane: ***REMOVED***0A0814;          /* bg-deep */
-  --surface: ***REMOVED***13112A;        /* bg-surface */
-  --raised: ***REMOVED***1C1A35;         /* bg-raised — поля, вторичные кнопки */
-  --ink: ***REMOVED***E5E3EB;
-  --ink2: ***REMOVED***E4E0F2;
-  --muted: ***REMOVED***FFFFFF;
-  --faint: ***REMOVED***6B6592;
-  --border: ***REMOVED***2E2A4A;
-  --grid: ***REMOVED***241F3F;
-  --axis: ***REMOVED***433E67;           /* border-hi */
+  --plane: #0A0814;          /* bg-deep */
+  --surface: #13112A;        /* bg-surface */
+  --raised: #1C1A35;         /* bg-raised — поля, вторичные кнопки */
+  --ink: #E5E3EB;
+  --ink2: #E4E0F2;
+  --muted: #FFFFFF;
+  --faint: #6B6592;
+  --border: #2E2A4A;
+  --grid: #241F3F;
+  --axis: #433E67;           /* border-hi */
   --hover: rgba(255, 255, 255, .035);
-  --accent: ***REMOVED***7549E8;
-  --accent-2: ***REMOVED***8A62F0;
+  --accent: #7549E8;
+  --accent-2: #8A62F0;
   --accent-soft: rgba(117, 73, 232, .16);
-  --good: ***REMOVED***82D6CC;           /* teal */
-  --good-ink: ***REMOVED***82D6CC;
-  --warning: ***REMOVED***BD9375;        /* warm */
-  --serious: ***REMOVED***E09A5F;
-  --critical: ***REMOVED***F48A8A;
+  --good: #82D6CC;           /* teal */
+  --good-ink: #82D6CC;
+  --warning: #BD9375;        /* warm */
+  --serious: #E09A5F;
+  --critical: #F48A8A;
   --crit-bg: rgba(198, 40, 40, .15);
-  --hm-0: ***REMOVED***232042;
-  --hm-b1: ***REMOVED***1D3D3A; --hm-b2: ***REMOVED***2C5C56; --hm-b3: ***REMOVED***4A8F86; --hm-b4: ***REMOVED***82D6CC;
-  --hm-r1: ***REMOVED***4A1F1F; --hm-r2: ***REMOVED***7A2E2E; --hm-r3: ***REMOVED***B04545; --hm-r4: ***REMOVED***F48A8A;
-  --hm-ink-3: ***REMOVED***E5E3EB; --hm-ink-4: ***REMOVED***0A0814;
-  --year-active: ***REMOVED***3A2A1C;
-  --year-active-line: ***REMOVED***E09A5F;
-  --year-past: ***REMOVED***23212E;
-  --year-past-line: ***REMOVED***6B6592;
+  --hm-0: #232042;
+  --hm-b1: #1D3D3A; --hm-b2: #2C5C56; --hm-b3: #4A8F86; --hm-b4: #82D6CC;
+  --hm-r1: #4A1F1F; --hm-r2: #7A2E2E; --hm-r3: #B04545; --hm-r4: #F48A8A;
+  --hm-ink-3: #E5E3EB; --hm-ink-4: #0A0814;
+  --year-active: #3A2A1C;
+  --year-active-line: #E09A5F;
+  --year-past: #23212E;
+  --year-past-line: #6B6592;
   --shadow: rgba(0, 0, 0, .45);
 }
 
@@ -93,7 +93,7 @@ select, input, textarea { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border);
   padding: 10px 20px 0;
 }
-:root[data-theme="dark"] .top { background: ***REMOVED***070512; }
+:root[data-theme="dark"] .top { background: #070512; }
 .top::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
   background: linear-gradient(90deg, var(--accent) 0%, rgba(117,73,232,.35) 35%, transparent 70%);
@@ -203,15 +203,15 @@ tbody tr:hover { background: var(--hover); }
 .clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* закреплённые первые колонки в широкой таблице ЦФО */
-***REMOVED***t-cfo th:nth-child(1), ***REMOVED***t-cfo td:nth-child(1),
-***REMOVED***t-cfo th:nth-child(2), ***REMOVED***t-cfo td:nth-child(2) {
+#t-cfo th:nth-child(1), #t-cfo td:nth-child(1),
+#t-cfo th:nth-child(2), #t-cfo td:nth-child(2) {
   position: sticky; background: var(--surface); z-index: 1;
 }
-***REMOVED***t-cfo th:nth-child(1), ***REMOVED***t-cfo td:nth-child(1) { left: 0; min-width: 72px; }
-***REMOVED***t-cfo th:nth-child(2), ***REMOVED***t-cfo td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--grid); }
-***REMOVED***t-cfo thead th:nth-child(1), ***REMOVED***t-cfo thead th:nth-child(2) { z-index: 3; }
-***REMOVED***t-cfo tr:hover td:nth-child(1), ***REMOVED***t-cfo tr:hover td:nth-child(2) { background: var(--plane); }
-***REMOVED***t-cfo tr.group td { position: static; }
+#t-cfo th:nth-child(1), #t-cfo td:nth-child(1) { left: 0; min-width: 72px; }
+#t-cfo th:nth-child(2), #t-cfo td:nth-child(2) { left: 72px; box-shadow: 1px 0 0 var(--grid); }
+#t-cfo thead th:nth-child(1), #t-cfo thead th:nth-child(2) { z-index: 3; }
+#t-cfo tr:hover td:nth-child(1), #t-cfo tr:hover td:nth-child(2) { background: var(--plane); }
+#t-cfo tr.group td { position: static; }
 tfoot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--raised); }
 tr.group td {
   background: var(--raised); font-weight: 700; font-size: 14px;
@@ -274,7 +274,7 @@ label.f { display: block; font-size: 13px; font-weight: 600; color: var(--muted)
   transition: background 120ms, box-shadow 120ms, border-color 120ms;
 }
 .btn:hover { background: var(--border); border-color: var(--axis); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: ***REMOVED***fff; font-weight: 500; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 500; }
 .btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); box-shadow: 0 0 0 4px var(--accent-soft); }
 .btn.sm { padding: 5px 12px; font-size: 14px; }
 .row-actions { display: flex; gap: 6px; }
@@ -377,11 +377,11 @@ table.editing .mini { visibility: visible; color: var(--critical); }
   border: 1px solid var(--border); border-radius: 14px; padding: 4px 12px;
   font-size: 15px; background: var(--raised); color: var(--ink2);
 }
-.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: ***REMOVED***fff; font-weight: 600; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 .chip:hover { border-color: var(--axis); color: var(--ink); }
 .legend-inline { font-size: 14px; color: var(--muted); display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
 .mono-s { font-size: 14px; color: var(--muted); font-weight: 700; }
-/* всё, что раньше было приглушённым (***REMOVED***ADA6CF), теперь жирное белое */
+/* всё, что раньше было приглушённым (#ADA6CF), теперь жирное белое */
 .kpi .lbl, .card > header .sub, .dim, .legend-inline, label.f,
 .cc-sub, .cc-meta, .cc-foot, .hm td.fc, .mini { font-weight: 700; }
 
@@ -392,8 +392,8 @@ tbody tr:hover .cfo-name { color: var(--accent-2); }
 .pick { cursor: pointer; }
 .pick[aria-selected="true"] { background: var(--accent-soft); }
 .batt-seg { transition: background 160ms; }
-***REMOVED***t-cfo tbody tr.manual td { background: rgba(117, 73, 232, .07); }
-***REMOVED***t-cfo tbody tr.manual td:nth-child(1) { box-shadow: inset 3px 0 0 var(--accent-2); }
+#t-cfo tbody tr.manual td { background: rgba(117, 73, 232, .07); }
+#t-cfo tbody tr.manual td:nth-child(1) { box-shadow: inset 3px 0 0 var(--accent-2); }
 
 /* ---------- справочник ЦФО: карточки дублей ---------- */
 .dup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 12px; }
@@ -406,8 +406,8 @@ tbody tr:hover .cfo-name { color: var(--accent-2); }
 .dup-arrow { font-size: 20px; color: var(--accent-2); font-weight: 700; }
 .dup-card .cc-title { font-size: 16px; }
 .dup-card .row-btns { margin-top: 12px; }
-***REMOVED***t-registry .chip { display: inline-flex; align-items: center; gap: 4px; }
-***REMOVED***t-registry .chip .mini { visibility: visible; }
+#t-registry .chip { display: inline-flex; align-items: center; gap: 4px; }
+#t-registry .chip .mini { visibility: visible; }
 @media (max-width: 700px) {
   .dup-pair { grid-template-columns: 1fr; }
   .dup-arrow { transform: rotate(90deg); }
@@ -467,7 +467,7 @@ thead th { border-right-color: var(--axis); }
 .fbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); background: var(--accent-soft); }
 .fcount {
   min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
-  background: var(--accent); color: ***REMOVED***fff; font-size: 12px; font-weight: 700;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .fcaret { font-size: 11px; color: var(--muted); }
@@ -525,41 +525,55 @@ thead th { border-right-color: var(--axis); }
   border-color: var(--year-past-line); color: var(--muted); background: var(--year-past);
 }
 /* строки прошлого года приглушены: это справка, а не то, что сейчас правят */
-***REMOVED***t-op tr.y-past td { color: var(--ink2); }
+#t-op tr.y-past td { color: var(--ink2); }
 /* Новая строка: заведена кнопкой «+ расход» и ещё не заполнена. Подсветка
    акцентным фиолетовым — глазу сразу видно, где продолжать. Первые две колонки
    закреплены и красятся своим фоном, поэтому им цвет задаём отдельно. */
-***REMOVED***t-op tr.is-new td,
-***REMOVED***t-op tr.is-new td:nth-child(1),
-***REMOVED***t-op tr.is-new td:nth-child(2) { background: var(--accent-soft); }
-***REMOVED***t-op tr.is-new td:first-child { box-shadow: inset 3px 0 0 var(--accent-2); }
-***REMOVED***t-op tr.is-new:hover td:nth-child(1),
-***REMOVED***t-op tr.is-new:hover td:nth-child(2) { background: var(--accent-soft); }
+#t-op tr.is-new td,
+#t-op tr.is-new td:nth-child(1),
+#t-op tr.is-new td:nth-child(2) { background: var(--accent-soft); }
+#t-op tr.is-new td:first-child { box-shadow: inset 3px 0 0 var(--accent-2); }
+#t-op tr.is-new:hover td:nth-child(1),
+#t-op tr.is-new:hover td:nth-child(2) { background: var(--accent-soft); }
+
+/* Отмеченная под удаление строка: тот же приём, что и у новой, но красным —
+   первые две колонки закреплены и красятся своим фоном, поэтому им отдельно. */
+#t-op tr.is-picked td,
+#t-op tr.is-picked td:nth-child(1),
+#t-op tr.is-picked td:nth-child(2) { background: var(--crit-bg); }
+#t-op tr.is-picked td:first-child { box-shadow: inset 3px 0 0 var(--critical); }
+#t-op tr.is-picked:hover td:nth-child(1),
+#t-op tr.is-picked:hover td:nth-child(2) { background: var(--crit-bg); }
+/* Галочка выбора стоит в колонке «№» слева от номера и не растягивает её. */
+#t-op input.row-pick { margin: 0; flex: none; cursor: pointer; }
+/* Кнопки, которые удаляют: красные по контуру, чтобы не нажать мимоходом. */
+.btn.danger { border-color: var(--critical); color: var(--critical); }
+.btn.danger:hover { background: var(--crit-bg); border-color: var(--critical); }
 
 /* Поля прямо в ячейке: списки статей, контрагентов и договоров у новой строки. */
-***REMOVED***t-op td.cell-pick { min-width: 210px; }
-***REMOVED***t-op td.cell-pick .f-in { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 14px; }
+#t-op td.cell-pick { min-width: 210px; }
+#t-op td.cell-pick .f-in { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 14px; }
 /* Сумма и раскладка — друг под другом. У ячеек таблицы white-space: nowrap,
    из-за чего select оставался на одной строке с полем и наезжал на соседние
    колонки; поэтому перенос здесь разрешаем явно и делаем оба поля блочными. */
-***REMOVED***t-op td.cell-sum { min-width: 190px; white-space: normal; }
-***REMOVED***t-op td.cell-sum .sum-in,
-***REMOVED***t-op td.cell-sum .spread-in {
+#t-op td.cell-sum { min-width: 190px; white-space: normal; }
+#t-op td.cell-sum .sum-in,
+#t-op td.cell-sum .spread-in {
   display: block; width: 100%; box-sizing: border-box;
 }
-***REMOVED***t-op td.cell-sum .sum-in { padding: 5px 8px; font-size: 14px; text-align: right; }
+#t-op td.cell-sum .sum-in { padding: 5px 8px; font-size: 14px; text-align: right; }
 /* «Не раскладывать»: поле только показывает итог, введённый по месяцам. */
-***REMOVED***t-op td.cell-sum .sum-in[readonly] { background: transparent; border-style: dashed; }
-***REMOVED***t-op td.cell-sum .spread-in {
+#t-op td.cell-sum .sum-in[readonly] { background: transparent; border-style: dashed; }
+#t-op td.cell-sum .spread-in {
   margin-top: 4px; padding: 3px 6px; font-size: 13px; color: var(--ink2);
 }
 /* Подсказка к ячейке, которую правят на месте. */
 .cell-suggest .copt { font-size: 14px; }
 
 /* Заголовок дирекции без строк: место, с которого начинают планировать. */
-***REMOVED***t-op tr.group.is-empty td { color: var(--muted); box-shadow: inset 3px 0 0 var(--border); }
+#t-op tr.group.is-empty td { color: var(--muted); box-shadow: inset 3px 0 0 var(--border); }
 /* Список дирекций под кнопкой «+ расход»: те же строки, что заголовки блоков. */
-***REMOVED***op-add-row { white-space: nowrap; }
+#op-add-row { white-space: nowrap; }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 .btn[disabled]:hover { background: var(--raised); border-color: var(--border); }
 
@@ -567,42 +581,42 @@ thead th { border-right-color: var(--axis); }
 /* Заморозка двух первых колонок — только для шапки и тела таблицы.
    В строке ИТОГО первая ячейка занимает пять колонок, поэтому счёт nth-child
    сбивается и вторая ячейка (сумма) наезжала бы на подпись. */
-***REMOVED***t-op th:nth-child(1), ***REMOVED***t-op tbody td:nth-child(1),
-***REMOVED***t-op th:nth-child(2), ***REMOVED***t-op tbody td:nth-child(2) {
+#t-op th:nth-child(1), #t-op tbody td:nth-child(1),
+#t-op th:nth-child(2), #t-op tbody td:nth-child(2) {
   position: sticky; background: var(--surface); z-index: 2;
 }
-***REMOVED***t-op th:nth-child(1), ***REMOVED***t-op tbody td:nth-child(1) { left: 0; min-width: 64px; }
-***REMOVED***t-op th:nth-child(2), ***REMOVED***t-op tbody td:nth-child(2) { left: 64px; box-shadow: 1px 0 0 var(--grid); }
-***REMOVED***t-op thead th:nth-child(1), ***REMOVED***t-op thead th:nth-child(2) { z-index: 3; }
-***REMOVED***t-op tbody tr:hover td:nth-child(1), ***REMOVED***t-op tbody tr:hover td:nth-child(2) { background: var(--plane); }
-***REMOVED***t-op tr.group td { position: static; }
+#t-op th:nth-child(1), #t-op tbody td:nth-child(1) { left: 0; min-width: 64px; }
+#t-op th:nth-child(2), #t-op tbody td:nth-child(2) { left: 64px; box-shadow: 1px 0 0 var(--grid); }
+#t-op thead th:nth-child(1), #t-op thead th:nth-child(2) { z-index: 3; }
+#t-op tbody tr:hover td:nth-child(1), #t-op tbody tr:hover td:nth-child(2) { background: var(--plane); }
+#t-op tr.group td { position: static; }
 
 .total-row td {
   background: var(--raised); font-weight: 700;
   border-bottom: 2px solid var(--axis);
 }
-***REMOVED***t-op thead th { top: 0; z-index: 4; }
-***REMOVED***t-op thead th:nth-child(1), ***REMOVED***t-op thead th:nth-child(2) { z-index: 5; }
+#t-op thead th { top: 0; z-index: 4; }
+#t-op thead th:nth-child(1), #t-op thead th:nth-child(2) { z-index: 5; }
 /* у строки ИТОГО первая ячейка на пять колонок — заморозку слева ей не считаем */
-***REMOVED***t-op .total-row td { position: static; }
+#t-op .total-row td { position: static; }
 .total-row .total-label { text-transform: none; letter-spacing: 0; color: var(--ink2); font-weight: 600; }
 .total-row .total-sum { color: var(--accent-2); }
 
 /* Раздел года в таблице: план нового года сверху развёрнут, база прошлого —
    свёрнута под ним. Клик по строке года разворачивает раздел. */
-***REMOVED***t-op tr.year-row td {
+#t-op tr.year-row td {
   position: static; cursor: pointer; padding: 10px 12px;
   background: var(--year-active); font-weight: 700; font-size: 16px;
   border-top: 2px solid var(--year-active-line); border-bottom: 1px solid var(--border);
 }
-***REMOVED***t-op tr.year-row.is-base td {
+#t-op tr.year-row.is-base td {
   background: var(--year-past); border-top-color: var(--year-past-line);
 }
-***REMOVED***t-op tr.year-row:hover td { box-shadow: inset 0 0 0 999px var(--hover); }
-***REMOVED***t-op tr.group td { padding-left: 28px; }
-***REMOVED***t-op tr.total-row td:first-child { padding-left: 28px; }
+#t-op tr.year-row:hover td { box-shadow: inset 0 0 0 999px var(--hover); }
+#t-op tr.group td { padding-left: 28px; }
+#t-op tr.total-row td:first-child { padding-left: 28px; }
 /* вертикальная черта у заголовка карточки повторяет цвет года */
-***REMOVED***p-op .card.y-base > header h2::before { background: var(--year-past-line); }
+#p-op .card.y-base > header h2::before { background: var(--year-past-line); }
 .year-row .year-tag { margin-left: 10px; font-size: 13px; padding: 1px 9px; }
 .year-row .grp-sum {
   float: right; font-weight: 400; color: var(--ink2); font-variant-numeric: tabular-nums;
@@ -662,14 +676,14 @@ td.saving { opacity: .55; }
   background: var(--raised);
 }
 .pick-opt { display: flex; align-items: center; gap: 7px; font-size: 15px; cursor: pointer; }
-***REMOVED***p-acc .row-btns { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
+#p-acc .row-btns { margin-top: 14px; display: flex; gap: 8px; align-items: center; }
 .btn.danger { color: var(--critical); }
 .btn.danger:hover { border-color: var(--critical); }
 
 /* ---------- классификатор МРГ/МРК ---------- */
 /* Колонка узкая и с постоянной шириной: значений всего два, и от их длины
    таблица прыгать не должна. */
-***REMOVED***t-op td.cls, ***REMOVED***t-op th:nth-child(3) { white-space: nowrap; width: 104px; }
+#t-op td.cls, #t-op th:nth-child(3) { white-space: nowrap; width: 104px; }
 .cls-pick {
   width: 100%; background: var(--raised); border: 1px solid var(--border);
   color: var(--ink); border-radius: var(--r-sm); padding: 2px 4px; font-size: 15px;

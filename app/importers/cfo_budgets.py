@@ -32,8 +32,8 @@ from app.importers import xlsx
 SHEET_NAME = "Бюджеты ЦФО"
 ARTICLES_SHEET = "ЦФО Статьи"
 TOTAL_MARK = "ИТОГО"
-GRAND_TOTAL_WORDS = ("ВСЕГО", "TOTAL")      ***REMOVED*** итог по всему листу, не блок
-OUT_OF_BUDGET_MARK = "ВНЕ БЮДЖЕТА"          ***REMOVED*** заголовок блока факта без строки бюджета
+GRAND_TOTAL_WORDS = ("ВСЕГО", "TOTAL")      # итог по всему листу, не блок
+OUT_OF_BUDGET_MARK = "ВНЕ БЮДЖЕТА"          # заголовок блока факта без строки бюджета
 DEFAULT_BUDGET = "Основной бюджет"
 
 ALIASES = {
@@ -44,6 +44,7 @@ ALIASES = {
     "contract": ("договор",),
     "detail": ("детализация",),
     "comment": ("комментарий",),
+    "link": ("наличие в бюджете",),
     "plan_year": ("итого", "бюджет"),
 }
 
@@ -72,6 +73,7 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
     out_rows: list[dict] = []
     skipped_service: list[dict] = []
     current: dict | None = None
+    outside = False                      # идём ли мы ниже заголовка «ВНЕ БЮДЖЕТА»
 
     for i in range(header_idx + 1, len(rows)):
         row = rows[i]
@@ -82,14 +84,24 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
         cfo = xlsx.text(cell(row, "cfo"))
         upper = article.upper()
 
-        if upper in GRAND_TOTAL_WORDS or OUT_OF_BUDGET_MARK in upper:
-            ***REMOVED*** Итог по всему листу и блок «вне бюджета» приходят в файлах
-            ***REMOVED*** дирекций. Как строка расхода «ВСЕГО» удваивала весь файл,
-            ***REMOVED*** а ЦФО у неё пустой — заводилась дирекция «Не указано».
+        if OUT_OF_BUDGET_MARK in upper:
+            # Всё, что ниже этого заголовка, — расход без строки бюджета.
+            # Прежде строки под ним дочитывались в последний открытый блок
+            # ЦФО и выглядели его бюджетом; теперь блок закрывается, а сами
+            # строки возвращаются со своим признаком.
+            outside = True
+            current = None
+            skipped_service.append({"excel_row": i + 1, "article": article})
+            continue
+
+        if upper in GRAND_TOTAL_WORDS:
+            # Итог по всему листу: как строка расхода «ВСЕГО» удваивала файл,
+            # а ЦФО у неё пустой — заводилась дирекция «Не указано».
             skipped_service.append({"excel_row": i + 1, "article": article})
             continue
 
         if upper == TOTAL_MARK:
+            outside = False
             current = {
                 "cfo": cfo,
                 "budget": xlsx.text(cell(row, "contract")) or DEFAULT_BUDGET,
@@ -102,10 +114,10 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             continue
 
         plan_year = xlsx.num(cell(row, "plan_year"))
-        ***REMOVED*** Нулевую строку со статьёй не отбрасываем: в бюджете это законная
-        ***REMOVED*** строка — расход заведён, сумму ещё не проставили. Строки вовсе без
-        ***REMOVED*** статьи отсеяны выше, так что «пустая техническая» сюда не доходит.
-        ***REMOVED*** Факту нули не нужны — их отсекает import_fact у себя.
+        # Нулевую строку со статьёй не отбрасываем: в бюджете это законная
+        # строка — расход заведён, сумму ещё не проставили. Строки вовсе без
+        # статьи отсеяны выше, так что «пустая техническая» сюда не доходит.
+        # Факту нули не нужны — их отсекает import_fact у себя.
 
         holder = (current or {}).get("cfo", "") or cfo
         out_rows.append({
@@ -113,8 +125,8 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             "row_cfo": cfo,
             "budget": (current or {}).get("budget", DEFAULT_BUDGET),
             "article": article,
-            ***REMOVED*** колонки может не быть вовсе: старые выгрузки и исходный файл
-            ***REMOVED*** ликвидности её не знают — тогда строка считается МРГ
+            # колонки может не быть вовсе: старые выгрузки и исходный файл
+            # ликвидности её не знают — тогда строка считается МРГ
             "classifier": repo.classifier_or_default(cell(row, "classifier")),
             "counterparty": xlsx.text(cell(row, "counterparty")),
             "contract": xlsx.text(cell(row, "contract")),
@@ -124,13 +136,17 @@ def parse(source: str | Path | bytes, sheet: str | None = SHEET_NAME) -> dict:
             "plan_year": plan_year,
             "months": months,
             "excel_row": i + 1,
+            "out_of_budget": outside,
+            # «вне бюджета» или «бюджет из строки N» — что человек вписал
+            # в колонке «Наличие в бюджете» выгрузки факта
+            "link": xlsx.text(cell(row, "link")),
         })
         if current:
             current["rows"] += 1
 
-    ***REMOVED*** Блок без единой строки — след разметки: в файлах дирекций «ИТОГО» идёт
-    ***REMOVED*** дважды, сначала без названия бюджета, потом с ним. Пустой блок удваивал
-    ***REMOVED*** контрольную сумму файла и заводил лишний бюджет.
+    # Блок без единой строки — след разметки: в файлах дирекций «ИТОГО» идёт
+    # дважды, сначала без названия бюджета, потом с ним. Пустой блок удваивал
+    # контрольную сумму файла и заводил лишний бюджет.
     blocks = [b for b in blocks if b["rows"]]
 
     return {
@@ -188,7 +204,7 @@ def parse_articles(source: str | Path | bytes, sheet: str | None = ARTICLES_SHEE
         name = xlsx.text(row[cols["cfo"]]) if cols["cfo"] < len(row) else ""
         article = xlsx.text(row[cols["article"]]) if cols["article"] < len(row) else ""
         if name:
-            cfo = name                      ***REMOVED*** название ЦФО тянется вниз по блоку
+            cfo = name                      # название ЦФО тянется вниз по блоку
         if cfo and article:
             pairs.append({"cfo": cfo, "article": article})
 

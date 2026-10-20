@@ -31,7 +31,7 @@ def make_cfo(client, name: str, budget: str, article: str, plan: float) -> dict:
     return {"cfo_id": cfo_id, "row_id": response.json()["id"]}
 
 
-***REMOVED*** ---------- поиск дублей ----------
+# ---------- поиск дублей ----------
 
 def test_находит_дубль_с_приписанным_словом(client):
     make_cfo(client, "Первая дирекция", "Основной бюджет", "4420_ПО", 1_000_000)
@@ -42,7 +42,7 @@ def test_находит_дубль_с_приписанным_словом(client
     assert len(pairs) == 1
     pair = pairs[0]
     assert pair["confidence"] == 3
-    ***REMOVED*** основным предлагается тот, где больше данных
+    # основным предлагается тот, где больше данных
     assert pair["target"]["name"] == "Первая дирекция"
     assert pair["source"]["name"].endswith("технически")
 
@@ -52,7 +52,7 @@ def test_находит_опечатку_в_названии(client):
     make_cfo(client, "Финансовый отедл", "Основной бюджет", "4106_Аудит", 100_000)
     pairs = registry.suggestions(2026)
     assert pairs and pairs[0]["confidence"] == 3
-    assert pairs[0]["target"]["name"] == "Финансовый отдел"    ***REMOVED*** где данных больше
+    assert pairs[0]["target"]["name"] == "Финансовый отдел"    # где данных больше
 
 
 def test_не_считает_дублями_разные_дирекции(client):
@@ -72,7 +72,7 @@ def test_статистика_считает_строки_и_суммы(client):
     assert item["empty"] is False
 
 
-***REMOVED*** ---------- сведение ----------
+# ---------- сведение ----------
 
 def test_сведение_сохраняет_суммы_и_переносит_данные(client):
     main = make_cfo(client, "Третья дирекция", "Бюджет обязательных затрат", "4420_ПО", 1_000_000)
@@ -90,11 +90,11 @@ def test_сведение_сохраняет_суммы_и_переносит_д
     assert result.status_code == 200, result.text
 
     after = client.get("/api/dashboard").json()["totals"]
-    assert after["plan_year"] == before["plan_year"]      ***REMOVED*** суммы не потерялись
+    assert after["plan_year"] == before["plan_year"]      # суммы не потерялись
     assert after["fact"] == before["fact"]
     assert after["claims"] == before["claims"]
 
-    ***REMOVED*** остался один ЦФО с двумя бюджетами
+    # остался один ЦФО с двумя бюджетами
     items = registry.stats(2026)
     assert len(items) == 1
     assert items[0]["budgets"] == 2
@@ -110,12 +110,12 @@ def test_сведение_объединяет_одноимённые_бюдже
 
     items = registry.stats(2026)
     assert len(items) == 1
-    assert items[0]["budgets"] == 1                       ***REMOVED*** бюджеты объединены
+    assert items[0]["budgets"] == 1                       # бюджеты объединены
     assert items[0]["rows_count"] == 2
 
     card = client.get(f"/api/cfo/{main['cfo_id']}").json()
     numbers = sorted(r["row_no"] for r in card["budgets"][0]["rows"])
-    assert numbers == [1, 2]                              ***REMOVED*** номера не дублируются
+    assert numbers == [1, 2]                              # номера не дублируются
 
 
 def test_после_сведения_прежнее_название_становится_алиасом(client):
@@ -126,7 +126,7 @@ def test_после_сведения_прежнее_название_стано�
     client.post("/api/registry/merge", json={"source_id": dup["cfo_id"],
                                             "target_id": main["cfo_id"]})
 
-    ***REMOVED*** повторный импорт со старым написанием попадёт в основной ЦФО, а не создаст дубль
+    # повторный импорт со старым написанием попадёт в основной ЦФО, а не создаст дубль
     assert repo.ensure_cfo(old_name) == main["cfo_id"]
     assert len(registry.stats(2026)) == 1
 
@@ -151,14 +151,14 @@ def test_нельзя_свести_цфо_с_самим_собой(client):
     assert response.status_code == 422
 
 
-***REMOVED*** ---------- переименование и алиасы ----------
+# ---------- переименование и алиасы ----------
 
 def test_переименование_сохраняет_старое_написание_как_алиас(client):
     made = make_cfo(client, "Четырнадцатая дирекция", "Основной бюджет", "4307.3_PR", 200_000)
     response = client.patch(f"/api/registry/cfo/{made['cfo_id']}",
                             json={"name": "Дирекция внешних коммуникаций"})
     assert response.status_code == 200
-    assert repo.ensure_cfo("Четырнадцатая дирекция") == made["cfo_id"]      ***REMOVED*** старое имя ведёт туда же
+    assert repo.ensure_cfo("Четырнадцатая дирекция") == made["cfo_id"]      # старое имя ведёт туда же
 
 
 def test_переименование_в_занятое_имя_отклоняется(client):
@@ -188,7 +188,7 @@ def test_пустой_цфо_можно_удалить_а_с_данными_не
     assert "сведение" in response.json()["detail"]
 
 
-***REMOVED*** ---------- права ----------
+# ---------- права ----------
 
 def test_руководителю_цфо_справочник_недоступен(client):
     made = make_cfo(client, "Дирекция Е", "Основной бюджет", "4102_Хозрасходы", 100_000)
@@ -198,7 +198,7 @@ def test_руководителю_цфо_справочник_недоступе
                        headers=headers).status_code == 403
 
 
-***REMOVED*** ---------- журнал ----------
+# ---------- журнал ----------
 
 def test_сведение_попадает_в_журнал_изменений(client):
     main = make_cfo(client, "Дирекция Ж", "Основной бюджет", "4102_Хозрасходы", 100_000)
@@ -215,7 +215,7 @@ def test_написания_отличающиеся_пробелами_и_ре�
     assert len([i for i in registry.stats(2026) if i["id"] == first]) == 1
 
 
-***REMOVED*** ---------- источник «Детализации» ----------
+# ---------- источник «Детализации» ----------
 
 def test_источник_детализации_ставится_в_реестре(client):
     """Это свойство ЦФО, а не догадка по названию: имя меняется, догадка — нет."""

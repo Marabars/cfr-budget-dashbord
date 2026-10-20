@@ -16,8 +16,8 @@
 
   function renderTable() {
     if (!data) return;
-    var body = document.querySelector("***REMOVED***t-sum tbody");
-    var foot = document.querySelector("***REMOVED***t-sum tfoot");
+    var body = document.querySelector("#t-sum tbody");
+    var foot = document.querySelector("#t-sum tfoot");
     U.clear(body);
     U.clear(foot);
 
@@ -65,8 +65,8 @@
   }
 
   function renderOutOfBudget(items) {
-    var body = document.querySelector("***REMOVED***t-oob tbody");
-    var foot = document.querySelector("***REMOVED***t-oob tfoot");
+    var body = document.querySelector("#t-oob tbody");
+    var foot = document.querySelector("#t-oob tfoot");
     U.clear(body);
     U.clear(foot);
     if (!items.length) {

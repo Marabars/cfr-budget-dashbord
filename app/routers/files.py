@@ -47,7 +47,7 @@ def _xlsx(content: bytes, filename: str) -> Response:
     )
 
 
-***REMOVED*** ---------- предпросмотр перед импортом ----------
+# ---------- предпросмотр перед импортом ----------
 
 @router.post("/import/inspect")
 async def inspect(kind: str = Form("plan"), file: UploadFile = File(...),
@@ -89,7 +89,7 @@ async def inspect(kind: str = Form("plan"), file: UploadFile = File(...),
         raise HTTPException(422, str(exc)) from exc
 
 
-***REMOVED*** ---------- импорт ----------
+# ---------- импорт ----------
 
 @router.post("/import/operplan")
 async def import_operplan(file: UploadFile = File(...), year: int = Form(...),
@@ -166,7 +166,7 @@ async def import_fact(file: UploadFile = File(...), year: int = Form(...),
         raise HTTPException(422, str(exc)) from exc
 
 
-***REMOVED*** ---------- экспорт ----------
+# ---------- экспорт ----------
 
 @router.get("/export/operplan.xlsx")
 def export_operplan(year: int | None = None, u: auth.User = Depends(user)) -> Response:

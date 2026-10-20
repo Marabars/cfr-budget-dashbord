@@ -9,7 +9,7 @@ from app import db
 from app.calc import MONTHS, month_of, normalize
 
 
-***REMOVED*** ---------- ЦФО и бюджеты ----------
+# ---------- ЦФО и бюджеты ----------
 
 def _canonical(name: str) -> str:
     """Ключ для сопоставления вариантов написания ЦФО."""
@@ -54,8 +54,8 @@ def add_alias(alias: str, cfo_id: int) -> None:
     )
 
 
-LAYER_MAIN = "main"          ***REMOVED*** исполнение: дашборд, сводка, карточка ЦФО
-LAYER_OPERPLAN = "operplan"  ***REMOVED*** планирование: вкладка «Оперплан»
+LAYER_MAIN = "main"          # исполнение: дашборд, сводка, карточка ЦФО
+LAYER_OPERPLAN = "operplan"  # планирование: вкладка «Оперплан»
 
 
 def ensure_budget(cfo_id: int, year: int, name: str, layer: str = LAYER_MAIN) -> int:
@@ -111,7 +111,7 @@ def delete_budgets(year: int, layer: str, cfo_ids: Sequence[int] | None = None) 
     return removed
 
 
-***REMOVED*** ---------- строки бюджета ----------
+# ---------- строки бюджета ----------
 
 CLASSIFIERS = ("МРГ", "МРК")
 CLASSIFIER_DEFAULT = "МРГ"
@@ -123,7 +123,7 @@ def classifier_or_default(value) -> str:
     Чужое значение не роняет загрузку: файл из чужих рук может принести что
     угодно, а строка бюджета важнее опечатки в одной колонке.
     """
-    text = str(value or "").strip().upper().replace("MP", "МР")   ***REMOVED*** латинские M и P
+    text = str(value or "").strip().upper().replace("MP", "МР")   # латинские M и P
     return text if text in CLASSIFIERS else CLASSIFIER_DEFAULT
 
 ROW_FIELDS = ("article", "classifier", "counterparty", "contract", "detail", "comment",
@@ -304,12 +304,35 @@ def clear_layer_fact(year: int, layer: str, cfo_ids: Sequence[int] | None = None
     if not ids:
         return 0
     marks = ",".join("?" for _ in ids)
-    return db.execute(
+    return db.change(
         f"DELETE FROM budget_row_fact_month WHERE row_id IN ({marks})", ids)
 
 
 def delete_row(row_id: int) -> None:
     db.execute("UPDATE budget_row SET deleted_at = datetime('now') WHERE id = ?", (row_id,))
+
+
+def delete_rows(row_ids: Sequence[int]) -> int:
+    """Мягкое удаление пачкой: отмеченные галочками строки и «Очистить всё».
+
+    Одним запросом, а не циклом по `delete_row`: очистка плана — это сотни
+    строк, и оборвись она посередине, таблица осталась бы наполовину пустой.
+    Уже удалённые строки не трогаем, чтобы `deleted_at` помнил настоящий
+    момент удаления.
+    """
+    ids = [int(i) for i in row_ids]
+    if not ids:
+        return 0
+    done = 0
+    # пачками: подстановок в один запрос у sqlite конечное число, а очистка
+    # года приносит сотни идентификаторов разом
+    for start in range(0, len(ids), 300):
+        part = ids[start:start + 300]
+        marks = ",".join("?" for _ in part)
+        done += db.change(
+            f"UPDATE budget_row SET deleted_at = datetime('now') "
+            f"WHERE id IN ({marks}) AND deleted_at IS NULL", part)
+    return done
 
 
 def plan_months(year: int, layer: str = LAYER_MAIN) -> dict[int, list[float]]:
@@ -341,13 +364,14 @@ def month_amount(row_id: int, month: int) -> float:
     return float(row["amount"]) if row else 0.0
 
 
-***REMOVED*** ---------- факт ----------
+# ---------- факт ----------
 
 def create_fact(data: dict, author: str = "") -> int:
     return db.execute(
         "INSERT INTO fact(row_id, cfo_id, layer, year, pay_date, amount, article, counterparty, "
-        "contract, purpose, claim_number, out_of_budget, source, external_id, matched_by, matched_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+        "contract, purpose, comment, claim_number, out_of_budget, source, external_id, matched_by, "
+        "matched_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
         "CASE WHEN ? IS NULL THEN NULL ELSE datetime('now') END)",
         (
             data.get("row_id"),
@@ -360,6 +384,7 @@ def create_fact(data: dict, author: str = "") -> int:
             data.get("counterparty", ""),
             data.get("contract", ""),
             data.get("purpose", ""),
+            data.get("comment", ""),
             data.get("claim_number", ""),
             1 if data.get("out_of_budget") else 0,
             data.get("source", "manual"),
@@ -446,7 +471,7 @@ def clear_layer_fact_rows(year: int, layer: str, cfo_ids: Sequence[int] | None =
             return 0
         sql += f" AND cfo_id IN ({','.join('?' for _ in cfo_ids)})"
         params.extend(int(i) for i in cfo_ids)
-    return db.execute(sql, params)
+    return db.change(sql, params)
 
 
 def get_fact(fact_id: int) -> dict | None:
@@ -480,7 +505,84 @@ def delete_fact(fact_id: int) -> None:
     db.execute("DELETE FROM fact WHERE id = ?", (fact_id,))
 
 
-***REMOVED*** ---------- заявки ----------
+# ---------- «Наличие в бюджете» ----------
+
+def list_fact_links(year: int, cfo_ids: Sequence[int] | None = None) -> list[dict]:
+    """Решения «в бюджете / вне бюджета», сделанные руками.
+
+    Живут отдельно от `fact` намеренно: загрузка факта стирает его записи
+    целиком по дирекции, и решение, лежащее только в них, не пережило бы
+    следующую заливку.
+    """
+    sql = "SELECT * FROM fact_link WHERE year = ?"
+    params: list[Any] = [year]
+    if cfo_ids is not None:
+        if not cfo_ids:
+            return []
+        sql += f" AND cfo_id IN ({','.join('?' for _ in cfo_ids)})"
+        params.extend(int(i) for i in cfo_ids)
+    return [dict(r) for r in db.query(sql, params)]
+
+
+def save_fact_link(year: int, cfo_id: int, key: Sequence[str],
+                   row_id: int | None, author: str) -> None:
+    """Запоминает решение по расходу. `row_id = None` — «вне бюджета».
+
+    Ключ приходит уже приведённым (см. `operplan._spend_key`): иначе лишний
+    пробел в следующей редакции файла оставил бы решение без хозяина.
+    """
+    article, counterparty, contract, purpose = key
+    db.execute(
+        "INSERT INTO fact_link(year, cfo_id, article, counterparty, contract, purpose, "
+        "row_id, author) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(year, cfo_id, article, counterparty, contract, purpose) "
+        "DO UPDATE SET row_id = excluded.row_id, author = excluded.author, "
+        "at = datetime('now')",
+        (year, cfo_id, article, counterparty, contract, purpose, row_id, author),
+    )
+
+
+def set_facts_row(fact_ids: Sequence[int], row_id: int | None,
+                  out_of_budget: bool, author: str) -> int:
+    """Переставляет записи факта на строку плана или уводит их вне бюджета."""
+    ids = [int(i) for i in fact_ids]
+    if not ids:
+        return 0
+    marks = ",".join("?" for _ in ids)
+    return db.change(
+        f"UPDATE fact SET row_id = ?, out_of_budget = ?, matched_by = ?, "
+        f"matched_at = datetime('now') WHERE id IN ({marks})",
+        [row_id, 1 if out_of_budget else 0, author, *ids],
+    )
+
+
+def rebuild_row_fact(row_ids: Sequence[int], year: int, layer: str) -> None:
+    """Пересобирает помесячный свод строк из записей `fact`.
+
+    Факт хранится дважды — сводом на строке (`budget_row_fact_month`) и
+    расходами по контрагентам (`fact`), — и при переносе расхода разойтись
+    им нельзя. Загрузка пишет оба источника согласованно, а здесь свод считается
+    из записей: они и есть то, что переставляют руками.
+    """
+    ids = [int(i) for i in row_ids if i]
+    if not ids:
+        return
+    marks = ",".join("?" for _ in ids)
+    rows = db.query(
+        f"SELECT row_id, pay_date, amount FROM fact "
+        f"WHERE year = ? AND layer = ? AND out_of_budget = 0 AND row_id IN ({marks})",
+        [year, layer, *ids],
+    )
+    months: dict[int, list[float]] = {i: [0.0] * MONTHS for i in ids}
+    for r in rows:
+        month = int(str(r["pay_date"])[5:7] or 0)
+        if 1 <= month <= MONTHS:
+            months[int(r["row_id"])][month - 1] += float(r["amount"])
+    for row_id, values in months.items():
+        set_row_fact(row_id, values)
+
+
+# ---------- заявки ----------
 
 def create_claim(data: dict, author: str = "") -> int:
     return db.execute(
@@ -544,7 +646,7 @@ def get_claim(claim_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-***REMOVED*** ---------- корректировки и журнал ----------
+# ---------- корректировки и журнал ----------
 
 def create_adjustment(data: dict, author: str) -> int:
     return db.execute(
@@ -598,7 +700,7 @@ def last_fact_loads(year: int) -> dict[int, dict]:
         except ValueError:
             continue
         for cfo_id in scope:
-            ***REMOVED*** строки идут от свежих к старым, первая встреченная и есть последняя
+            # строки идут от свежих к старым, первая встреченная и есть последняя
             out.setdefault(int(cfo_id),
                            {"filename": row["filename"], "at": row["uploaded_at"]})
     return out
@@ -616,7 +718,7 @@ def get_column_mapping(cfo_id: int) -> str:
     row = db.query_one("SELECT mapping FROM column_mapping WHERE cfo_id = ?", (cfo_id,))
     return row["mapping"] if row else ""
 
-***REMOVED*** ---------- справочники для форм Оперплана ----------
+# ---------- справочники для форм Оперплана ----------
 
 def get_cfo_detail_source(cfo_id: int) -> str:
     """Откуда дирекция берёт «Детализацию»; по умолчанию — наш комментарий."""

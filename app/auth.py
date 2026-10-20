@@ -22,11 +22,11 @@ from fastapi import HTTPException, Request
 
 from app import db, repo
 
-ROLE_FIN = "fin"      ***REMOVED*** финансовый отдел — видит все ЦФО
-ROLE_CFO = "cfo"      ***REMOVED*** руководитель ЦФО — только свои
+ROLE_FIN = "fin"      # финансовый отдел — видит все ЦФО
+ROLE_CFO = "cfo"      # руководитель ЦФО — только свои
 
 SESSION_COOKIE = "budget_session"
-SESSION_HOURS = 12            ***REMOVED*** сессия продлевается, когда прошла половина срока
+SESSION_HOURS = 12            # сессия продлевается, когда прошла половина срока
 MIN_PASSWORD = 8
 _PBKDF2_ROUNDS = 240_000
 
@@ -37,7 +37,7 @@ class User:
     name: str
     role: str
     cfo_ids: list[int] = field(default_factory=list)
-    viewing_as: bool = False      ***REMOVED*** финотдел смотрит глазами руководителя
+    viewing_as: bool = False      # финотдел смотрит глазами руководителя
 
     @property
     def is_fin(self) -> bool:
@@ -56,7 +56,7 @@ class User:
 FIN_USER = User(login="fin", name="Финансовый отдел", role=ROLE_FIN)
 
 
-***REMOVED*** ---------- пароли ----------
+# ---------- пароли ----------
 
 def hash_password(password: str) -> str:
     """PBKDF2-HMAC-SHA256; соль своя у каждого пароля."""
@@ -93,7 +93,7 @@ def auth_enabled() -> bool:
     return row is not None
 
 
-***REMOVED*** ---------- сессии ----------
+# ---------- сессии ----------
 
 def _now() -> datetime:
     return datetime.now()
@@ -145,8 +145,8 @@ def session_user(token: str) -> User | None:
     if not row["is_active"]:
         drop_sessions_of(row["login"])
         return None
-    ***REMOVED*** Продлеваем не на каждый запрос, а когда прошла половина срока: иначе любое
-    ***REMOVED*** чтение дашборда писало бы в базу.
+    # Продлеваем не на каждый запрос, а когда прошла половина срока: иначе любое
+    # чтение дашборда писало бы в базу.
     if row["expires_at"] < _stamp(now + timedelta(hours=SESSION_HOURS / 2)):
         db.execute(
             "UPDATE session SET expires_at = ? WHERE token = ?",
@@ -156,7 +156,7 @@ def session_user(token: str) -> User | None:
                 cfo_ids=parse_ids(row["cfo_ids"]))
 
 
-***REMOVED*** ---------- определение пользователя запроса ----------
+# ---------- определение пользователя запроса ----------
 
 def parse_ids(raw: str) -> list[int]:
     out = []
@@ -201,7 +201,7 @@ def current_user(request: Request) -> User:
     if user is not None:
         raw = (request.headers.get("X-User") or "").strip()
         if user.is_fin and raw.startswith("cfo:"):
-            return _as_cfo(raw) or user      ***REMOVED*** финотдел смотрит глазами руководителя
+            return _as_cfo(raw) or user      # финотдел смотрит глазами руководителя
         return user
     if auth_enabled():
         raise HTTPException(401, "Нужно войти в приложение")

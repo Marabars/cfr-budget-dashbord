@@ -64,7 +64,7 @@
   }
 
   function render(items) {
-    var body = document.querySelector("***REMOVED***t-unmatched tbody");
+    var body = document.querySelector("#t-unmatched tbody");
     U.clear(body);
     document.getElementById("match-count").textContent = items.length
       ? items.length + " платежей ждут разбора" : "всё разобрано";

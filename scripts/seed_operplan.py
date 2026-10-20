@@ -1,4 +1,4 @@
-***REMOVED*** -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """Первичная загрузка года из листа «Оперплан ЦФО».
 
 Путь к файлу — аргументом или через переменную окружения OPERPLAN_FILE,
@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import db, service  ***REMOVED*** noqa: E402
+from app import db, service  # noqa: E402
 
 
 def main() -> int:

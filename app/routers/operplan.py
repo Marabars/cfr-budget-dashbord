@@ -8,12 +8,13 @@ from fastapi.responses import Response
 
 from app import auth, db, operplan, repo
 from app.exporters import excel
-from app.models import CopyYearIn, LockIn, OperplanRowIn, YearIn
+from app.models import (CopyYearIn, FactLinkIn, LockIn, OperplanRowIn,
+                        RowsDeleteIn, YearIn)
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MAX_UPLOAD_MB = 40
-***REMOVED*** Файлы факта приходят по одному на дирекцию, их дюжина; потолок
-***REMOVED*** с запасом, чтобы случайно выбранная папка не ушла целиком.
+# Файлы факта приходят по одному на дирекцию, их дюжина; потолок
+# с запасом, чтобы случайно выбранная папка не ушла целиком.
 MAX_UPLOAD_FILES = 30
 
 router = APIRouter(prefix="/api/operplan", tags=["operplan"])
@@ -50,6 +51,27 @@ def lock(payload: LockIn, u: auth.User = Depends(user)) -> dict:
     if not u.is_fin:
         raise HTTPException(403, "Блокировку снимает и ставит финансовый отдел")
     return operplan.set_lock(int(payload.year or operplan.plan_year()), payload.locked, u.name)
+
+
+@router.post("/fact-link")
+def fact_link(payload: FactLinkIn, u: auth.User = Depends(user)) -> dict:
+    """«В бюджете, за счёт строки N» или «Вне бюджета» для расхода.
+
+    Правит только финотдел — как и грузит факт (решение 12.10.2026):
+    перенос расхода меняет план-факт чужой строки, и делать это должен тот,
+    кто отвечает за бюджет целиком.
+    """
+    if not u.is_fin:
+        raise HTTPException(403, "Наличие в бюджете меняет финансовый отдел")
+    year = int(payload.year or operplan.base_year())
+    try:
+        return operplan.set_fact_link(
+            year, int(payload.cfo_id),
+            {"article": payload.article, "counterparty": payload.counterparty,
+             "contract": payload.contract, "detail": payload.detail},
+            payload.row_id, u.name)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/copy-year")
@@ -90,7 +112,7 @@ def renumber(payload: YearIn, u: auth.User = Depends(user)) -> dict:
     return operplan.renumber(year, u.name, u.visible_cfo_ids())
 
 
-***REMOVED*** ---------- Excel ----------
+# ---------- Excel ----------
 
 async def _upload(file: UploadFile, kind: str, year: int, u: auth.User) -> bytes:
     """Общие проверки загрузки: предпросмотр и запись должны сходиться в них."""
@@ -103,8 +125,8 @@ async def _upload(file: UploadFile, kind: str, year: int, u: auth.User) -> bytes
         raise HTTPException(422, f"Ожидается файл .xlsx: {file.filename}")
     if kind not in ("plan", "fact"):
         raise HTTPException(422, "Загружать можно бюджет или факт")
-    ***REMOVED*** Кнопку руководителю не рисуют, но запрет держит сервер: роль приезжает
-    ***REMOVED*** заголовком, и форму можно отправить мимо интерфейса.
+    # Кнопку руководителю не рисуют, но запрет держит сервер: роль приезжает
+    # заголовком, и форму можно отправить мимо интерфейса.
     if kind == "fact" and not u.is_fin:
         raise HTTPException(403, "Факт загружает финансовый отдел")
     try:
@@ -205,6 +227,53 @@ def add_missing(row_id: int, year: int | None = None, u: auth.User = Depends(use
         return operplan.add_missing(row_id, u.name, target)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/rows/delete")
+def delete_rows(payload: RowsDeleteIn, u: auth.User = Depends(user)) -> dict:
+    """Удалить пачку строк плана: отмеченные галочками и «Очистить всё».
+
+    Строки приходят списком идентификаторов — ровно теми, что человек видел
+    в таблице. Круг «весь год» сервер не достраивает: на экране мог стоять
+    фильтр, и скрытые им строки удалять никто не просил.
+
+    Право проверяется у каждой строки отдельно, до того как удалена первая:
+    в списке финотдела лежат строки разных дирекций, и частично выполненная
+    очистка хуже отказа. Строк, которых уже нет, в ответе считаем отдельно —
+    это не ошибка: тот же список могли удалить из соседней вкладки.
+    """
+    year = int(payload.year or operplan.plan_year())
+    try:
+        operplan.require_plan_year(year)
+        operplan.require_edit(u, year)
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+    rows, missing = [], 0
+    for row_id in dict.fromkeys(int(i) for i in payload.ids):   # дубли не считаем дважды
+        row = repo.get_row(row_id)
+        if not row:
+            missing += 1
+            continue
+        if row.get("layer") != operplan.LAYER or int(row["year"]) != year:
+            raise HTTPException(422, f"Строка №{row_id} не из плана {year} года")
+        try:
+            operplan.require_edit(u, year, int(row["cfo_id"]))
+        except ValueError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        rows.append(row)
+
+    deleted = repo.delete_rows([int(r["id"]) for r in rows])
+    total = round(sum(float(r["plan_year"] or 0) for r in rows), 2)
+    if deleted:
+        names = sorted({str(r["cfo_name"]) for r in rows})
+        # одной записью, а не по строке на каждую: журнал читают глазами
+        db.log(u.name, "Удаление строк плана",
+               f"Оперплан {year} · " + ", ".join(names[:5])
+               + (f" и ещё {len(names) - 5}" if len(names) > 5 else ""),
+               f"удалено строк: {deleted} на {_money(total)}",
+               "Массовое удаление на вкладке «Бюджет»")
+    return {"deleted": deleted, "missing": missing, "total": total, "year": year}
 
 
 @router.post("/rows", status_code=201)

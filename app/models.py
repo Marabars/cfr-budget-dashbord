@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 
 MONTHS = 12
 
-***REMOVED*** Классификатор юрлица у строки бюджета: значений ровно два.
+# Классификатор юрлица у строки бюджета: значений ровно два.
 Classifier = Literal["МРГ", "МРК"]
 CLASSIFIER_DEFAULT = "МРГ"
 
@@ -121,7 +121,7 @@ class CfoIn(BaseModel):
 class RenameIn(BaseModel):
     """Правка ЦФО в реестре: название и/или источник «Детализации»."""
     name: str | None = Field(default=None, min_length=2)
-    ***REMOVED*** 'detail' — своя колонка бюджета, 'comment' — наш комментарий
+    # 'detail' — своя колонка бюджета, 'comment' — наш комментарий
     detail_source: Literal["detail", "comment"] | None = None
 
 
@@ -206,6 +206,32 @@ class YearIn(BaseModel):
     year: int | None = None
 
 
+# Потолок с запасом: в плане года бывает несколько сотен строк, а «Очистить
+# всё» присылает ровно столько идентификаторов, сколько видно на экране.
+MAX_DELETE_ROWS = 5000
+
+
+class RowsDeleteIn(BaseModel):
+    """Удаление строк пачкой: отмеченные галочками и «Очистить всё».
+
+    Строки называются идентификаторами, а не кругом «весь год такой-то
+    дирекции»: удаляется ровно то, что человек видел в таблице. Фильтр на
+    экране сужает список на клиенте, и сервер его не домысливает — иначе
+    скрытая фильтром строка пропала бы вместе с остальными.
+    """
+    year: int | None = None
+    ids: list[int]
+
+    @field_validator("ids")
+    @classmethod
+    def sane_ids(cls, value: list[int]) -> list[int]:
+        if not value:
+            raise ValueError("Не выбрано ни одной строки")
+        if len(value) > MAX_DELETE_ROWS:
+            raise ValueError(f"За раз удаляется не больше {MAX_DELETE_ROWS} строк")
+        return value
+
+
 class CopyYearIn(BaseModel):
     """Повтор прошлого года с необязательной индексацией.
 
@@ -228,6 +254,23 @@ class CopyYearIn(BaseModel):
 class LockIn(BaseModel):
     year: int | None = None
     locked: bool
+
+
+class FactLinkIn(BaseModel):
+    """«Наличие в бюджете» у расхода.
+
+    `row_id = None` — «Вне бюджета»; иначе строка плана, за счёт которой
+    расход идёт. Расход опознаётся не идентификатором, а тем же набором
+    полей, которым он сведён в одну строку на экране: загрузка факта
+    пересоздаёт записи, и прежние id после неё не живут.
+    """
+    year: int | None = None
+    cfo_id: int
+    article: str = ""
+    counterparty: str = ""
+    contract: str = ""
+    detail: str = ""
+    row_id: int | None = None
 
 
 class LoginIn(BaseModel):

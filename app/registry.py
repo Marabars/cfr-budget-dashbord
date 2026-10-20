@@ -14,7 +14,7 @@ from app import calc, db, repo
 SUGGEST_LIMIT = 40
 
 
-***REMOVED*** ---------- статистика ----------
+# ---------- статистика ----------
 
 def stats(year: int) -> list[dict]:
     """По каждому ЦФО: сколько бюджетов, строк, план, факт, заявки, алиасы."""
@@ -56,7 +56,7 @@ def stats(year: int) -> list[dict]:
     return out
 
 
-***REMOVED*** ---------- поиск дублей ----------
+# ---------- поиск дублей ----------
 
 def _key(name: str) -> str:
     """Ключ сравнения: без регистра, пробелов, дефисов и кавычек."""
@@ -121,7 +121,7 @@ def suggestions(year: int) -> list[dict]:
             if not verdict:
                 continue
             confidence, reason = verdict
-            ***REMOVED*** основной — где больше строк, при равенстве — больше плана
+            # основной — где больше строк, при равенстве — больше плана
             main, extra = first, second
             if (second["rows_count"], second["plan_year"]) > (first["rows_count"], first["plan_year"]):
                 main, extra = second, first
@@ -135,7 +135,7 @@ def suggestions(year: int) -> list[dict]:
     return pairs[:SUGGEST_LIMIT]
 
 
-***REMOVED*** ---------- изменение справочника ----------
+# ---------- изменение справочника ----------
 
 def rename(cfo_id: int, new_name: str, author: str) -> dict:
     """Переименование с сохранением прежнего написания как алиаса."""
@@ -274,7 +274,7 @@ def merge(source_id: int, target_id: int, author: str) -> dict:
                 (target_id, budget["year"], budget["name"]),
             ).fetchone()
             if same:
-                ***REMOVED*** объединяем: строки переезжают, номера продолжают нумерацию получателя
+                # объединяем: строки переезжают, номера продолжают нумерацию получателя
                 next_no = conn.execute(
                     "SELECT COALESCE(MAX(row_no), 0) FROM budget_row WHERE budget_id = ?",
                     (same["id"],),

@@ -10,7 +10,7 @@ import openpyxl
 
 from app.calc import MONTHS, MONTH_NAMES
 
-MAX_HEADER_SCAN = 25   ***REMOVED*** в скольких первых строках ищем шапку
+MAX_HEADER_SCAN = 25   # в скольких первых строках ищем шапку
 MAX_COLS = 60
 
 

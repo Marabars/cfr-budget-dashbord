@@ -132,7 +132,7 @@
   }
 
   function renderList(items) {
-    var body = document.querySelector("***REMOVED***t-registry tbody");
+    var body = document.querySelector("#t-registry tbody");
     U.clear(body);
     if (!items.length) {
       body.appendChild(U.empty(7, "Справочник пуст — загрузите бюджеты."));
@@ -222,7 +222,7 @@
         e.message.indexOf("финансовый") >= 0
           ? "Справочник ЦФО доступен финансовому отделу."
           : "Не удалось загрузить справочник: " + e.message }));
-      U.clear(document.querySelector("***REMOVED***t-registry tbody"));
+      U.clear(document.querySelector("#t-registry tbody"));
     });
   }
 

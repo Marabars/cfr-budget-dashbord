@@ -162,8 +162,19 @@
     operplanRenumber: function (year) {
       return request("POST", "/api/operplan/renumber", { year: year });
     },
+    /* «Наличие в бюджете» у расхода. Расход называется полями, а не id:
+       загрузка факта пересоздаёт записи, и прежние id после неё не живут. */
+    factLink: function (payload) {
+      return request("POST", "/api/operplan/fact-link", payload);
+    },
     createOperplanRow: function (payload, year) {
       return request("POST", "/api/operplan/rows?year=" + year, payload);
+    },
+    /* Удаление пачкой: отмеченные галочками строки и «Очистить всё».
+       Строки называются списком идентификаторов, а не кругом «весь год»:
+       на экране мог стоять фильтр, и удалить надо ровно показанное. */
+    deleteRows: function (ids, year) {
+      return request("POST", "/api/operplan/rows/delete", { ids: ids, year: year });
     },
     /* kind: "plan" — бюджет года, "fact" — факт года. Файл один и тот же по виду. */
     importBudget: function (files, year, kind, cfoIds) {

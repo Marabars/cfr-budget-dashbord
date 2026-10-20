@@ -14,9 +14,9 @@ _db_path: Path = DEFAULT_DB_PATH
 
 DEFAULT_SETTINGS = {
     "year": "2026",
-    "closed_through": "7",       ***REMOVED*** факт закрыт по этот месяц включительно
-    "as_of": "",                 ***REMOVED*** пусто = текущая дата
-    "pace_warning_pp": "15",     ***REMOVED*** опережение темпа освоения, п.п.
+    "closed_through": "7",       # факт закрыт по этот месяц включительно
+    "as_of": "",                 # пусто = текущая дата
+    "pace_warning_pp": "15",     # опережение темпа освоения, п.п.
 }
 
 
@@ -70,7 +70,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     не может существовать одновременно в исполнении и в планировании.
     """
     if not _has_table(conn, "budget"):
-        return                              ***REMOVED*** чистая база: всё создаст schema.sql
+        return                              # чистая база: всё создаст schema.sql
 
     if not _has_table(conn, "app_user"):
         conn.execute(
@@ -81,25 +81,50 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "detail_source" not in _columns(conn, "cfo"):
         conn.execute("ALTER TABLE cfo ADD COLUMN detail_source TEXT NOT NULL DEFAULT 'comment'")
 
-    ***REMOVED*** вход по паролю: на уже работающей базе колонок ещё нет, добавляем пустыми —
-    ***REMOVED*** пока ни у кого нет пароля, приложение остаётся в режиме доверенной сети
+    # вход по паролю: на уже работающей базе колонок ещё нет, добавляем пустыми —
+    # пока ни у кого нет пароля, приложение остаётся в режиме доверенной сети
     if "password_hash" not in _columns(conn, "app_user"):
         conn.execute("ALTER TABLE app_user ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''")
     if "is_active" not in _columns(conn, "app_user"):
         conn.execute("ALTER TABLE app_user ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
 
-    ***REMOVED*** классификатор МРГ/МРК: на работающей базе выбирать за старые строки
-    ***REMOVED*** некому, поэтому всем проставляется МРГ — значением по умолчанию
+    # классификатор МРГ/МРК: на работающей базе выбирать за старые строки
+    # некому, поэтому всем проставляется МРГ — значением по умолчанию
     if _has_table(conn, "budget_row") and "classifier" not in _columns(conn, "budget_row"):
         conn.execute(
             "ALTER TABLE budget_row ADD COLUMN classifier TEXT NOT NULL DEFAULT 'МРГ'"
         )
 
-    ***REMOVED*** слой платежа: весь прежний факт — исполнение, слоя планирования в нём
-    ***REMOVED*** не было, поэтому умолчание 'main' верно для всех существующих записей
+    # слой платежа: весь прежний факт — исполнение, слоя планирования в нём
+    # не было, поэтому умолчание 'main' верно для всех существующих записей
     if _has_table(conn, "fact") and "layer" not in _columns(conn, "fact"):
         conn.execute("ALTER TABLE fact ADD COLUMN layer TEXT NOT NULL DEFAULT 'main'")
         conn.execute("CREATE INDEX IF NOT EXISTS ix_fact_layer ON fact(layer, year)")
+
+    # второй текст у расхода: до 16.10.2026 детализация и комментарий
+    # склеивались в `purpose`, разделить их задним числом нечем — у старых
+    # записей колонка остаётся пустой и наполнится следующей загрузкой
+    if _has_table(conn, "fact") and "comment" not in _columns(conn, "fact"):
+        conn.execute("ALTER TABLE fact ADD COLUMN comment TEXT NOT NULL DEFAULT ''")
+
+    # решения «в бюджете / вне бюджета», переживающие перезаливку факта
+    if not _has_table(conn, "fact_link"):
+        conn.executescript("""
+            CREATE TABLE fact_link (
+              id           INTEGER PRIMARY KEY,
+              year         INTEGER NOT NULL,
+              cfo_id       INTEGER NOT NULL REFERENCES cfo(id) ON DELETE CASCADE,
+              article      TEXT NOT NULL DEFAULT '',
+              counterparty TEXT NOT NULL DEFAULT '',
+              contract     TEXT NOT NULL DEFAULT '',
+              purpose      TEXT NOT NULL DEFAULT '',
+              row_id       INTEGER REFERENCES budget_row(id) ON DELETE CASCADE,
+              author       TEXT NOT NULL DEFAULT '',
+              at           TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE (year, cfo_id, article, counterparty, contract, purpose)
+            );
+            CREATE INDEX IF NOT EXISTS ix_fact_link_year ON fact_link(year, cfo_id);
+        """)
 
     if "layer" not in _columns(conn, "budget"):
         conn.executescript("""
@@ -126,7 +151,7 @@ def init_db() -> None:
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
     conn = connect()
     try:
-        conn.execute("PRAGMA foreign_keys = OFF")   ***REMOVED*** пересборка budget роняет внешние ключи
+        conn.execute("PRAGMA foreign_keys = OFF")   # пересборка budget роняет внешние ключи
         _migrate(conn)
         conn.commit()
     except Exception:
@@ -148,7 +173,7 @@ def init_db() -> None:
         )
 
 
-***REMOVED*** ---------- короткие обёртки ----------
+# ---------- короткие обёртки ----------
 
 def query(sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
     conn = connect()
@@ -167,10 +192,22 @@ def query_one(sql: str, params: Iterable[Any] = ()) -> sqlite3.Row | None:
 
 
 def execute(sql: str, params: Iterable[Any] = ()) -> int:
-    """Выполняет запрос и возвращает lastrowid."""
+    """Выполняет запрос и возвращает lastrowid.
+
+    Годится для INSERT. Для UPDATE и DELETE lastrowid ничего не значит —
+    там нужен `change`, иначе «удалено строк» приезжает нулём при честно
+    удалённых строках.
+    """
     with tx() as conn:
         cur = conn.execute(sql, tuple(params))
         return int(cur.lastrowid or 0)
+
+
+def change(sql: str, params: Iterable[Any] = ()) -> int:
+    """Выполняет UPDATE или DELETE и возвращает число изменённых строк."""
+    with tx() as conn:
+        cur = conn.execute(sql, tuple(params))
+        return int(cur.rowcount or 0)
 
 
 def get_setting(key: str, default: str = "") -> str:

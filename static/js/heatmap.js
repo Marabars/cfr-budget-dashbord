@@ -14,8 +14,8 @@
   }
 
   function render(payload) {
-    var head = document.querySelector("***REMOVED***t-heat thead");
-    var body = document.querySelector("***REMOVED***t-heat tbody");
+    var head = document.querySelector("#t-heat thead");
+    var body = document.querySelector("#t-heat tbody");
     U.clear(head);
     U.clear(body);
 

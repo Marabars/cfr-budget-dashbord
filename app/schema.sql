@@ -111,6 +111,10 @@ CREATE TABLE IF NOT EXISTS fact (
   counterparty  TEXT NOT NULL DEFAULT '',
   contract      TEXT NOT NULL DEFAULT '',
   purpose       TEXT NOT NULL DEFAULT '',
+  -- у расхода из файла дирекции два текста, как и у строки плана: `purpose` —
+  -- детализация, `comment` — комментарий. Разводятся с 16.10.2026, до этого
+  -- в `purpose` лежало «детализация, а если её нет — комментарий».
+  comment       TEXT NOT NULL DEFAULT '',
   claim_number  TEXT NOT NULL DEFAULT '',   -- № заявки 1С для автосхлопывания
   out_of_budget INTEGER NOT NULL DEFAULT 0,
   source        TEXT NOT NULL DEFAULT 'manual', -- 1c | excel | manual | operplan
@@ -123,6 +127,33 @@ CREATE TABLE IF NOT EXISTS fact (
 CREATE INDEX IF NOT EXISTS ix_fact_row ON fact(row_id);
 CREATE INDEX IF NOT EXISTS ix_fact_unmatched ON fact(year) WHERE row_id IS NULL AND out_of_budget = 0;
 CREATE INDEX IF NOT EXISTS ix_fact_layer ON fact(layer, year);
+
+-- ---------- «Наличие в бюджете»: решения, пережившие перезаливку ----------
+-- Факт заменяется целиком по дирекции при каждой загрузке файла, поэтому
+-- привязку, сделанную руками, нельзя хранить только в `fact`: следующая
+-- загрузка стёрла бы её молча. Здесь лежит само решение, а применяется оно
+-- к свежим записям после каждого разбора.
+--
+-- Ключ — то, чем расход опознаётся в файле: дирекция, статья, контрагент,
+-- договор и текст. Это та же группировка, которой расход показан в блоке
+-- «ВНЕ БЮДЖЕТА», то есть ровно одна строка на экране. Поля хранятся
+-- приведёнными (registr, пробелы, «ё» → «е»), иначе решение терялось бы от
+-- лишнего пробела в следующей редакции файла.
+CREATE TABLE IF NOT EXISTS fact_link (
+  id           INTEGER PRIMARY KEY,
+  year         INTEGER NOT NULL,
+  cfo_id       INTEGER NOT NULL REFERENCES cfo(id) ON DELETE CASCADE,
+  article      TEXT NOT NULL DEFAULT '',
+  counterparty TEXT NOT NULL DEFAULT '',
+  contract     TEXT NOT NULL DEFAULT '',
+  purpose      TEXT NOT NULL DEFAULT '',
+  -- NULL = «вне бюджета»; иначе строка плана, за счёт которой расход идёт
+  row_id       INTEGER REFERENCES budget_row(id) ON DELETE CASCADE,
+  author       TEXT NOT NULL DEFAULT '',
+  at           TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (year, cfo_id, article, counterparty, contract, purpose)
+);
+CREATE INDEX IF NOT EXISTS ix_fact_link_year ON fact_link(year, cfo_id);
 
 -- ---------- корректировки лимитов ----------
 CREATE TABLE IF NOT EXISTS adjustment (

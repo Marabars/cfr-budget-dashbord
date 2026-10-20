@@ -22,13 +22,13 @@ from app.importers import cfo_budgets, planfact, xlsx
 LAYER = repo.LAYER_OPERPLAN
 DEFAULT_PLAN_YEAR = 2027
 DEFAULT_BASE_YEAR = 2026
-***REMOVED*** Откуда дирекция берёт колонку «Детализация» — свойство самой дирекции
-***REMOVED*** (`cfo.detail_source`), а не догадка по её названию: имя меняется, подстрока
-***REMOVED*** устаревает молча. Признак ставится руками в реестре ЦФО, заливка плана его
-***REMOVED*** не трогает.
+# Откуда дирекция берёт колонку «Детализация» — свойство самой дирекции
+# (`cfo.detail_source`), а не догадка по её названию: имя меняется, подстрока
+# устаревает молча. Признак ставится руками в реестре ЦФО, заливка плана его
+# не трогает.
 
 
-***REMOVED*** ---------- параметры вкладки ----------
+# ---------- параметры вкладки ----------
 
 def plan_year() -> int:
     return int(db.get_setting("operplan_year", str(DEFAULT_PLAN_YEAR)))
@@ -96,7 +96,7 @@ def require_plan_year(year: int) -> None:
         raise ValueError(f"{year} год — база для сравнения, правке не подлежит")
 
 
-***REMOVED*** ---------- ключи сравнения строк ----------
+# ---------- ключи сравнения строк ----------
 
 def _norm(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
@@ -111,7 +111,7 @@ def _detail_text(row: dict) -> str:
     detail = (row.get("detail") or "").strip()
     comment = (row.get("comment") or "").strip()
     if (row.get("detail_source") or "comment") == "detail":
-        return detail or comment      ***REMOVED*** у ИТ детализация местами пустая — тогда комментарий
+        return detail or comment      # у ИТ детализация местами пустая — тогда комментарий
     return comment
 
 
@@ -131,7 +131,7 @@ def full_key(row: dict) -> tuple:
     return match_key(row) + (_norm(_detail_text(row)),)
 
 
-***REMOVED*** ---------- представление ----------
+# ---------- представление ----------
 
 def _empty_months() -> list[float]:
     return [0.0] * calc.MONTHS
@@ -208,16 +208,16 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
     base_ids = {int(r["id"]) for r in base_rows}
     base_fact = sum(sum(v) for v in fact_months_by_row(by, row_ids=base_ids).values())
 
-    ***REMOVED*** Вне бюджета — факт без строки плана: и объявленный дирекцией в блоке
-    ***REMOVED*** «ВНЕ БЮДЖЕТА», и тот, которому строки не нашлось. Считается по тому же
-    ***REMOVED*** кругу ЦФО, что и остальные плитки, поэтому при фильтре по дирекции
-    ***REMOVED*** показывает её одну, а без фильтра — сумму по всем доступным.
+    # Вне бюджета — факт без строки плана: и объявленный дирекцией в блоке
+    # «ВНЕ БЮДЖЕТА», и тот, которому строки не нашлось. Считается по тому же
+    # кругу ЦФО, что и остальные плитки, поэтому при фильтре по дирекции
+    # показывает её одну, а без фильтра — сумму по всем доступным.
     outside = unlinked_fact(by, cfo_ids)
     outside_total = sum(item["total"] for item in outside)
 
-    ***REMOVED*** Плитка «Факт» отвечает на вопрос «сколько прошло по факту», а не «сколько
-    ***REMOVED*** освоено плана» (решение пользователя 15.10.2026), поэтому расход вне
-    ***REMOVED*** бюджета в неё входит. Освоение строк плана осталось в `base_fact`.
+    # Плитка «Факт» отвечает на вопрос «сколько прошло по факту», а не «сколько
+    # освоено плана» (решение пользователя 15.10.2026), поэтому расход вне
+    # бюджета в неё входит. Освоение строк плана осталось в `base_fact`.
     fact_total = base_fact + outside_total
 
     return {
@@ -225,15 +225,15 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
         "base_year": by,
         "plan_total": plan_total,
         "base_total": base_total,
-        ***REMOVED*** доля прошлогоднего бюджета от нового: 100% = план не изменился
+        # доля прошлогоднего бюджета от нового: 100% = план не изменился
         "base_ratio": (base_total / plan_total) if plan_total else 0.0,
-        ***REMOVED*** набранный план в долях прошлогоднего бюджета: растёт по мере наполнения,
-        ***REMOVED*** 100% = план повторил прошлый год, больше 100% = бюджет вырос
+        # набранный план в долях прошлогоднего бюджета: растёт по мере наполнения,
+        # 100% = план повторил прошлый год, больше 100% = бюджет вырос
         "plan_ratio": (plan_total / base_total) if base_total else 0.0,
-        ***REMOVED*** факт на строках плана: освоение бюджета, без расхода мимо него
+        # факт на строках плана: освоение бюджета, без расхода мимо него
         "base_fact": base_fact,
         "base_pct": (base_fact / base_total) if base_total else 0.0,
-        ***REMOVED*** весь факт года — он и стоит на плитке
+        # весь факт года — он и стоит на плитке
         "fact_total": fact_total,
         "fact_pct": (fact_total / base_total) if base_total else 0.0,
         "fact_loaded": fact_total > 0,
@@ -242,7 +242,7 @@ def kpi(cfo_ids: Iterable[int] | None = None) -> dict:
         "outside_total": outside_total,
         "outside_rows": len(outside),
         "outside_cfo": len({item["cfo_id"] for item in outside}),
-        ***REMOVED*** доля перерасхода от бюджета базового года
+        # доля перерасхода от бюджета базового года
         "outside_pct": (outside_total / base_total) if base_total else 0.0,
     }
 
@@ -261,12 +261,16 @@ def row_spends(year: int, cfo_ids: Iterable[int] | None = None) -> dict[int, lis
         row_id = item["row_id"]
         if not row_id:
             continue
-        key = (item["counterparty"], item["contract"], item["purpose"])
+        key = (item["article"], item["counterparty"], item["contract"], item["purpose"])
         slot = grouped.setdefault(int(row_id), {}).get(key)
         if slot is None:
             slot = grouped[int(row_id)][key] = {
+                # артикул и оба текста — то, чем расход опознаётся между
+                # загрузками: по ним же работает «Наличие в бюджете»
+                "article": item["article"],
                 "counterparty": item["counterparty"], "contract": item["contract"],
-                "detail": item["purpose"], "months": _empty_months(),
+                "detail": item["purpose"], "comment": item["comment"],
+                "months": _empty_months(),
             }
         month = calc.month_of(item["pay_date"])
         if 1 <= month <= calc.MONTHS:
@@ -288,7 +292,7 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
     rows = _year_rows(year, cfo_ids)
     months_all = repo.plan_months(year, layer=LAYER)
 
-    ***REMOVED*** строки базового года — чтобы показать рядом прошлогоднюю сумму
+    # строки базового года — чтобы показать рядом прошлогоднюю сумму
     base_by_key: dict[tuple, dict] = {}
     if year != by:
         for r in _year_rows(by, cfo_ids):
@@ -309,9 +313,9 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
         }
 
     spends = row_spends(year, cfo_ids)
-    ***REMOVED*** Факт строки по месяцам — из него вкладка строит раздел «<год> · факт»
-    ***REMOVED*** под плановым. Берём тем же источником, что плитка и выгрузка факта,
-    ***REMOVED*** иначе таблица и плитка разошлись бы.
+    # Факт строки по месяцам — из него вкладка строит раздел «<год> · факт»
+    # под плановым. Берём тем же источником, что плитка и выгрузка факта,
+    # иначе таблица и плитка разошлись бы.
     row_fact = fact_months_by_row(year, row_ids={int(r["id"]) for r in rows})
     for row in rows:
         block = blocks.get(int(row["budget_id"]))
@@ -320,7 +324,7 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
         rid = int(row["id"])
         item = _row_view(row, months_all.get(rid, _empty_months()),
                          base_by_key.get(full_key(row)))
-        ***REMOVED*** расходы по контрагентам под строкой: раскрытие на вкладке
+        # расходы по контрагентам под строкой: раскрытие на вкладке
         item["spends"] = spends.get(rid, [])
         item["fact_months"] = row_fact.get(rid, _empty_months())
         block["rows"].append(item)
@@ -352,12 +356,12 @@ def view(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
             "rows_count": len(all_rows),
         },
         "blocks": out_blocks,
-        ***REMOVED*** факт без строки бюджета: показывается блоком внизу вкладки и плиткой
+        # факт без строки бюджета: показывается блоком внизу вкладки и плиткой
         "outside": unlinked_fact(by, cfo_ids),
     }
 
 
-***REMOVED*** ---------- строки, которые были в базовом году и пропали в новом ----------
+# ---------- строки, которые были в базовом году и пропали в новом ----------
 
 def missing_rows(year: int | None = None, cfo_ids: Iterable[int] | None = None) -> dict:
     """Расходы базового года, которых нет в плане нового (ключ: статья+контрагент+договор)."""
@@ -378,6 +382,8 @@ def missing_rows(year: int | None = None, cfo_ids: Iterable[int] | None = None) 
             "article": row["article"],
             "counterparty": row["counterparty"],
             "contract": row["contract"],
+            "detail": row["detail"],
+            "comment": row["comment"],
             "detail_text": _detail_text(row),
             "plan_year": float(row["plan_year"]),
             "months": months_all.get(rid, _empty_months()),
@@ -432,7 +438,7 @@ def add_missing(row_id: int, author: str, to_year: int | None = None) -> dict:
     return {"id": new_id}
 
 
-***REMOVED*** ---------- повтор бюджета прошлого года ----------
+# ---------- повтор бюджета прошлого года ----------
 
 def copy_year(author: str, from_year: int | None = None, to_year: int | None = None,
               index_pct: float = 0.0, cfo_ids: Iterable[int] | None = None,
@@ -470,10 +476,10 @@ def copy_year(author: str, from_year: int | None = None, to_year: int | None = N
     if source == "fact" and not months_all:
         raise ValueError(f"Факт за {from_year} год не загружен — переносить нечего")
 
-    ***REMOVED*** Дубли считаем по кратности, а не по множеству: в году легально лежат несколько
-    ***REMOVED*** строк с одинаковым ключом (одна статья без контрагента, разные назначения).
-    ***REMOVED*** Каждая строка целевого года «гасит» одну исходную — повторный запуск ничего не добавит.
-    ***REMOVED*** Круг ЦФО тот же, что у источника, иначе чужая строка съедала бы чужую квоту.
+    # Дубли считаем по кратности, а не по множеству: в году легально лежат несколько
+    # строк с одинаковым ключом (одна статья без контрагента, разные назначения).
+    # Каждая строка целевого года «гасит» одну исходную — повторный запуск ничего не добавит.
+    # Круг ЦФО тот же, что у источника, иначе чужая строка съедала бы чужую квоту.
     quota = Counter(full_key(r) for r in _year_rows(to_year, ids))
 
     copied = skipped = empty = 0
@@ -487,7 +493,7 @@ def copy_year(author: str, from_year: int | None = None, to_year: int | None = N
         rid = int(row["id"])
         months = months_all.get(rid, _empty_months())
         if source == "fact" and not any(months):
-            empty += 1           ***REMOVED*** по строке не было расхода — в план её не тянем
+            empty += 1           # по строке не было расхода — в план её не тянем
             continue
         row_data = dict(row)
         if source == "fact":
@@ -510,7 +516,7 @@ def copy_year(author: str, from_year: int | None = None, to_year: int | None = N
             "source": source}
 
 
-***REMOVED*** ---------- справочники для форм ----------
+# ---------- справочники для форм ----------
 
 def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dict:
     """Статьи, контрагенты, договоры и детализация для выпадающих списков.
@@ -556,9 +562,9 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
                 b["counterparties"].add(row["counterparty"])
             if row["contract"]:
                 b["contracts"].setdefault(row["counterparty"] or "", set()).add(row["contract"])
-            ***REMOVED*** Берём то, что видно в колонке «Детализация», — у ИТ при пустой
-            ***REMOVED*** детализации там стоит комментарий, и список должен совпадать с
-            ***REMOVED*** тем, что дирекция читает в таблице.
+            # Берём то, что видно в колонке «Детализация», — у ИТ при пустой
+            # детализации там стоит комментарий, и список должен совпадать с
+            # тем, что дирекция читает в таблице.
             if (row.get("detail_source") or "comment") == "detail":
                 detail = _detail_text(row)
                 if detail:
@@ -584,7 +590,7 @@ def references(year: int | None = None, cfo_ids: list[int] | None = None) -> dic
     return out
 
 
-***REMOVED*** ---------- импорт листа «Бюджеты ЦФО» ----------
+# ---------- импорт листа «Бюджеты ЦФО» ----------
 
 def _plan_or_months(row: dict) -> float:
     """ИТОГО строки: из файла, а при пустой колонке — сумма месяцев.
@@ -609,9 +615,9 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
     allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
 
     rows = [(repo.ensure_cfo(row["cfo"]), row) for row in parsed["rows"]]
-    ***REMOVED*** Замена — только по тем ЦФО, чьи строки есть в файле. Файл одной дирекции
-    ***REMOVED*** не должен стирать план остальных, даже когда его грузит финотдел. Пустой
-    ***REMOVED*** файл не удаляет ничего: сносить план целиком — отдельное действие.
+    # Замена — только по тем ЦФО, чьи строки есть в файле. Файл одной дирекции
+    # не должен стирать план остальных, даже когда его грузит финотдел. Пустой
+    # файл не удаляет ничего: сносить план целиком — отдельное действие.
     scope = {cfo_id for cfo_id, _ in rows if allowed is None or cfo_id in allowed}
     removed = repo.delete_budgets(year, LAYER, sorted(scope)) if replace else 0
 
@@ -643,14 +649,14 @@ def import_budgets(content: bytes, filename: str, year: int, author: str,
         "year": year, "rows": created, "blocks": len(parsed["blocks"]),
         "removed": removed, "replaced_cfo": len(scope),
         "other_cfo_label": other_label, "foreign": foreign,
-        ***REMOVED*** ровно то, что легло в базу: у строки с пустым ИТОГО сумма собирается
-        ***REMOVED*** из месяцев, а чужие ЦФО в отчёт не попадают — их и не записали
+        # ровно то, что легло в базу: у строки с пустым ИТОГО сумма собирается
+        # из месяцев, а чужие ЦФО в отчёт не попадают — их и не записали
         "total": round(total, 2),
         "mismatches": mismatches,
     }
 
 
-***REMOVED*** ---------- факт слоя планирования ----------
+# ---------- факт слоя планирования ----------
 
 def _detail_source_of(cfo_id: int) -> str:
     row = db.query_one("SELECT detail_source FROM cfo WHERE id = ?", (cfo_id,))
@@ -677,7 +683,7 @@ def unlinked_fact(year: int, cfo_ids: Iterable[int] | None = None) -> list[dict]
             slot = grouped[key] = {
                 "cfo_id": item["cfo_id"], "article": item["article"],
                 "counterparty": item["counterparty"], "contract": item["contract"],
-                "detail": item["purpose"],
+                "detail": item["purpose"], "comment": item["comment"],
                 "out_of_budget": bool(item["out_of_budget"]),
                 "months": _empty_months(),
             }
@@ -691,6 +697,108 @@ def unlinked_fact(year: int, cfo_ids: Iterable[int] | None = None) -> list[dict]
     for slot in out:
         slot["cfo_name"] = names.get(int(slot["cfo_id"] or 0), "")
     return sorted(out, key=lambda s: (s["cfo_name"], s["article"], s["counterparty"]))
+
+
+# ---------- «Наличие в бюджете» ----------
+
+def _spend_key(item: dict) -> tuple[str, str, str, str]:
+    """Чем расход опознаётся между загрузками.
+
+    Те же четыре поля, по которым расход сведён в одну строку на экране
+    (см. `unlinked_fact` и `row_spends`). Приводим так же, как ключи строк
+    плана: регистр, лишние пробелы. Сумма в ключ не входит — она меняется
+    от редакции к редакции файла, а решение «за счёт строки N» остаётся.
+    """
+    return (_norm(item.get("article", "")), _norm(item.get("counterparty", "")),
+            _norm(item.get("contract", "")), _norm(item.get("purpose", "")
+                                                   or item.get("detail", "")))
+
+
+# «бюджет из строки 42» в колонке «Наличие в бюджете» нашей выгрузки факта:
+# номер — строка того же листа, как это делают дирекции в «Комм наш».
+LINK_ROW_RE = re.compile(r"строк\w*\s*№?\s*(\d+)", re.IGNORECASE)
+
+
+def _link_target(text: str, by_excel: dict[int, int]) -> int | None:
+    """Строка плана, названная в колонке «Наличие в бюджете», или None.
+
+    Разрешается только через строки этого же файла: номер — позиция в листе,
+    а не наш идентификатор, и чужой лист про него ничего не знает.
+    """
+    found = LINK_ROW_RE.search(text or "")
+    return by_excel.get(int(found.group(1))) if found else None
+
+
+def apply_fact_links(year: int, cfo_ids: Iterable[int] | None = None) -> int:
+    """Накладывает ручные решения на свежезалитый факт.
+
+    Зовётся в конце загрузки: она пишет то, что разобрала из файла, а человек
+    мог уже сказать про этот расход «он за счёт строки N». Без этого шага
+    каждая перезаливка отменяла бы ручную работу, причём молча.
+
+    Возвращает число переставленных записей.
+    """
+    scope = None if cfo_ids is None else [int(i) for i in cfo_ids]
+    links = repo.list_fact_links(year, scope)
+    if not links:
+        return 0
+    by_key = {(int(l["cfo_id"]), l["article"], l["counterparty"],
+               l["contract"], l["purpose"]): l for l in links}
+
+    buckets: dict[tuple, list[dict]] = {}
+    for item in repo.layer_fact_rows(year, LAYER, scope):
+        key = (int(item["cfo_id"] or 0), *_spend_key(item))
+        buckets.setdefault(key, []).append(item)
+
+    touched: set[int] = set()
+    moved = 0
+    for key, link in by_key.items():
+        items = buckets.get(key)
+        if not items:
+            continue                      # такого расхода в этой заливке нет
+        target = int(link["row_id"]) if link["row_id"] is not None else None
+        if target is not None and not repo.get_row(target):
+            continue                      # строку плана с тех пор удалили
+        ids, same = [], True
+        for item in items:
+            was = int(item["row_id"]) if item["row_id"] is not None else None
+            if was != target or bool(item["out_of_budget"]) is not (target is None):
+                same = False
+            if was:
+                touched.add(was)
+            ids.append(int(item["id"]))
+        if same:
+            continue
+        repo.set_facts_row(ids, target, target is None, link["author"] or "")
+        if target:
+            touched.add(target)
+        moved += len(ids)
+    repo.rebuild_row_fact(sorted(touched), year, LAYER)
+    return moved
+
+
+def set_fact_link(year: int, cfo_id: int, item: dict, row_id: int | None,
+                  author: str) -> dict:
+    """Ставит расходу «В бюджете, за счёт строки N» или «Вне бюджета».
+
+    Решение и запоминается (переживёт перезаливку), и применяется сразу.
+    Свод строк, откуда расход ушёл и куда пришёл, пересчитывается из записей
+    факта — иначе плитка, таблица и выгрузка показали бы разное.
+    """
+    if row_id is not None:
+        row = repo.get_row(int(row_id))
+        if not row:
+            raise ValueError("Строка бюджета не найдена")
+        if int(row["cfo_id"]) != int(cfo_id):
+            raise ValueError("Строка другой дирекции: расход можно отнести "
+                             "только на строку своего ЦФО")
+    key = _spend_key(item)
+    repo.save_fact_link(year, int(cfo_id), key, row_id, author)
+    moved = apply_fact_links(year, [int(cfo_id)])
+    db.log(author, "Наличие в бюджете", item.get("article", ""),
+           "вне бюджета" if row_id is None else f"в бюджете, за счёт строки {row_id}",
+           f"{year} год, записей факта: {moved}")
+    return {"year": year, "cfo_id": int(cfo_id), "row_id": row_id, "moved": moved}
 
 
 def _find_cfo_id(name: str) -> int | None:
@@ -724,13 +832,28 @@ def _items_from_planfact(parsed: dict) -> list[dict]:
     return items
 
 
-def _items_from_budgets(parsed: dict) -> tuple[list[dict], list[dict]]:
-    """Строки нашей выгрузки «Бюджеты ЦФО»: факт лежит прямо в месяцах строки."""
-    items, errors = [], []
+def _items_from_budgets(parsed: dict) -> tuple[list[dict], list[dict], list[dict]]:
+    """Строки нашей выгрузки «Бюджеты ЦФО»: факт лежит прямо в месяцах строки.
+
+    Третьим списком возвращается то, что лежало под заголовком «ВНЕ БЮДЖЕТА»:
+    расход без строки плана. Там же человек правит колонку «Наличие в
+    бюджете», и её текст едет дальше в поле `link`.
+    """
+    items, errors, outside = [], [], []
     for row in parsed["rows"]:
+        if row.get("out_of_budget"):
+            if any(row["months"]):
+                outside.append({
+                    "cfo": row["row_cfo"] or row["cfo"], "article": row["article"],
+                    "counterparty": row["counterparty"], "contract": row["contract"],
+                    "detail": row["detail"], "comment": row["comment"],
+                    "months": list(row["months"]), "excel_row": row["excel_row"],
+                    "link": row.get("link", ""),
+                })
+            continue
         if row["plan_year"] and not any(row["months"]):
-            ***REMOVED*** Факт складывается из месяцев, колонка ИТОГО для него не читается.
-            ***REMOVED*** Раньше такая строка молча записывала нули и гасила прежний факт.
+            # Факт складывается из месяцев, колонка ИТОГО для него не читается.
+            # Раньше такая строка молча записывала нули и гасила прежний факт.
             errors.append({"excel_row": row["excel_row"], "article": row["article"],
                            "problem": "заполнено ИТОГО, но не заполнен ни один месяц"})
             continue
@@ -743,7 +866,7 @@ def _items_from_budgets(parsed: dict) -> tuple[list[dict], list[dict]]:
             "plan_year": row["plan_year"], "excel_row": row["excel_row"],
             "fact_months": list(row["months"]), "parts": [],
         })
-    return items, errors
+    return items, errors, outside
 
 
 def _link_keys(item: dict, detail_source: str) -> list[tuple]:
@@ -805,15 +928,15 @@ def _link_rows(items: list[dict], rows: list[dict]) -> dict[int, dict]:
                 continue
             found = index.get((item["cfo_id"],) + keys[depth]) or []
             fresh = [r for r in found if int(r["id"]) not in used]
-            ***REMOVED*** у дирекции с несколькими бюджетами блок разводит одинаковые
-            ***REMOVED*** ключи: у ИТ таких строк восемь десятков в двух блоках
+            # у дирекции с несколькими бюджетами блок разводит одинаковые
+            # ключи: у ИТ таких строк восемь десятков в двух блоках
             if len(fresh) > 1 and item["cfo_id"] in multi:
                 same = [r for r in fresh
                         if _norm(r["budget_name"]) == _norm(item.get("budget", ""))]
                 if len(same) == 1:
                     fresh = same
-            ***REMOVED*** неоднозначный признак привязкой не считаем: пусть лучше строка
-            ***REMOVED*** уйдёт в непривязанное, чем факт ляжет не туда
+            # неоднозначный признак привязкой не считаем: пусть лучше строка
+            # уйдёт в непривязанное, чем факт ляжет не туда
             if len(fresh) == 1:
                 taken[item["excel_row"]] = fresh[0]
                 used.add(int(fresh[0]["id"]))
@@ -879,12 +1002,12 @@ def plan_fact(content: bytes, year: int, cfo_ids: Iterable[int] | None = None,
         conflicts = parsed["conflicts"]
     else:
         parsed = cfo_budgets.parse(content)
-        items, errors = _items_from_budgets(parsed)
-        out_of_budget, fmt = [], "budgets"
+        items, errors, out_of_budget = _items_from_budgets(parsed)
+        fmt = "budgets"
         skipped, conflicts = parsed.get("skipped_service", []), []
 
     allowed = None if cfo_ids is None else {int(i) for i in cfo_ids}
-    ***REMOVED*** отмеченные галочками дирекции: что не отмечено, то и не тронется
+    # отмеченные галочками дирекции: что не отмечено, то и не тронется
     chosen = None if only_cfo_ids is None else {int(i) for i in only_cfo_ids}
     if chosen is not None and not chosen:
         chosen = None
@@ -923,10 +1046,10 @@ def plan_fact(content: bytes, year: int, cfo_ids: Iterable[int] | None = None,
     for item in matched:
         item["row"] = linked[item["excel_row"]]
 
-    ***REMOVED*** Второй проход: расходы непривязанных строк могут найтись поодиночке.
+    # Второй проход: расходы непривязанных строк могут найтись поодиночке.
     busy = {int(item["row"]["id"]) for item in matched}
     spends = _link_spends(unlinked, rows, busy)
-    ***REMOVED*** то, что пристроено, из непривязанного вычитается — иначе задвоится
+    # то, что пристроено, из непривязанного вычитается — иначе задвоится
     placed_by_item: dict[int, list[dict]] = {}
     for p in spends:
         placed_by_item.setdefault(p["item"]["excel_row"], []).append(p)
@@ -936,14 +1059,14 @@ def plan_fact(content: bytes, year: int, cfo_ids: Iterable[int] | None = None,
                                    zip(item["fact_months"], p["months"])]
     unlinked = [item for item in unlinked if any(round(m, 2) for m in item["fact_months"])]
 
-    ***REMOVED*** Строка легла в другой блок бюджета, чем в файле. Молчать об этом нельзя:
-    ***REMOVED*** значит план у нас и у дирекции разошёлся блоками, и либо она переложила
-    ***REMOVED*** расход, либо наша база устарела.
-    ***REMOVED***
-    ***REMOVED*** Считаем только тогда, когда названный в файле блок у этой дирекции
-    ***REMOVED*** действительно есть. Иначе сравнивать нечего: свой единственный блок
-    ***REMOVED*** дирекции называют «Бюджет дирекции», у нас он «Основной бюджет», —
-    ***REMOVED*** пометить этим всю дирекцию значило бы соврать.
+    # Строка легла в другой блок бюджета, чем в файле. Молчать об этом нельзя:
+    # значит план у нас и у дирекции разошёлся блоками, и либо она переложила
+    # расход, либо наша база устарела.
+    #
+    # Считаем только тогда, когда названный в файле блок у этой дирекции
+    # действительно есть. Иначе сравнивать нечего: свой единственный блок
+    # дирекции называют «Бюджет дирекции», у нас он «Основной бюджет», —
+    # пометить этим всю дирекцию значило бы соврать.
     known: dict[int, set[str]] = {}
     for row in rows:
         known.setdefault(int(row["cfo_id"]), set()).add(_norm(row["budget_name"]))
@@ -964,9 +1087,9 @@ def plan_fact(content: bytes, year: int, cfo_ids: Iterable[int] | None = None,
     loads = repo.last_fact_loads(year)
     return {
         "format": fmt, "year": year, "scope": scope,
-        ***REMOVED*** по каждой дирекции круга: сколько факта заменится и чем он был залит.
-        ***REMOVED*** Файл ИТ несёт ещё стратегию и аналитику, и без этой строки старый
-        ***REMOVED*** файл молча затирал бы более свежую отдельную загрузку.
+        # по каждой дирекции круга: сколько факта заменится и чем он был залит.
+        # Файл ИТ несёт ещё стратегию и аналитику, и без этой строки старый
+        # файл молча затирал бы более свежую отдельную загрузку.
         "cfo": [{"id": int(c["id"]), "name": c["name"],
                  "before": before_by_cfo.get(int(c["id"]), 0.0),
                  "last_file": (loads.get(int(c["id"])) or {}).get("filename", ""),
@@ -1015,11 +1138,16 @@ def import_fact(content: bytes, filename: str, year: int, author: str,
                 "pay_date": f"{year}-{m:02d}-15", "amount": amount,
                 "article": article, "counterparty": part.get("counterparty", ""),
                 "contract": part.get("contract", ""),
-                "purpose": part.get("detail") or part.get("comment", ""),
+                # два текста порознь, как и у строки плана (16.10.2026).
+                # До этого в `purpose` лежало «детализация, а нет — комментарий»,
+                # и у записей, залитых раньше, `comment` пуст: разделить их
+                # задним числом нечем, лечится перезаливкой факта.
+                "purpose": part.get("detail", ""),
+                "comment": part.get("comment", ""),
                 "out_of_budget": out_of_budget, "source": "planfact",
-                ***REMOVED*** ЦФО в ключе обязателен: файлы разных дирекций нумеруются
-                ***REMOVED*** с единицы, и без него десятая строка одного файла
-                ***REMOVED*** сталкивалась с десятой строкой другого.
+                # ЦФО в ключе обязателен: файлы разных дирекций нумеруются
+                # с единицы, и без него десятая строка одного файла
+                # сталкивалась с десятой строкой другого.
                 "external_id": f"pf:{year}:{cfo_id}:{tag}:{part['excel_row']}:m{m}",
             }, author)
 
@@ -1031,8 +1159,8 @@ def import_fact(content: bytes, filename: str, year: int, author: str,
         repo.set_row_fact(row_id, months)
         total += sum(months)
         parts = item["parts"] or [{
-            ***REMOVED*** у строки без расшифровки контрагент берётся с неё самой, иначе
-            ***REMOVED*** раскрытие строки на вкладке осталось бы пустым
+            # у строки без расшифровки контрагент берётся с неё самой, иначе
+            # раскрытие строки на вкладке осталось бы пустым
             "counterparty": item["counterparty"], "contract": item["contract"],
             "detail": item["detail"], "comment": item["comment"],
             "months": months, "excel_row": item["excel_row"],
@@ -1057,12 +1185,28 @@ def import_fact(content: bytes, filename: str, year: int, author: str,
     for x in plan["out_of_budget"]:
         spend(int(x["cfo_id"]), None, x, True, x["article"], "oob")
 
+    # Правка пачкой в Excel: в колонке «Наличие в бюджете» нашей выгрузки
+    # человек меняет «вне бюджета» на «бюджет из строки N». Решение ложится
+    # туда же, куда и сделанное на экране, — и так же переживёт перезаливку.
+    by_excel = {int(i["excel_row"]): int(i["row"]["id"]) for i in plan["matched"]
+                if i.get("excel_row")}
+    for x in plan["out_of_budget"]:
+        target = _link_target(x.get("link", ""), by_excel)
+        if target is not None:
+            repo.save_fact_link(year, int(x["cfo_id"]), _spend_key(x), target, author)
+
+    # Ручные решения «в бюджете / вне бюджета» накладываются поверх разбора:
+    # файл про них не знает, а человек их уже принял. Без этого шага каждая
+    # перезаливка молча отменяла бы ручную работу.
+    relinked = apply_fact_links(year, scope)
+
     note = (f"строк: {len(plan['matched'])}, без строки плана: {len(plan['unlinked'])}, "
             f"вне бюджета: {len(plan['out_of_budget'])}"
             + (f", в другой блок: {len(plan['block_moved'])}"
-               if plan["block_moved"] else ""))
-    ***REMOVED*** круг дирекций сохраняем: по нему предпросмотр следующей загрузки скажет,
-    ***REMOVED*** что именно он собирается заменить и насколько оно свежее
+               if plan["block_moved"] else "")
+            + (f", по ручным решениям переставлено: {relinked}" if relinked else ""))
+    # круг дирекций сохраняем: по нему предпросмотр следующей загрузки скажет,
+    # что именно он собирается заменить и насколько оно свежее
     repo.create_import("operplan_fact", filename, year, author,
                        len(plan["matched"]), len(plan["unlinked"]), note=note,
                        mapping=json.dumps({"cfo_ids": scope}, ensure_ascii=False))
@@ -1079,6 +1223,7 @@ def import_fact(content: bytes, filename: str, year: int, author: str,
         "block_moved": len(plan["block_moved"]),
         "spends": len(plan["spends"]), "spends_total": plan["spends_total"],
         "errors": plan["errors"], "cleared": cleared, "total": total,
+        "relinked": relinked,
     }
 
 
